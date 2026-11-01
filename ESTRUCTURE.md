@@ -41,11 +41,13 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   ├── tracingEngine.ts      # Motor de calco: Extracción Sobel de Lineart, contraste y paletas Wasm
 │   │   ├── strokeAssistant.ts    # Asistente REAL de Grosor: Visión artificial, percentiles y muestreo local
 │   │   ├── kotlinWasmBridge.ts   # Puente de ejecución Kotlin/Wasm para Lápiz Vectorial (cero píxeles al zoom)
+│   │   ├── environmentDetector.ts# Detección determinista de PWA Standalone vs Navegador y excepción de Preview
 │   │   ├── webgpuEngine.ts       # Pipeline WebGPU con shaders WGSL, fallback y composición vectorial
-│   │   └── engine.test.ts        # Suite de 27 pruebas unitarias deterministas (node:test)
+│   │   └── engine.test.ts        # Suite de 30 pruebas unitarias deterministas (node:test)
 │   ├── store/                    # Gestión de estado global
 │   │   └── drawingStore.ts       # Estado del proyecto, capas, paleta y herramientas
 │   ├── components/               # Componentes modulares de interfaz de usuario
+│   │   ├── WelcomeScreen.tsx     # Pantalla de bienvenida, catálogo de funciones pro y descarga PWA en navegador
 │   │   ├── StudioScreen.tsx      # Lienzo táctil con Pinch/Rotate/Pan a dos dedos, barra móvil anti-overflow
 │   │   ├── TracingAdjuster.tsx   # Superposición táctil minimizable para mover, rotar, escalar y filtrar foto
 │   │   ├── StrokeGuideAssistant.tsx # Barra ergonómica con recomendación calibrada por visión artificial

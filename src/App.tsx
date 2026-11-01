@@ -24,6 +24,8 @@ import { LayersModal } from './components/LayersModal';
 import { ColorPickerModal } from './components/ColorPickerModal';
 import { ToolPickerModal } from './components/ToolPickerModal';
 import { ExportModal } from './components/ExportModal';
+import { WelcomeScreen } from './components/WelcomeScreen';
+import { detectIsStandalone, detectIsDevOrPreview, shouldShowWelcomeScreen } from './engine/environmentDetector';
 
 interface UndoSnapshot {
   layerId: string;
@@ -31,8 +33,43 @@ interface UndoSnapshot {
 }
 
 export default function App() {
-  // Pantalla activa: 'studio' | 'gallery' | 'engine'
-  const [currentScreen, setCurrentScreen] = useState<'studio' | 'gallery' | 'engine'>('studio');
+  // Pantalla activa: 'welcome' | 'studio' | 'gallery' | 'engine'
+  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'studio' | 'gallery' | 'engine'>(() => {
+    if (typeof window === 'undefined') return 'studio';
+
+    // 1. Detección de standalone PWA instalada
+    const isStandalone = detectIsStandalone(
+      window.matchMedia('(display-mode: standalone)').matches,
+      (window.navigator as unknown as { standalone?: boolean })?.standalone,
+      document.referrer || ''
+    );
+
+    // 2. Detección de entorno de desarrollo / previsualización (localhost, *.run.app, aistudio)
+    const isDevOrPreview = detectIsDevOrPreview(window.location.hostname, window.location.search);
+
+    // 3. Forzar bienvenida si se especifica explícitamente en la URL
+    if (window.location.search.includes('screen=welcome')) {
+      return 'welcome';
+    }
+
+    // 4. Si el usuario ya entró en la sesión actual
+    const hasDismissed = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('inkflow_welcome_dismissed') === 'true';
+
+    // 5. Excepción para el entorno de desarrollo de AI Studio / localhost:
+    // Permite al usuario/evaluador probar la app directamente sin obligar a instalar PWA
+    if (isDevOrPreview && !window.location.search.includes('force_welcome=true')) {
+      return 'studio';
+    }
+
+    // 6. En el navegador web estándar (ej: producción inkflow-ezp.pages.dev sin instalar PWA)
+    const showWelcome = shouldShowWelcomeScreen({
+      isStandalone,
+      isDevOrPreview,
+      hasDismissedWelcome: hasDismissed,
+    });
+
+    return showWelcome ? 'welcome' : 'studio';
+  });
   
   // Proyectos guardados
   const [projects, setProjects] = useState<ProjectData[]>([DEFAULT_PROJECT]);
@@ -535,6 +572,24 @@ export default function App() {
         className="hidden"
       />
 
+      {/* Pantalla 0: Bienvenida y Presentación PWA (para navegadores web estándar) */}
+      {currentScreen === 'welcome' && (
+        <WelcomeScreen
+          onEnterStudio={() => {
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.setItem('inkflow_welcome_dismissed', 'true');
+            }
+            setCurrentScreen('studio');
+          }}
+          onGoToGallery={() => {
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.setItem('inkflow_welcome_dismissed', 'true');
+            }
+            setCurrentScreen('gallery');
+          }}
+        />
+      )}
+
       {/* Pantalla 1: Estudio de Dibujo Principal */}
       {currentScreen === 'studio' && (
         <StudioScreen
@@ -566,6 +621,7 @@ export default function App() {
           onOpenExportModal={() => setIsExportModalOpen(true)}
           onGoToGallery={() => setCurrentScreen('gallery')}
           onGoToEngine={() => setCurrentScreen('engine')}
+          onGoToWelcome={() => setCurrentScreen('welcome')}
           onUpdateProjectThumbnail={handleUpdateProjectThumbnail}
           onUpdateTracing={handleUpdateTracing}
           onApplyTracingFilter={handleApplyTracingFilter}
@@ -587,6 +643,7 @@ export default function App() {
           onDuplicateProject={handleDuplicateProject}
           onDeleteProject={handleDeleteProject}
           onReturnToStudio={() => setCurrentScreen('studio')}
+          onGoToWelcome={() => setCurrentScreen('welcome')}
         />
       )}
 

@@ -21,6 +21,7 @@ interface GalleryScreenProps {
   onDuplicateProject: (project: ProjectData) => void;
   onDeleteProject: (id: string) => void;
   onReturnToStudio: () => void;
+  onGoToWelcome?: () => void;
 }
 
 const CANVAS_PRESETS = [
@@ -38,6 +39,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onDuplicateProject,
   onDeleteProject,
   onReturnToStudio,
+  onGoToWelcome,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [projectName, setProjectName] = useState('Nueva Ilustración');
@@ -53,7 +55,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     <div className="min-h-screen bg-[#111215] text-[#e5e7eb] flex flex-col">
       {/* Barra superior de navegación */}
       <header className="h-16 px-4 sm:px-6 bg-[#18191f] border-b border-[#292b34] flex items-center justify-between sticky top-0 z-20 shadow-md">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={onReturnToStudio}
             className="p-2.5 rounded-xl bg-[#23252d] hover:bg-[#2c2f3a] text-gray-300 hover:text-white border border-[#313440] transition-colors flex items-center gap-2 text-sm font-medium"
@@ -61,7 +63,17 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             <ArrowLeft size={18} />
             <span>Volver al Lienzo</span>
           </button>
-          <div className="hidden sm:block">
+          {onGoToWelcome && (
+            <button
+              onClick={onGoToWelcome}
+              className="p-2.5 rounded-xl bg-[#23252d] hover:bg-[#2c2f3a] text-amber-400 border border-[#313440] transition-colors flex items-center gap-1.5 text-xs font-semibold"
+              title="Presentación y Guía PWA"
+            >
+              <Smartphone size={16} />
+              <span className="hidden sm:inline">PWA Info</span>
+            </button>
+          )}
+          <div className="hidden md:block">
             <h1 className="text-lg font-bold text-white">Mis Obras y Proyectos</h1>
             <p className="text-xs text-gray-400">Galería de ilustraciones guardadas</p>
           </div>

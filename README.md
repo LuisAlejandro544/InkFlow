@@ -87,7 +87,7 @@ Abre `http://localhost:3000` en tu teléfono móvil y pulsa el botón **"Instala
 
 ## 🧪 Pruebas Unitarias de Lógica
 
-El proyecto cuenta con **27 pruebas unitarias automatizadas deterministas** con `node:test` (`npx --yes tsx --test src/engine/engine.test.ts`):
+El proyecto cuenta con **30 pruebas unitarias automatizadas deterministas** con `node:test` (`npx --yes tsx --test src/engine/engine.test.ts`):
 1. Interpolación lineal y cálculo euclidiano Wasm.
 2. Estabilizador exponencial anti-temblor S-Form.
 3. Simulación de curva de presión táctil por velocidad.
@@ -110,6 +110,9 @@ El proyecto cuenta con **27 pruebas unitarias automatizadas deterministas** con 
 20. **Mapeo Canónico Exacto de Pantalla a Lienzo con Rotación (`screenToCanvasCoords`).**
 21. **Reversibilidad y Consistencia Biyectiva (`canvasToScreenCoords` <-> `screenToCanvasCoords`).**
 22. **Normalización angular continua al cruzar la frontera $[-\pi, \pi]$ en rotación.**
+23. **Detección PWA Standalone (display-mode, navigator.standalone y TWA referrer).**
+24. **Detección de Excepción en Entorno de Desarrollo y Vista Previa de AI Studio.**
+25. **Decisión Determinista de Mostrar Pantalla de Bienvenida PWA vs Acceso Directo al Estudio.**
 
 ```bash
 npx --yes tsx --test src/engine/engine.test.ts

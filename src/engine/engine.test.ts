@@ -18,6 +18,11 @@ import {
   screenToCanvasCoords,
   canvasToScreenCoords
 } from './transformMath';
+import {
+  detectIsStandalone,
+  detectIsDevOrPreview,
+  shouldShowWelcomeScreen
+} from './environmentDetector';
 
 test('Wasm Lerp e Interpolación Lineal', () => {
   const result = wasmEngine.lerp(10, 20, 0.5);
@@ -585,6 +590,77 @@ test('Rotación Táctil con Normalización Angular al Cruzar Frontera [-π, π]'
   const angle = calculateTouchRotation(t0Init, t1Init, t0Curr, t1Curr, 0);
   // La rotación horaria debe ser un cambio sutil (~357.5° o -2.5°), no un salto errático
   assert.ok(angle > 355 || angle < 5, `El ángulo calculado debe ser coherente tras cruzar frontera: ${angle}`);
+});
+
+test('Detección PWA Standalone (display-mode, navigator.standalone o TWA referrer)', () => {
+  // 1. Coincide con display-mode: standalone
+  assert.equal(detectIsStandalone(true, false, ''), true);
+
+  // 2. Coincide con iOS Safari navigator.standalone
+  assert.equal(detectIsStandalone(false, true, ''), true);
+
+  // 3. Coincide con Android TWA referrer
+  assert.equal(detectIsStandalone(false, false, 'android-app://com.example.inkflow'), true);
+
+  // 4. Navegador web estándar sin standalone
+  assert.equal(detectIsStandalone(false, false, 'https://google.com'), false);
+});
+
+test('Detección de Excepción en Entorno de Desarrollo y Vista Previa de AI Studio', () => {
+  // Localhost
+  assert.equal(detectIsDevOrPreview('localhost'), true);
+  assert.equal(detectIsDevOrPreview('127.0.0.1'), true);
+
+  // AI Studio Cloud Run Preview (*.run.app)
+  assert.equal(detectIsDevOrPreview('ais-dev-3svunrjwahjz222xwtgxtp-62934322005.us-west2.run.app'), true);
+
+  // Producción Cloudflare Pages (no es dev ni preview)
+  assert.equal(detectIsDevOrPreview('inkflow-ezp.pages.dev'), false);
+
+  // Parámetro de query preview=true o env=dev
+  assert.equal(detectIsDevOrPreview('inkflow-ezp.pages.dev', '?preview=true'), true);
+});
+
+test('Decisión de Mostrar Pantalla de Bienvenida PWA vs Acceso Directo al Estudio', () => {
+  // Caso 1: PWA Standalone instalada -> NO mostrar bienvenida (va directo al lienzo)
+  assert.equal(
+    shouldShowWelcomeScreen({
+      isStandalone: true,
+      isDevOrPreview: false,
+      hasDismissedWelcome: false,
+    }),
+    false
+  );
+
+  // Caso 2: Navegador Web estándar (inkflow-ezp.pages.dev) sin instalar -> SÍ mostrar bienvenida
+  assert.equal(
+    shouldShowWelcomeScreen({
+      isStandalone: false,
+      isDevOrPreview: false,
+      hasDismissedWelcome: false,
+    }),
+    true
+  );
+
+  // Caso 3: Usuario ya pulsó "Continuar en el Navegador" en esta sesión -> NO mostrar bienvenida
+  assert.equal(
+    shouldShowWelcomeScreen({
+      isStandalone: false,
+      isDevOrPreview: false,
+      hasDismissedWelcome: true,
+    }),
+    false
+  );
+
+  // Caso 4: Entorno de desarrollo descartado -> NO mostrar bienvenida
+  assert.equal(
+    shouldShowWelcomeScreen({
+      isStandalone: false,
+      isDevOrPreview: true,
+      hasDismissedWelcome: true,
+    }),
+    false
+  );
 });
 
 

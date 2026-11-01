@@ -68,6 +68,7 @@ interface StudioScreenProps {
   onOpenExportModal: () => void;
   onGoToGallery: () => void;
   onGoToEngine: () => void;
+  onGoToWelcome?: () => void;
   onUpdateProjectThumbnail: (thumbnailUrl: string) => void;
   onUpdateTracing: (update: Partial<TracingReference>) => void;
   onApplyTracingFilter: (mode: TracingFilterMode) => void;
@@ -107,6 +108,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onOpenExportModal,
   onGoToGallery,
   onGoToEngine,
+  onGoToWelcome,
   onUpdateProjectThumbnail,
   onUpdateTracing,
   onApplyTracingFilter,
@@ -747,7 +749,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   };
 
   return (
-    <div className="relative w-screen h-screen bg-[#0d0e12] text-[#e5e7eb] flex flex-col overflow-hidden select-none touch-none">
+    <div className="relative w-screen h-screen h-[100dvh] max-h-[100dvh] bg-[#0d0e12] text-[#e5e7eb] flex flex-col overflow-hidden select-none touch-none pb-[env(safe-area-inset-bottom)]">
       
       {/* 1. BARRA SUPERIOR ELEGANTE Y ESPACIOSA ESTILO APP NATIVA MÓVIL */}
       {/* 1. BARRA SUPERIOR MÓVIL NATIVA ESTILO IBISPAINT (CERO DESBORDES) */}
@@ -1033,6 +1035,24 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 <span className="block leading-tight">Diagnóstico Motor</span>
                 <span className="text-[9px] text-gray-400 block">
                   WebGPU, Kotlin/Wasm & Rust
+                </span>
+              </div>
+            </button>
+
+            {/* Opción 4: Acerca de / Instalar PWA */}
+            <button
+              onClick={() => {
+                triggerHaptic(8);
+                setShowMoreMenu(false);
+                if (onGoToWelcome) onGoToWelcome();
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-200 hover:bg-[#20222f] active:scale-98 transition-all text-left"
+            >
+              <Smartphone size={16} className="text-amber-400" />
+              <div className="flex-1 min-w-0">
+                <span className="block leading-tight">Presentación & PWA</span>
+                <span className="text-[9px] text-gray-400 block">
+                  Instalar en pantalla de inicio
                 </span>
               </div>
             </button>
