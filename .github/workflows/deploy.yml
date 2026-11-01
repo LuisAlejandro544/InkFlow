@@ -94,9 +94,14 @@ jobs:
             ${{ runner.os }}-vite-cache-${{ hashFiles('package.json') }}-
             ${{ runner.os }}-vite-cache-
 
-      # 10. Instalación limpia de dependencias
+      # 10. Instalación limpia y resiliente de dependencias
       - name: Instalar dependencias de la PWA
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
 
       # 11. Ejecución determinista de la suite completa de 27 pruebas unitarias
       - name: Ejecutar pruebas unitarias del motor (node:test)
