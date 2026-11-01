@@ -1,0 +1,115 @@
+name: InkFlow - Compilar WebAssembly (C++, Rust, Kotlin) y Desplegar a Cloudflare Pages
+
+# Activación EXCLUSIVAMENTE manual (sin push, sin pull requests ni disparadores automáticos)
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: 'Nombre del proyecto en Cloudflare Pages'
+        required: false
+        default: 'inkflow'
+      build_native_cores:
+        description: 'Compilar núcleos nativos C++23 y Rust a WebAssembly'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  build-and-deploy:
+    name: Compilar Wasm & Desplegar InkFlow
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # 1. Descarga del código fuente del repositorio
+      - name: Checkout del código fuente
+        uses: actions/checkout@v4
+
+      # 2. Configurar toolchain de Rust con soporte nativo para WebAssembly
+      - name: Configurar Rust Toolchain (wasm32-unknown-unknown)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      # 3. Caché de Rust para compilaciones instantáneas
+      - name: Caché de Rust Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src/rust-core/target/
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('src/rust-core/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-wasm-
+
+      # 4. Compilar núcleo de Rust a WebAssembly (.wasm)
+      - name: Compilar Rust Core a WebAssembly (wasm32)
+        working-directory: src/rust-core
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          echo "✅ Núcleo Rust compilado exitosamente a Wasm"
+
+      # 5. Configurar Emscripten para compilar C++23 moderno (ISO/IEC 14882:2023)
+      - name: Configurar Emscripten SDK (C++23)
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
+
+      # 6. Compilar núcleo C++23 con CMake + SIMD128 a WebAssembly
+      - name: Compilar C++23 Core con Emscripten a Wasm
+        run: |
+          mkdir -p build-cpp
+          emcmake cmake -B build-cpp -S src/cpp-core -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cpp --config Release
+          echo "✅ Núcleo C++23 compilado exitosamente a Wasm con SIMD128"
+
+      # 7. Configurar Java JDK para ecosistema Kotlin/Wasm
+      - name: Configurar Java 21 (Temurin) para Kotlin/Wasm
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      # 8. Configurar Node.js 22 con caché automática de npm
+      - name: Configurar Node.js 22 con caché de npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      # 9. Caché de compilación Vite para ultra velocidad
+      - name: Caché de compilador Vite
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.vite
+          key: ${{ runner.os }}-vite-cache-${{ hashFiles('package.json') }}-${{ hashFiles('src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-cache-${{ hashFiles('package.json') }}-
+            ${{ runner.os }}-vite-cache-
+
+      # 10. Instalación limpia de dependencias
+      - name: Instalar dependencias de la PWA
+        run: npm ci
+
+      # 11. Ejecución determinista de la suite completa de 27 pruebas unitarias
+      - name: Ejecutar pruebas unitarias del motor (node:test)
+        run: npx tsx --test src/engine/engine.test.ts
+
+      # 12. Compilación estática de la Progressive Web App (genera dist/)
+      - name: Compilar PWA estática (Vite)
+        run: npm run build
+
+      # 13. Despliegue directo a Cloudflare Pages como sitio estático sin coste de backend
+      - name: Desplegar a Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ github.event.inputs.project_name || 'inkflow' }} --branch=main

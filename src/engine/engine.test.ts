@@ -1,0 +1,593 @@
+/**
+ * @file engine.test.ts
+ * @description Pruebas unitarias de lógica pura y matemática para el motor de dibujo.
+ * Ejecuta validaciones de Wasm, interpolación de trazos, curvas de presión y estabilizador.
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { wasmEngine } from './wasmEngine';
+import { drawingEngine } from './webgpuEngine';
+import { kotlinVectorEngine } from './kotlinWasmBridge';
+import { ToolNavigationStateManager } from './toolNavigationState';
+import { 
+  calculateTouchRotation, 
+  snapRotationDegrees, 
+  unrotatePoint, 
+  calculateArtworkBoundingBox,
+  screenToCanvasCoords,
+  canvasToScreenCoords
+} from './transformMath';
+
+test('Wasm Lerp e Interpolación Lineal', () => {
+  const result = wasmEngine.lerp(10, 20, 0.5);
+  assert.equal(result, 15);
+
+  const start = wasmEngine.lerp(0, 100, 0);
+  assert.equal(start, 0);
+
+  const end = wasmEngine.lerp(0, 100, 1);
+  assert.equal(end, 100);
+});
+
+test('Wasm Cálculo de Distancia Euclidiana', () => {
+  const dist = wasmEngine.distance(0, 0, 3, 4);
+  assert.equal(dist, 5);
+
+  const zeroDist = wasmEngine.distance(12.5, 8.2, 12.5, 8.2);
+  assert.equal(zeroDist, 0);
+});
+
+test('Interpolación de Trazos con densidad y paso uniforme', () => {
+  const p0 = { x: 0, y: 0, pressure: 0.2 };
+  const p1 = { x: 10, y: 0, pressure: 0.8 };
+  
+  // Paso de 2px en una distancia de 10px debe generar 5 segmentos
+  const interpolated = wasmEngine.interpolateStroke(p0, p1, 2);
+  assert.equal(interpolated.length, 5);
+
+  // El último punto debe coincidir con p1
+  const last = interpolated[interpolated.length - 1];
+  assert.equal(last.x, 10);
+  assert.equal(last.y, 0);
+  assert.equal(last.pressure, 0.8);
+});
+
+test('Estabilizador estilo IbisPaint (Filtro exponencial de temblor)', () => {
+  const pRaw = { x: 100, y: 100, pressure: 0.5 };
+  const pLast = { x: 50, y: 50, pressure: 0.5 };
+
+  // Nivel 0: no altera las coordenadas (trazo libre sin amortiguación)
+  const noSmoothing = wasmEngine.stabilizePoint(pRaw, pLast, 0);
+  assert.equal(noSmoothing.x, 100);
+  assert.equal(noSmoothing.y, 100);
+
+  // Nivel 10: amortigua fuertemente hacia la posición anterior para línea limpia
+  const maxSmoothing = wasmEngine.stabilizePoint(pRaw, pLast, 10);
+  assert.ok(maxSmoothing.x < 100 && maxSmoothing.x > 50, 'El estabilizador debe interpolar suavemente');
+  assert.ok(maxSmoothing.y < 100 && maxSmoothing.y > 50, 'El estabilizador debe interpolar suavemente');
+});
+
+test('Simulación de Presión por Velocidad para Pantallas Táctiles', () => {
+  const p0 = { x: 0, y: 0, pressure: 0, timestamp: 0 };
+  
+  // Trazo muy rápido (1000px en 50ms) -> debe reducir la presión (trazo fino)
+  const pFast = { x: 1000, y: 0, pressure: 0, timestamp: 50 };
+  const fastPressure = wasmEngine.calculateVelocityPressure(pFast, p0);
+
+  // Trazo lento (5px en 500ms) -> debe aumentar la presión (trazo denso)
+  const pSlow = { x: 5, y: 0, pressure: 0, timestamp: 500 };
+  const slowPressure = wasmEngine.calculateVelocityPressure(pSlow, p0);
+
+  assert.ok(fastPressure < slowPressure, 'Un trazo rápido debe ser más fino que uno lento');
+});
+
+test('Conversión de Colores Hexadecimal y RGB', () => {
+  const rgb = drawingEngine.hexToRgb('#ff8800');
+  assert.equal(rgb.r, 255);
+  assert.equal(rgb.g, 136);
+  assert.equal(rgb.b, 0);
+
+  const hex = drawingEngine.rgbToHex(255, 136, 0);
+  assert.equal(hex.toLowerCase(), '#ff8800');
+});
+
+test('Kotlin/Wasm Algoritmo de Simplificación Douglas-Peucker', () => {
+  // Línea recta con un punto redundante en el medio
+  const collinearPoints = [
+    { x: 0, y: 0, pressure: 0.5 },
+    { x: 50, y: 0, pressure: 0.5 },
+    { x: 100, y: 0, pressure: 0.5 }
+  ];
+
+  const simplified = kotlinVectorEngine.simplifyPoints(collinearPoints, 1.0);
+  // Debe reducir de 3 a 2 puntos eliminando el punto intermedio redundante
+  assert.equal(simplified.length, 2);
+  assert.equal(simplified[0].x, 0);
+  assert.equal(simplified[1].x, 100);
+});
+
+test('Kotlin/Wasm Generación de Segmentos Bézier Cúbicos para Lápiz Vectorial', () => {
+  const strokePoints = [
+    { x: 10, y: 10, pressure: 0.2 },
+    { x: 30, y: 50, pressure: 0.5 },
+    { x: 70, y: 80, pressure: 0.8 },
+    { x: 120, y: 90, pressure: 0.4 }
+  ];
+
+  const segments = kotlinVectorEngine.generateBezierSegments(strokePoints, 12);
+  assert.ok(segments.length >= 2, 'Debe generar segmentos Bézier continuos');
+
+  // Cada segmento debe tener puntos de inicio, fin y puntos de control calculados
+  for (const seg of segments) {
+    assert.ok(typeof seg.p0.x === 'number');
+    assert.ok(typeof seg.cp1.x === 'number');
+    assert.ok(typeof seg.cp2.x === 'number');
+    assert.ok(typeof seg.p1.x === 'number');
+    assert.ok(seg.width0 > 0 && seg.width1 > 0, 'El grosor debe ser positivo y adaptado a la presión');
+  }
+});
+
+import { calculateFocalZoomPan, calculateWheelZoom } from './transformMath';
+
+test('Cálculo Matemático de Pinch-to-Zoom Multitáctil', () => {
+  // Dos dedos a 100px de distancia
+  const initialDist = 100;
+  const initialScale = 1.0;
+
+  // Los dedos se separan a 200px (acercar zoom)
+  const expandedDist = 200;
+  const zoomInScale = Math.max(0.15, Math.min(5.0, initialScale * (expandedDist / initialDist)));
+  assert.equal(zoomInScale, 2.0);
+
+  // Los dedos se juntan a 50px (alejar zoom)
+  const pinchedDist = 50;
+  const zoomOutScale = Math.max(0.15, Math.min(5.0, initialScale * (pinchedDist / initialDist)));
+  assert.equal(zoomOutScale, 0.5);
+});
+
+test('Invarianza del Punto Focal en Zoom Táctil (Sin Desplazamiento Indeseado)', () => {
+  // Supongamos que el usuario tiene los dedos en (120, 80) relativo al centro
+  const initialCenter = { x: 120, y: 80 };
+  const currentCenter = { x: 120, y: 80 }; // Los dedos no se movieron de sitio, solo se separaron
+  const initialDist = 100;
+  const currentDist = 200; // Doble de distancia -> zoom al 200%
+  const initialScale = 1.0;
+  const initialPan = { x: 0, y: 0 };
+
+  const result = calculateFocalZoomPan(
+    initialCenter,
+    currentCenter,
+    initialDist,
+    currentDist,
+    initialScale,
+    initialPan
+  );
+
+  assert.equal(result.scale, 2.0);
+  // Al duplicar el zoom sobre (120, 80), el nuevo pan debe ser exactamente -120 y -80
+  // para que el punto (120, 80) permanezca exactamente en (120, 80)
+  assert.equal(result.pan.x, -120);
+  assert.equal(result.pan.y, -80);
+
+  // Verificar la posición del punto en pantalla tras la transformación:
+  // pantalla = puntoLienzo * escala + pan = 120 * 2.0 + (-120) = 120 (idéntico)
+  const screenPosAfterZoom = 120 * result.scale + result.pan.x;
+  assert.equal(screenPosAfterZoom, 120);
+});
+
+test('Zoom con Rueda de Ratón anclado al Cursor', () => {
+  const focalPoint = { x: 50, y: -40 };
+  const currentScale = 1.0;
+  const currentPan = { x: 0, y: 0 };
+
+  const result = calculateWheelZoom(focalPoint, currentScale, currentPan, 1.2);
+  assert.equal(result.scale, 1.2);
+
+  const screenPos = 50 * result.scale + result.pan.x;
+  assert.equal(Math.round(screenPos), 50);
+});
+
+import { 
+  calculateInitialTracingFit, 
+  extractLineartFromPixels, 
+  extractDominantColorsFromImage 
+} from './tracingEngine';
+
+test('Cálculo de centrado y ajuste automático de foto para calco', () => {
+  // Lienzo móvil de 800 x 1200
+  const canvasW = 800;
+  const canvasH = 1200;
+  // Foto de 1920 x 1080
+  const photoW = 1920;
+  const photoH = 1080;
+
+  const fit = calculateInitialTracingFit(photoW, photoH, canvasW, canvasH);
+  
+  // Debe situarse exactamente en el centro de la hoja
+  assert.equal(fit.x, 400);
+  assert.equal(fit.y, 600);
+  assert.ok(fit.scale > 0 && fit.scale < 1.0, 'La escala debe reducir proporcionalmente la foto grande');
+});
+
+test('Filtro Sobel de Extracción de Lineart para Foto de Calco', () => {
+  // Crear imagen sintética de 4x4 píxeles con un borde vertical en el centro
+  const width = 4;
+  const height = 4;
+  const pixels = new Uint8ClampedArray(width * height * 4);
+
+  // Lado izquierdo negro (0), lado derecho blanco (255)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const val = x < 2 ? 0 : 255;
+      pixels[idx] = val;
+      pixels[idx + 1] = val;
+      pixels[idx + 2] = val;
+      pixels[idx + 3] = 255;
+    }
+  }
+
+  const lineart = extractLineartFromPixels(pixels, width, height, true, 20);
+  assert.equal(lineart.length, pixels.length);
+  // Debe detectar bordes en la transición vertical
+  let hasLines = false;
+  for (let i = 3; i < lineart.length; i += 4) {
+    if (lineart[i] > 0) hasLines = true;
+  }
+  assert.ok(hasLines, 'El filtro Sobel debe extraer los bordes de la imagen para calcar');
+});
+
+test('Extracción de Colores Dominantes de Foto de Calco', () => {
+  // Imagen sintética con rojo y azul
+  const pixels = new Uint8ClampedArray(100 * 4);
+  for (let i = 0; i < 50; i++) {
+    pixels[i * 4] = 255;   // R
+    pixels[i * 4 + 1] = 0; // G
+    pixels[i * 4 + 2] = 0; // B
+    pixels[i * 4 + 3] = 255;
+  }
+  for (let i = 50; i < 100; i++) {
+    pixels[i * 4] = 0;     // R
+    pixels[i * 4 + 1] = 0; // G
+    pixels[i * 4 + 2] = 255;// B
+    pixels[i * 4 + 3] = 255;
+  }
+
+  const colors = extractDominantColorsFromImage(pixels, 4);
+  assert.ok(colors.length >= 2, 'Debe extraer al menos los 2 colores dominantes');
+  assert.ok(colors.some(c => c.toLowerCase().includes('ff0000') || c.startsWith('#')), 'Debe contener formato hex');
+});
+
+import { 
+  detectRoleFromSize, 
+  getRoleInfoForSize, 
+  getRecommendedSizeForRole, 
+  generateStrokeAdvice,
+  analyzeImageStrokeThickness,
+  sampleStrokeThicknessAtPoint,
+  getCalibratedStrokeRoles
+} from './strokeAssistant';
+
+test('Asistente de Grosor de Trazo - Detección de Roles Canónicos', () => {
+  // Silueta: contorno exterior (>= 19px)
+  assert.equal(detectRoleFromSize(24), 'silhouette');
+  assert.equal(detectRoleFromSize(19), 'silhouette');
+  assert.equal(detectRoleFromSize(40), 'silhouette');
+
+  // Estructura: ropa y pelo (10 - 18px)
+  assert.equal(detectRoleFromSize(14), 'structure');
+  assert.equal(detectRoleFromSize(10), 'structure');
+  assert.equal(detectRoleFromSize(18), 'structure');
+
+  // Detalles: rostro y ojos (4 - 9px)
+  assert.equal(detectRoleFromSize(6), 'details');
+  assert.equal(detectRoleFromSize(4), 'details');
+  assert.equal(detectRoleFromSize(9), 'details');
+
+  // Tramas: achurado y texturas (< 4px)
+  assert.equal(detectRoleFromSize(2), 'hatching');
+  assert.equal(detectRoleFromSize(1), 'hatching');
+});
+
+test('Asistente de Grosor de Trazo - Tamaños Recomendados e Información de Rol', () => {
+  assert.equal(getRecommendedSizeForRole('silhouette'), 24);
+  assert.equal(getRecommendedSizeForRole('structure'), 14);
+  assert.equal(getRecommendedSizeForRole('details'), 6);
+  assert.equal(getRecommendedSizeForRole('hatching'), 2);
+
+  const info = getRoleInfoForSize(6);
+  assert.equal(info.id, 'details');
+  assert.equal(info.recommendedPx, 6);
+  assert.ok(info.exampleUses.length > 0);
+});
+
+test('Asistente de Grosor de Trazo - Consejos Contextuales para Calco', () => {
+  const calcoAdviceEyes = generateStrokeAdvice(6, true);
+  assert.ok(calcoAdviceEyes.advice.includes('ojos') || calcoAdviceEyes.advice.includes('calcar'));
+
+  const calcoAdviceOutline = generateStrokeAdvice(24, true);
+  assert.ok(calcoAdviceOutline.advice.includes('contorno') || calcoAdviceOutline.advice.includes('silueta'));
+
+  const standardAdvice = generateStrokeAdvice(14, false);
+  assert.ok(standardAdvice.advice.length > 5);
+});
+
+test('Análisis Real de Grosor de Trazo desde Píxeles de Imagen', () => {
+  // Crear una imagen sintética de 100x100 con:
+  // 1. Una barra gruesa de 20px (Silueta)
+  // 2. Una barra intermedia de 10px (Estructura)
+  // 3. Una línea fina de 4px (Detalle)
+  // 4. Una micro-línea de 1px (Trama)
+  const width = 100;
+  const height = 100;
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  // Inicializar fondo blanco
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = 255;
+    pixels[i + 1] = 255;
+    pixels[i + 2] = 255;
+    pixels[i + 3] = 255;
+  }
+
+  const drawHorizLine = (startY: number, thickness: number) => {
+    for (let y = startY; y < startY + thickness && y < height; y++) {
+      for (let x = 10; x < 90; x++) {
+        const idx = (y * width + x) * 4;
+        pixels[idx] = 20;     // R oscuro
+        pixels[idx + 1] = 20; // G oscuro
+        pixels[idx + 2] = 20; // B oscuro
+        pixels[idx + 3] = 255;
+      }
+    }
+  };
+
+  drawHorizLine(10, 20); // 20px
+  drawHorizLine(40, 10); // 10px
+  drawHorizLine(65, 4);  // 4px
+  drawHorizLine(85, 1);  // 1px
+
+  const analysis = analyzeImageStrokeThickness(pixels, width, height, 1.0);
+  assert.ok(analysis.isImageCalibrated, 'Debe calibrar con la imagen sintética');
+  assert.ok(analysis.sampledEdgesCount > 0, 'Debe muestrear bordes oscuros');
+  assert.ok(analysis.silhouettePx >= analysis.structurePx, 'Silueta debe ser mayor o igual a estructura');
+  assert.ok(analysis.structurePx >= analysis.detailsPx, 'Estructura debe ser mayor o igual a detalles');
+  assert.ok(analysis.detailsPx >= analysis.hatchingPx, 'Detalles debe ser mayor o igual a tramas');
+
+  const calibratedRoles = getCalibratedStrokeRoles(analysis);
+  assert.equal(calibratedRoles.length, 4);
+  assert.equal(calibratedRoles[0].isCalibrated, true);
+  assert.ok(calibratedRoles[0].badge.includes('Calibrado'));
+});
+
+test('Muestreo Local de Grosor en un Punto Específico de la Imagen', () => {
+  const width = 60;
+  const height = 60;
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  pixels.fill(255);
+
+  // Línea oscura centrada en Y=30 de 8px de grosor (de y=26 a y=33)
+  for (let y = 26; y <= 33; y++) {
+    for (let x = 10; x < 50; x++) {
+      const idx = (y * width + x) * 4;
+      pixels[idx] = 10;
+      pixels[idx + 1] = 10;
+      pixels[idx + 2] = 10;
+      pixels[idx + 3] = 255;
+    }
+  }
+
+  // Tocar en el centro de la línea (x=30, y=30)
+  const sampled = sampleStrokeThicknessAtPoint(pixels, width, height, 30, 30, 1.0);
+  assert.ok(sampled !== null, 'Debe detectar la línea');
+  assert.ok(sampled! >= 6 && sampled! <= 10, `Grosor muestreado esperado ~8px, recibido ${sampled}`);
+
+  // Tocar en el fondo blanco libre (x=5, y=5)
+  const emptySample = sampleStrokeThicknessAtPoint(pixels, width, height, 5, 5, 1.0);
+  assert.equal(emptySample, null, 'En zona blanca debe retornar null');
+});
+
+test('Navegación de Herramientas: Salir de Mover restaura exactamente la herramienta previa (Evita vector_pencil)', () => {
+  const manager = new ToolNavigationStateManager('brush');
+  assert.equal(manager.getActiveTool(), 'brush');
+
+  // Caso 1: Usuario usa Pluma Fuerte ('brush'), activa Mover ('hand'), y luego deja de moverse
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'hand');
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'brush', 'Al dejar de moverse debe volver a brush y NUNCA a vector_pencil');
+
+  // Caso 2: Usuario usa Lápiz Grafito ('pencil'), activa Mover, y deja de moverse
+  manager.selectTool('pencil');
+  assert.equal(manager.getActiveTool(), 'pencil');
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'hand');
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'pencil', 'Debe restaurar pencil');
+
+  // Caso 3: Usuario usa Goma ('eraser'), activa Mover, y deja de moverse
+  manager.selectTool('eraser');
+  assert.equal(manager.getActiveTool(), 'eraser');
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'hand');
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'eraser', 'Debe restaurar eraser exactamente sin alterar a vector_pencil');
+
+  // Caso 4: Alternar pincel/borrador mientras se navega no debe contaminar lastDrawingTool con 'hand'
+  manager.selectTool('brush');
+  manager.selectTool('hand');
+  manager.toggleBrushEraser(); // intentar alternar
+  assert.notEqual(manager.getLastDrawingTool(), 'hand', 'lastDrawingTool NUNCA debe ser hand');
+
+  // Caso 5: Si el usuario estaba explícitamente usando vector_pencil, debe preservarlo legítimamente
+  manager.selectTool('vector_pencil');
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'hand');
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'vector_pencil', 'Debe retornar a vector_pencil solo si era la herramienta activa del usuario');
+});
+
+test('Rotación Táctil Continua de la Hoja', () => {
+  // Dos dedos alineados horizontalmente (dx=100, dy=0)
+  const t0Init = { x: 100, y: 100 };
+  const t1Init = { x: 200, y: 100 };
+
+  // Los dos dedos giran 90 grados en sentido horario (dx=0, dy=100)
+  const t0Curr = { x: 150, y: 50 };
+  const t1Curr = { x: 150, y: 150 };
+
+  const angle = calculateTouchRotation(t0Init, t1Init, t0Curr, t1Curr, 0);
+  assert.equal(angle, 90, 'El ángulo resultante debe ser 90°');
+});
+
+test('Snap Magnético de Ángulos Cardinales (0°, 90°, 180°, 270°)', () => {
+  // Cerca de 0° (ej: 2.5° o 358°) debe encajar a 0°
+  assert.equal(snapRotationDegrees(2.5, 4.0), 0);
+  assert.equal(snapRotationDegrees(358, 4.0), 0);
+
+  // Cerca de 90° (ej: 88.5°) debe encajar a 90°
+  assert.equal(snapRotationDegrees(88.5, 4.0), 90);
+
+  // Lejos de cualquier cardinal (ej: 45°) debe mantenerse inalterado
+  assert.equal(snapRotationDegrees(45, 4.0), 45);
+});
+
+test('Mapeo Inverso de Puntos con Rotación (unrotatePoint)', () => {
+  const center = { x: 200, y: 200 };
+
+  // Con rotación de +90° en sentido horario, un punto que estaba arriba en (x=200, y=100)
+  // aparece girado a la derecha en pantalla (x=300, y=200).
+  // Por tanto, al desrotar (300, 200) debe recuperar exactamente (200, 100).
+  const unrotated90 = unrotatePoint(300, 200, center.x, center.y, 90);
+  assert.ok(Math.abs(unrotated90.x - 200) < 0.001);
+  assert.ok(Math.abs(unrotated90.y - 100) < 0.001);
+
+  // Con rotación 0°, el punto debe ser idéntico
+  const unrotated0 = unrotatePoint(250, 180, center.x, center.y, 0);
+  assert.equal(unrotated0.x, 250);
+  assert.equal(unrotated0.y, 180);
+});
+
+test('Auto-Recorte de Obra Maestra (Bounding Box)', () => {
+  const width = 100;
+  const height = 100;
+  const buffer = new Uint8ClampedArray(width * height * 4); // Lienzo transparente
+
+  // Dibujar un trazo en la región (x=30 a 50, y=40 a 60)
+  for (let y = 40; y <= 60; y++) {
+    for (let x = 30; x <= 50; x++) {
+      const idx = (y * width + x) * 4;
+      buffer[idx] = 20;
+      buffer[idx + 1] = 20;
+      buffer[idx + 2] = 20;
+      buffer[idx + 3] = 255; // Opaco
+    }
+  }
+
+  const bbox = calculateArtworkBoundingBox([buffer], width, height, 10);
+  assert.equal(bbox.hasContent, true);
+  // minX debe ser 30 - padding(10) = 20
+  assert.equal(bbox.minX, 20);
+  // maxX debe ser 50 + padding(10) = 60
+  assert.equal(bbox.maxX, 60);
+  // minY debe ser 40 - padding(10) = 30
+  assert.equal(bbox.minY, 30);
+  // maxY debe ser 60 + padding(10) = 70
+  assert.equal(bbox.maxY, 70);
+  assert.equal(bbox.width, 40);
+  assert.equal(bbox.height, 40);
+});
+
+test('Mapeo Canónico Exacto de Pantalla a Lienzo con Rotación (screenToCanvasCoords)', () => {
+  // Lienzo móvil no cuadrado: 800 x 1200
+  const canvasW = 800;
+  const canvasH = 1200;
+  const screenCenterX = 500;
+  const screenCenterY = 600;
+  const scale = 1.0;
+
+  // Caso 1: Rotación 0° (sin rotación)
+  // El centro de la pantalla debe ser el centro del lienzo (400, 600)
+  const centerCoords = screenToCanvasCoords(screenCenterX, screenCenterY, screenCenterX, screenCenterY, scale, 0, canvasW, canvasH);
+  assert.equal(centerCoords.x, 400);
+  assert.equal(centerCoords.y, 600);
+
+  // Caso 2: Rotación 90° en sentido horario
+  // En rotación de 90° horario, la parte superior del lienzo (x=400, y=0) gira 90° y aparece a la DERECHA en pantalla
+  // (screenCenterX + 600, screenCenterY). Al tocar allí, debe recuperar exactamente (400, 0).
+  const topRotated90 = screenToCanvasCoords(screenCenterX + 600, screenCenterY, screenCenterX, screenCenterY, scale, 90, canvasW, canvasH);
+  assert.ok(Math.abs(topRotated90.x - 400) < 0.001, `x esperado 400, recibido ${topRotated90.x}`);
+  assert.ok(Math.abs(topRotated90.y - 0) < 0.001, `y esperado 0, recibido ${topRotated90.y}`);
+
+  // En rotación de 90° horario, el lado derecho del lienzo (x=800, y=600) gira 90° y aparece ABAJO en pantalla
+  // (screenCenterX, screenCenterY + 400). Al tocar allí, debe recuperar exactamente (800, 600).
+  const rightRotated90 = screenToCanvasCoords(screenCenterX, screenCenterY + 400, screenCenterX, screenCenterY, scale, 90, canvasW, canvasH);
+  assert.ok(Math.abs(rightRotated90.x - 800) < 0.001, `x esperado 800, recibido ${rightRotated90.x}`);
+  assert.ok(Math.abs(rightRotated90.y - 600) < 0.001, `y esperado 600, recibido ${rightRotated90.y}`);
+
+  // Caso 3: Rotación 180° (lienzo invertido de cabeza)
+  // Tocar arriba en pantalla (screenCenterX, screenCenterY - 600) corresponde al fondo del lienzo (x=400, y=1200)
+  const bottomRotated180 = screenToCanvasCoords(screenCenterX, screenCenterY - 600, screenCenterX, screenCenterY, scale, 180, canvasW, canvasH);
+  assert.ok(Math.abs(bottomRotated180.x - 400) < 0.001);
+  assert.ok(Math.abs(bottomRotated180.y - 1200) < 0.001);
+
+  // Caso 4: Rotación 270° (-90° antihorario)
+  // Tocar arriba en pantalla (screenCenterX, screenCenterY - 400) corresponde al lado derecho del lienzo (x=800, y=600)
+  const rightRotated270 = screenToCanvasCoords(screenCenterX, screenCenterY - 400, screenCenterX, screenCenterY, scale, 270, canvasW, canvasH);
+  assert.ok(Math.abs(rightRotated270.x - 800) < 0.001);
+  assert.ok(Math.abs(rightRotated270.y - 600) < 0.001);
+});
+
+test('Reversibilidad y Consistencia Biyectiva (canvasToScreenCoords <-> screenToCanvasCoords)', () => {
+  const canvasW = 800;
+  const canvasH = 1200;
+  const centerX = 360;
+  const centerY = 450;
+  const angles = [0, 15, 30, 45, 90, 120, 180, 240, 270, 315];
+  const scales = [0.5, 1.0, 1.75, 3.0];
+
+  for (const rot of angles) {
+    for (const sc of scales) {
+      // Probar múltiples puntos clave del lienzo
+      const testPoints = [
+        { x: 0, y: 0 },
+        { x: 400, y: 600 },
+        { x: 800, y: 1200 },
+        { x: 234, y: 891 }
+      ];
+
+      for (const pt of testPoints) {
+        const screen = canvasToScreenCoords(pt.x, pt.y, centerX, centerY, sc, rot, canvasW, canvasH);
+        const recovered = screenToCanvasCoords(screen.x, screen.y, centerX, centerY, sc, rot, canvasW, canvasH);
+
+        assert.ok(
+          Math.abs(recovered.x - pt.x) < 0.001,
+          `Error en X para rot=${rot}, scale=${sc}: esperado ${pt.x}, obtenido ${recovered.x}`
+        );
+        assert.ok(
+          Math.abs(recovered.y - pt.y) < 0.001,
+          `Error en Y para rot=${rot}, scale=${sc}: esperado ${pt.y}, obtenido ${recovered.y}`
+        );
+      }
+    }
+  }
+});
+
+test('Rotación Táctil con Normalización Angular al Cruzar Frontera [-π, π]', () => {
+  // Dos dedos casi horizontales en el borde izquierdo (ángulo cercano a +179°)
+  const t0Init = { x: 200, y: 100 };
+  const t1Init = { x: 100, y: 102 }; // atan2(2, -100) ≈ +178.8°
+
+  // Los dedos rotan levemente en sentido horario cruzando la frontera horizontal a -179°
+  const t0Curr = { x: 200, y: 100 };
+  const t1Curr = { x: 100, y: 98 }; // atan2(-2, -100) ≈ -178.8°
+
+  const angle = calculateTouchRotation(t0Init, t1Init, t0Curr, t1Curr, 0);
+  // La rotación horaria debe ser un cambio sutil (~357.5° o -2.5°), no un salto errático
+  assert.ok(angle > 355 || angle < 5, `El ángulo calculado debe ser coherente tras cruzar frontera: ${angle}`);
+});
+
+
+
+
+

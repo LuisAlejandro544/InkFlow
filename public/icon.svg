@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e2028"/>
+      <stop offset="100%" stop-color="#0f1014"/>
+    </linearGradient>
+    <linearGradient id="nib" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <!-- Background squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4"/>
+  
+  <!-- Glowing color splash ring -->
+  <circle cx="256" cy="256" r="140" fill="none" stroke="url(#glow)" stroke-width="12" opacity="0.3" stroke-dasharray="30 15"/>
+
+  <!-- Stylized Inking Pen Nib -->
+  <path d="M256 80 L350 240 L310 270 L280 230 L280 340 L256 370 L232 340 L232 230 L202 270 L162 240 Z" fill="url(#nib)"/>
+  <circle cx="256" cy="210" r="16" fill="#1e2028"/>
+  <line x1="256" y1="226" x2="256" y2="370" stroke="#1e2028" stroke-width="6"/>
+
+  <!-- Ink drop -->
+  <path d="M256 400 C240 400 230 415 230 430 C230 445 242 456 256 456 C270 456 282 445 282 430 C282 415 272 400 256 400 Z" fill="#fbbf24"/>
+</svg>

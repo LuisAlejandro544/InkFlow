@@ -1,0 +1,8 @@
+{
+  "name": "WebPaint",
+  "description": "A high-performance mobile drawing app powered by WebGPU, Rust, and WebAssembly for a smooth, professional digital art experience.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
