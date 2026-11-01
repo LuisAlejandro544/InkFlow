@@ -10,6 +10,7 @@
  * Licencia: MIT / Apache-2.0 (Permisiva sin restricciones de código abierto obligatorio ni copyleft)
  */
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct StrokePoint {
     pub x: f32,
     pub y: f32,
@@ -17,6 +18,7 @@ pub struct StrokePoint {
     pub timestamp: f64,
 }
 
+#[derive(Clone, Debug)]
 pub struct WasmBrushEngine {
     pub stabilizer_level: u32,
     pub last_point: Option<StrokePoint>,

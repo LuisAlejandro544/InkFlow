@@ -43,16 +43,16 @@ if(EMSCRIPTEN)
     add_executable(inkflow_stroke_analyzer_wasm ${SOURCES})
     target_include_directories(inkflow_stroke_analyzer_wasm PRIVATE include)
     
-    set_target_properties(inkflow_stroke_analyzer_wasm PROPERTIES
-        LINK_FLAGS "\
-            -s WASM=1 \
-            -s MODULARIZE=1 \
-            -s EXPORT_NAME='createInkflowCppModule' \
-            -s EXPORTED_FUNCTIONS='[\"_ibis_analyze_stroke_role\", \"_ibis_sample_point_thickness\", \"_malloc\", \"_free\"]' \
-            -s EXPORTED_RUNTIME_METHODS='[\"ccall\", \"cwrap\", \"HEAPU8\"]' \
-            -s ALLOW_MEMORY_GROWTH=1 \
-            -s NO_FILESYSTEM=1 \
-            -O3 \
-            -msimd128"
+    set_target_properties(inkflow_stroke_analyzer_wasm PROPERTIES SUFFIX ".js")
+    target_link_options(inkflow_stroke_analyzer_wasm PRIVATE
+        "-sWASM=1"
+        "-sMODULARIZE=1"
+        "-sEXPORT_NAME=createInkflowCppModule"
+        "-sEXPORTED_FUNCTIONS=['_ibis_analyze_stroke_role','_ibis_sample_point_thickness','_malloc','_free']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8']"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sNO_FILESYSTEM=1"
+        "-O3"
+        "-msimd128"
     )
 endif()
