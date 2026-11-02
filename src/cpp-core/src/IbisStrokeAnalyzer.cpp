@@ -185,8 +185,6 @@ namespace ibis::vision::stroke {
     return (thick >= 1.0f) ? std::optional<float>{thick} : std::nullopt;
 }
 
-} // namespace ibis::vision::stroke
-
 [[nodiscard]] auto StrokeAnalyzer::close_boundary_gaps(
     std::span<const uint8_t> rgba_pixels,
     int32_t width,
