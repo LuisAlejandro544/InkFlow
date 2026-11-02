@@ -15,6 +15,7 @@ import { Layer, ToolType, Point, ProjectData, VectorStroke, TracingReference, Tr
 import { wasmEngine } from '../engine/wasmEngine';
 import { drawingEngine } from '../engine/webgpuEngine';
 import { kotlinVectorEngine } from '../engine/kotlinWasmBridge';
+import { gpuBitmapCache } from '../engine/bitmapCache';
 import { 
   calculateFocalZoomPan, 
   calculateWheelZoom, 
@@ -209,10 +210,9 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const activeLayer = layers.find(l => l.id === activeLayerId) || layers[0];
 
   /**
-   * Redibuja la composición de todas las capas en el canvas de visualización con
-   * súper-resolución dinámica adaptada a la escala de zoom y al DPR del dispositivo.
-   * Garantiza que el Lápiz Vectorial analítico de Kotlin/Wasm se evalúe con
-   * antialiasing nítido de precisión submétrica sin pixelarse jamás.
+   * Redibuja la composición de capas y trazos en el canvas de visualización con
+   * súper-resolución dinámica. Al estar desacoplado de la foto de calco (que corre en su
+   * propia capa GPU), el trazo del lápiz corre a 120 FPS ultra fluidos sin saturar la VRAM.
    */
   const renderComposite = useCallback(() => {
     const displayCanvas = displayCanvasRef.current;
@@ -238,6 +238,10 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
+    // Durante el modo interactivo de ajuste, TracingAdjuster maneja la imagen directamente en el DOM
+    // mediante CSS transform acelerado por hardware a 120 FPS sin saturar la VRAM ni el hilo de dibujo.
+    const activeTracingForCanvas = (tracingRef && !tracingRef.isAdjusting) ? tracingRef : null;
+
     drawingEngine.compositeLayers(
       ctx,
       layers,
@@ -245,7 +249,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       project.height,
       '#ffffff',
       scaleRef.current * superScale,
-      tracingRef,
+      activeTracingForCanvas,
       currentVectorStrokeRef.current
     );
 
@@ -260,12 +264,33 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     const displayCanvas = displayCanvasRef.current;
     if (!displayCanvas) return;
     try {
+      if (tracingRef && tracingRef.visible && tracingRef.image) {
+        const thumbCanvas = document.createElement('canvas');
+        thumbCanvas.width = project.width;
+        thumbCanvas.height = project.height;
+        const tctx = thumbCanvas.getContext('2d');
+        if (tctx) {
+          drawingEngine.compositeLayers(
+            tctx,
+            layers,
+            project.width,
+            project.height,
+            '#ffffff',
+            1.0,
+            tracingRef,
+            null
+          );
+          const thumb = thumbCanvas.toDataURL('image/jpeg', 0.5);
+          onUpdateProjectThumbnail(thumb);
+          return;
+        }
+      }
       const thumb = displayCanvas.toDataURL('image/jpeg', 0.5);
       onUpdateProjectThumbnail(thumb);
     } catch {
       // Ignorar restricciones
     }
-  }, [onUpdateProjectThumbnail]);
+  }, [layers, onUpdateProjectThumbnail, project.height, project.width, tracingRef]);
 
   /**
    * Aplica la transformación directamente al estilo CSS del DOM mediante GPU sin latencia
@@ -842,7 +867,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
-            className="w-full h-full block touch-none"
+            className="relative w-full h-full block touch-none"
+            style={{ zIndex: 2 }}
           />
 
           {/* Calibrador y transformador de foto de calco o accesorio */}
@@ -851,6 +877,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               canvasWidth={project.width}
               canvasHeight={project.height}
               screenScale={scale}
+              canvasRotation={rotation}
               tracing={tracingRef}
               onChangeTransform={onUpdateTracing}
               onApplyFilter={onApplyTracingFilter}
@@ -882,31 +909,33 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         />
       </main>
 
-      {/* 3. BARRA INFERIOR MODULAR ERGONÓMICA */}
-      <StudioBottomBar
-        activeTool={activeTool}
-        lastDrawingTool={lastDrawingTool}
-        brushSize={brushSize}
-        brushOpacity={brushOpacity}
-        brushColor={brushColor}
-        brushTexture={brushTexture}
-        layers={layers}
-        tracingRef={tracingRef}
-        showStrokeGuide={showStrokeGuide}
-        onToggleBrushEraser={onToggleBrushEraser}
-        onOpenToolPicker={onOpenToolPicker}
-        onOpenTextureModal={onOpenTextureModal}
-        onToggleHandMode={onToggleHandMode}
-        onSelectTool={onSelectTool}
-        onOpenColorPicker={onOpenColorPicker}
-        onOpenLayersModal={onOpenLayersModal}
-        onChangeBrushSize={onChangeBrushSize}
-        onChangeBrushOpacity={onChangeBrushOpacity}
-        onCloseStrokeGuide={() => setShowStrokeGuide(false)}
-        setShowSizePreview={setShowSizePreview}
-        setShowOpacityPreview={setShowOpacityPreview}
-        triggerHaptic={triggerHaptic}
-      />
+      {/* 3. BARRA INFERIOR MODULAR ERGONÓMICA (Oculta mientras se calibra el calco para dar prioridad a la Hoja Inferior nativa) */}
+      {(!tracingRef || !tracingRef.isAdjusting) && (
+        <StudioBottomBar
+          activeTool={activeTool}
+          lastDrawingTool={lastDrawingTool}
+          brushSize={brushSize}
+          brushOpacity={brushOpacity}
+          brushColor={brushColor}
+          brushTexture={brushTexture}
+          layers={layers}
+          tracingRef={tracingRef}
+          showStrokeGuide={showStrokeGuide}
+          onToggleBrushEraser={onToggleBrushEraser}
+          onOpenToolPicker={onOpenToolPicker}
+          onOpenTextureModal={onOpenTextureModal}
+          onToggleHandMode={onToggleHandMode}
+          onSelectTool={onSelectTool}
+          onOpenColorPicker={onOpenColorPicker}
+          onOpenLayersModal={onOpenLayersModal}
+          onChangeBrushSize={onChangeBrushSize}
+          onChangeBrushOpacity={onChangeBrushOpacity}
+          onCloseStrokeGuide={() => setShowStrokeGuide(false)}
+          setShowSizePreview={setShowSizePreview}
+          setShowOpacityPreview={setShowOpacityPreview}
+          triggerHaptic={triggerHaptic}
+        />
+      )}
     </div>
   );
 };

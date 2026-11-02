@@ -214,8 +214,12 @@ export class DrawingEngine {
     targetCtx.save();
     
     // Fondo de lienzo
-    targetCtx.fillStyle = backgroundColor;
-    targetCtx.fillRect(0, 0, width, height);
+    if (backgroundColor === 'transparent') {
+      targetCtx.clearRect(0, 0, width, height);
+    } else {
+      targetCtx.fillStyle = backgroundColor;
+      targetCtx.fillRect(0, 0, width, height);
+    }
 
     // Si hay una foto de calco activa y visible, dibujarla de fondo para que el usuario trace encima
     if (tracingRef && tracingRef.visible && tracingRef.image) {

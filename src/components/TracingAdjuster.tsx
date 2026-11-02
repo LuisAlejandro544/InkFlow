@@ -1,21 +1,29 @@
 /**
  * @file TracingAdjuster.tsx
- * @description Superposición táctil ergonómica para posicionar, escalar, rotar
- * y calibrar la foto de referencia para calco sobre el lienzo sin obstruir la vista del artista.
+ * @description Superposición táctil ergonómica y barra de calibración compacta nativa (estilo IbisPaint X)
+ * para posicionar, escalar, rotar y calibrar la foto de referencia para calco o accesorios/stickers.
  * 
- * Mejoras clave de experiencia móvil:
- * - Panel minimizable: Permite colapsar el menú a una barra ultra compacta con 1 toque
- *   para ver y calcar toda la hoja sin que ningún diálogo bloquee el dibujo.
- * - Conmutador instantáneo de visibilidad (Ocultar/Mostrar calco al instante).
- * - Tiradores táctiles en esquinas con amplia zona de toque (touch targets de 44px+).
- * - Gestos multitáctiles con 2 dedos (Pinch-to-scale y rotación) y arrastre con 1 dedo.
- * - Filtros Wasm (Sobel Lineart, Alto Contraste, Monocromo).
+ * Mejoras clave de rendimiento y ergonomía (120 FPS Pure GPU Acceleration):
+ * 1. Cero Reflows de Diseño: El tamaño de la caja se mantiene constante en dimensiones nativas.
+ *    Toda la posición, escala y rotación se aplican exclusivamente mediante CSS hardware transform
+ *    (translate3d, rotate, scale) en la GPU, evitando recalcular el layout DOM o remuestrear la imagen
+ *    en CPU en cada píxel de movimiento.
+ * 2. Gestos Multitáctiles Fluidos: Arrastre con 1 dedo, escalado isotropic desde cualquier esquina
+ *    y pinch-to-zoom / rotación con 2 dedos mediante requestAnimationFrame sin disparar re-renderizados
+ *    de React. La persistencia al estado de React ocurre al soltar el dedo (1 solo commit).
+ * 3. Compensación de Escala Inteligente: Los tiradores táctiles y botones mantienen un tamaño físico
+ *    óptimo en pantalla (~36-44px) sin importar cuánto se agrande o achique la foto o el lienzo.
+ * 4. Diseño Adaptable sin Desbordamiento (Zero-Overflow): Toda la botonera cabe en pantallas móviles
+ *    estrechas desde 320px hasta 430px, asegurando que el botón principal "Fijar Calco" esté siempre
+ *    visible y bajo la zona del pulgar.
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Check, X, RotateCcw, Move, Sliders, Image as ImageIcon, 
-  Sparkles, Eye, EyeOff, ChevronDown, ChevronUp, Layers
+  Sparkles, Eye, EyeOff, ChevronDown, ChevronUp, Layers, 
+  RotateCw, Maximize2, SlidersHorizontal
 } from 'lucide-react';
 import { TracingReference, TracingFilterMode } from '../engine/types';
 
@@ -23,6 +31,7 @@ interface TracingAdjusterProps {
   canvasWidth: number;
   canvasHeight: number;
   screenScale: number;
+  canvasRotation?: number;
   tracing: TracingReference;
   onChangeTransform: (update: Partial<TracingReference>) => void;
   onApplyFilter: (mode: TracingFilterMode) => void;
@@ -37,6 +46,7 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
   canvasWidth,
   canvasHeight,
   screenScale,
+  canvasRotation = 0,
   tracing,
   onChangeTransform,
   onApplyFilter,
@@ -46,480 +56,661 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
   onStampToActiveLayer,
   onStampAsNewLayer,
 }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const isAccessory = tracing.purpose === 'accessory';
-  const dragStartRef = useRef<{
-    pointerX: number;
-    pointerY: number;
+  
+  // Referencia a la caja transformable para aceleración por GPU pura
+  const boxRef = useRef<HTMLDivElement | null>(null);
+
+  // Registro mutable de la transformación actual durante la interacción táctil
+  const currentTransformRef = useRef({
+    x: tracing.x,
+    y: tracing.y,
+    scale: tracing.scale,
+    rotation: tracing.rotation,
+  });
+
+  // Identificador de requestAnimationFrame para sincronizar a 60-120 FPS
+  const rafIdRef = useRef<number | null>(null);
+
+  // Referencia al estado de arrastre de 1 dedo o esquina
+  const dragRef = useRef<{
+    type: 'move' | 'corner';
+    corner?: 'tl' | 'tr' | 'bl' | 'br';
     startX: number;
     startY: number;
+    startClientX: number;
+    startClientY: number;
     startScale: number;
-    mode: 'move' | 'corner' | 'pinch';
-    corner?: 'tl' | 'tr' | 'bl' | 'br';
+    centerX: number;
+    centerY: number;
+    startDist: number;
   } | null>(null);
 
+  // Referencia para gestos multitáctiles con 2 dedos (Pinch-to-zoom y rotación)
   const pinchRef = useRef<{
     initialDist: number;
-    initialScale: number;
     initialAngle: number;
+    initialScale: number;
     initialRotation: number;
+    initialX: number;
+    initialY: number;
+    initialCenterX: number;
+    initialCenterY: number;
   } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'transform' | 'filters'>('transform');
-  // Estado para minimizar los controles y no tapar el dibujo
+  // Menú emergente de filtros Wasm
+  const [showFiltersMenu, setShowFiltersMenu] = useState<boolean>(false);
+  // Modo píldora ultra compacta
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
 
-  // Dimensiones actuales dibujadas en píxeles de lienzo
-  const drawWidth = tracing.width * tracing.scale;
-  const drawHeight = tracing.height * tracing.scale;
+  /**
+   * Actualiza el estilo CSS transform de la caja en la GPU mediante requestAnimationFrame
+   */
+  const scheduleDOMTransform = useCallback(() => {
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      if (!boxRef.current) return;
+      const { x, y, scale, rotation } = currentTransformRef.current;
+      boxRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) rotate(${rotation}rad) scale(${scale})`;
+      
+      // Counter-scale para que los tiradores táctiles mantengan tamaño visible uniforme en pantalla
+      const counterFactor = Math.min(6.0, Math.max(0.6, 1 / (screenScale * scale)));
+      boxRef.current.style.setProperty('--counter-scale', String(counterFactor));
+    });
+  }, [screenScale]);
 
-  // Manejador PointerDown para mover la foto con 1 dedo
+  // Sincronizar transformación cuando cambian las props de React
+  useEffect(() => {
+    currentTransformRef.current = {
+      x: tracing.x,
+      y: tracing.y,
+      scale: tracing.scale,
+      rotation: tracing.rotation,
+    };
+    if (boxRef.current) {
+      boxRef.current.style.transform = `translate3d(${tracing.x}px, ${tracing.y}px, 0) translate(-50%, -50%) rotate(${tracing.rotation}rad) scale(${tracing.scale})`;
+      const counterFactor = Math.min(6.0, Math.max(0.6, 1 / (screenScale * tracing.scale)));
+      boxRef.current.style.setProperty('--counter-scale', String(counterFactor));
+    }
+  }, [tracing.x, tracing.y, tracing.scale, tracing.rotation, screenScale]);
+
+  /**
+   * Manejador de movimiento global para 1 dedo (desplazamiento o escalado por esquina)
+   */
+  const onGlobalPointerMove = useCallback((e: PointerEvent) => {
+    if (!dragRef.current) return;
+    e.preventDefault();
+
+    if (dragRef.current.type === 'move') {
+      const dx = e.clientX - dragRef.current.startClientX;
+      const dy = e.clientY - dragRef.current.startClientY;
+
+      // Compensar la rotación del lienzo del estudio para que mover con el dedo siga la pantalla
+      const rotRad = (canvasRotation * Math.PI) / 180;
+      const cos = Math.cos(-rotRad);
+      const sin = Math.sin(-rotRad);
+      const canvasDx = (dx * cos - dy * sin) / screenScale;
+      const canvasDy = (dx * sin + dy * cos) / screenScale;
+
+      currentTransformRef.current.x = Math.round(dragRef.current.startX + canvasDx);
+      currentTransformRef.current.y = Math.round(dragRef.current.startY + canvasDy);
+      scheduleDOMTransform();
+    } else if (dragRef.current.type === 'corner') {
+      // Escalado isotrópico independiente de rotación basado en distancia al centro
+      const currentDist = Math.hypot(
+        e.clientX - dragRef.current.centerX,
+        e.clientY - dragRef.current.centerY
+      );
+      const scaleMultiplier = currentDist / Math.max(10, dragRef.current.startDist);
+      const nextScale = Math.max(0.08, Math.min(8.0, Number((dragRef.current.startScale * scaleMultiplier).toFixed(3))));
+      
+      currentTransformRef.current.scale = nextScale;
+      scheduleDOMTransform();
+    }
+  }, [canvasRotation, screenScale, scheduleDOMTransform]);
+
+  /**
+   * Manejador al soltar el dedo: Realiza 1 solo commit al estado de React
+   */
+  const onGlobalPointerUp = useCallback((e: PointerEvent) => {
+    if (!dragRef.current) return;
+    e.preventDefault();
+    const wasCorner = dragRef.current.type === 'corner';
+    dragRef.current = null;
+
+    window.removeEventListener('pointermove', onGlobalPointerMove);
+    window.removeEventListener('pointerup', onGlobalPointerUp);
+    window.removeEventListener('pointercancel', onGlobalPointerUp);
+
+    if (wasCorner) {
+      onChangeTransform({ scale: currentTransformRef.current.scale });
+    } else {
+      onChangeTransform({
+        x: currentTransformRef.current.x,
+        y: currentTransformRef.current.y,
+      });
+    }
+  }, [onGlobalPointerMove, onChangeTransform]);
+
+  /**
+   * Inicia el arrastre de traslación con 1 dedo
+   */
   const handlePointerDownMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     e.stopPropagation();
-    try {
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      // Ignorar
-    }
-    dragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      startX: tracing.x,
-      startY: tracing.y,
-      startScale: tracing.scale,
-      mode: 'move',
+
+    dragRef.current = {
+      type: 'move',
+      startX: currentTransformRef.current.x,
+      startY: currentTransformRef.current.y,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startScale: currentTransformRef.current.scale,
+      centerX: 0,
+      centerY: 0,
+      startDist: 0,
     };
+
+    window.addEventListener('pointermove', onGlobalPointerMove, { passive: false });
+    window.addEventListener('pointerup', onGlobalPointerUp);
+    window.addEventListener('pointercancel', onGlobalPointerUp);
   };
 
-  // Manejador PointerDown para redimensionar desde una esquina
+  /**
+   * Inicia el redimensionamiento desde una esquina
+   */
   const handlePointerDownCorner = (e: React.PointerEvent<HTMLDivElement>, corner: 'tl' | 'tr' | 'bl' | 'br') => {
+    e.preventDefault();
     e.stopPropagation();
-    try {
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      // Ignorar
-    }
-    dragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      startX: tracing.x,
-      startY: tracing.y,
-      startScale: tracing.scale,
-      mode: 'corner',
+
+    // Obtener el centro visual de la caja en coordenadas de pantalla
+    const rect = boxRef.current ? boxRef.current.getBoundingClientRect() : null;
+    const centerX = rect ? rect.left + rect.width / 2 : e.clientX;
+    const centerY = rect ? rect.top + rect.height / 2 : e.clientY;
+    const startDist = Math.hypot(e.clientX - centerX, e.clientY - centerY);
+
+    dragRef.current = {
+      type: 'corner',
       corner,
+      startX: currentTransformRef.current.x,
+      startY: currentTransformRef.current.y,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startScale: currentTransformRef.current.scale,
+      centerX,
+      centerY,
+      startDist: Math.max(10, startDist),
     };
+
+    window.addEventListener('pointermove', onGlobalPointerMove, { passive: false });
+    window.addEventListener('pointerup', onGlobalPointerUp);
+    window.addEventListener('pointercancel', onGlobalPointerUp);
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragStartRef.current) return;
-    e.stopPropagation();
+  // Suscripción a gestos multitáctiles nativos de 2 dedos (Pinch-to-zoom y rotación sin delay)
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
 
-    const dx = (e.clientX - dragStartRef.current.pointerX) / screenScale;
-    const dy = (e.clientY - dragStartRef.current.pointerY) / screenScale;
+    const onNativeTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const angle = Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX);
+        const centerX = (t0.clientX + t1.clientX) / 2;
+        const centerY = (t0.clientY + t1.clientY) / 2;
 
-    if (dragStartRef.current.mode === 'move') {
-      onChangeTransform({
-        x: Math.round(dragStartRef.current.startX + dx),
-        y: Math.round(dragStartRef.current.startY + dy),
-      });
-    } else if (dragStartRef.current.mode === 'corner') {
-      const corner = dragStartRef.current.corner;
-      let scaleMultiplier = 1;
-      const initialDiagonal = Math.hypot(tracing.width, tracing.height);
-      const deltaDiag = (corner === 'br' || corner === 'tr' ? dx : -dx) + (corner === 'br' || corner === 'bl' ? dy : -dy);
-      scaleMultiplier = 1 + deltaDiag / (initialDiagonal * dragStartRef.current.startScale);
+        pinchRef.current = {
+          initialDist: Math.max(10, dist),
+          initialAngle: angle,
+          initialScale: currentTransformRef.current.scale,
+          initialRotation: currentTransformRef.current.rotation,
+          initialX: currentTransformRef.current.x,
+          initialY: currentTransformRef.current.y,
+          initialCenterX: centerX,
+          initialCenterY: centerY,
+        };
+      }
+    };
 
-      const nextScale = Math.max(0.1, Math.min(6.0, Number((dragStartRef.current.startScale * scaleMultiplier).toFixed(3))));
-      onChangeTransform({ scale: nextScale });
-    }
-  };
+    const onNativeTouchMove = (e: TouchEvent) => {
+      if (pinchRef.current && e.touches.length === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const angle = Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX);
+        const centerX = (t0.clientX + t1.clientX) / 2;
+        const centerY = (t0.clientY + t1.clientY) / 2;
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    try {
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      // Ignorar
-    }
-    dragStartRef.current = null;
-  };
+        const scaleRatio = dist / pinchRef.current.initialDist;
+        const nextScale = Math.max(0.08, Math.min(8.0, Number((pinchRef.current.initialScale * scaleRatio).toFixed(3))));
+        const deltaAngle = angle - pinchRef.current.initialAngle;
+        const nextRotation = Number((pinchRef.current.initialRotation + deltaAngle).toFixed(3));
 
-  // Soporte para gestos multitáctiles a 2 dedos sobre el calco
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 2) {
-      e.stopPropagation();
-      const t0 = e.touches[0];
-      const t1 = e.touches[1];
-      const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-      const angle = Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX);
+        // Paneo durante el pinch
+        const dx = centerX - pinchRef.current.initialCenterX;
+        const dy = centerY - pinchRef.current.initialCenterY;
+        const rotRad = (canvasRotation * Math.PI) / 180;
+        const cos = Math.cos(-rotRad);
+        const sin = Math.sin(-rotRad);
+        const canvasDx = (dx * cos - dy * sin) / screenScale;
+        const canvasDy = (dx * sin + dy * cos) / screenScale;
 
-      pinchRef.current = {
-        initialDist: Math.max(10, dist),
-        initialScale: tracing.scale,
-        initialAngle: angle,
-        initialRotation: tracing.rotation,
-      };
-    }
-  };
+        currentTransformRef.current.scale = nextScale;
+        currentTransformRef.current.rotation = nextRotation;
+        currentTransformRef.current.x = Math.round(pinchRef.current.initialX + canvasDx);
+        currentTransformRef.current.y = Math.round(pinchRef.current.initialY + canvasDy);
 
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (pinchRef.current && e.touches.length === 2) {
-      e.stopPropagation();
-      const t0 = e.touches[0];
-      const t1 = e.touches[1];
-      const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-      const angle = Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX);
+        scheduleDOMTransform();
+      }
+    };
 
-      const scaleRatio = dist / pinchRef.current.initialDist;
-      const nextScale = Math.max(0.1, Math.min(6.0, Number((pinchRef.current.initialScale * scaleRatio).toFixed(3))));
-      const deltaAngle = angle - pinchRef.current.initialAngle;
-      const nextRotation = Number((pinchRef.current.initialRotation + deltaAngle).toFixed(3));
+    const onNativeTouchEnd = (e: TouchEvent) => {
+      if (pinchRef.current) {
+        e.preventDefault();
+        pinchRef.current = null;
+        onChangeTransform({
+          x: currentTransformRef.current.x,
+          y: currentTransformRef.current.y,
+          scale: currentTransformRef.current.scale,
+          rotation: currentTransformRef.current.rotation,
+        });
+      }
+    };
 
-      onChangeTransform({
-        scale: nextScale,
-        rotation: nextRotation,
-      });
-    }
-  };
+    box.addEventListener('touchstart', onNativeTouchStart, { passive: false });
+    box.addEventListener('touchmove', onNativeTouchMove, { passive: false });
+    box.addEventListener('touchend', onNativeTouchEnd, { passive: false });
+    box.addEventListener('touchcancel', onNativeTouchEnd, { passive: false });
 
-  const handleTouchEnd = () => {
-    pinchRef.current = null;
-  };
+    return () => {
+      box.removeEventListener('touchstart', onNativeTouchStart);
+      box.removeEventListener('touchmove', onNativeTouchMove);
+      box.removeEventListener('touchend', onNativeTouchEnd);
+      box.removeEventListener('touchcancel', onNativeTouchEnd);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, [canvasRotation, screenScale, scheduleDOMTransform, onChangeTransform]);
 
   return (
-    <div 
-      ref={containerRef}
-      className="absolute inset-0 pointer-events-none z-30 select-none overflow-hidden"
-    >
-      {/* 1. Marco interactivo de Transformación sobre el lienzo */}
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        style={{
-          position: 'absolute',
-          left: `${tracing.x}px`,
-          top: `${tracing.y}px`,
-          width: `${drawWidth}px`,
-          height: `${drawHeight}px`,
-          transform: `translate(-50%, -50%) rotate(${tracing.rotation}rad)`,
-          pointerEvents: 'auto',
-          cursor: 'grab',
-        }}
-        className="touch-none group"
-      >
-        {/* Borde guía con acento ámbar */}
-        <div 
-          onPointerDown={handlePointerDownMove}
-          className="w-full h-full border-2 border-dashed border-amber-400 bg-amber-400/5 hover:bg-amber-400/10 transition-colors flex items-center justify-center relative shadow-lg"
+    <>
+      {/* 1. MARCO INTERACTIVO ACELERADO POR GPU PURA (120 FPS Sin Reflows) */}
+      <div className="absolute inset-0 pointer-events-none z-30 select-none overflow-visible">
+        <div
+          ref={boxRef}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: `${tracing.width}px`,
+            height: `${tracing.height}px`,
+            transform: `translate3d(${tracing.x}px, ${tracing.y}px, 0) translate(-50%, -50%) rotate(${tracing.rotation}rad) scale(${tracing.scale})`,
+            transformOrigin: 'center center',
+            pointerEvents: 'auto',
+            cursor: 'grab',
+            willChange: 'transform',
+          }}
+          className="touch-none group"
         >
-          {/* Indicador central para mover con 1 dedo */}
-          <div className="p-3 rounded-full bg-amber-500 text-black shadow-xl flex items-center justify-center pointer-events-none active:scale-95 transition-transform ring-4 ring-black/40">
-            <Move size={20} />
+          {/* Imagen de calco renderizada en textura GPU sin latencia */}
+          {tracing.image && (
+            <img
+              src={tracing.image.src || tracing.src}
+              alt="Referencia de calco"
+              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+              style={{
+                opacity: tracing.opacity,
+                display: tracing.visible ? 'block' : 'none',
+              }}
+            />
+          )}
+
+          {/* Borde guía con acento ámbar o rosa según sea calco o accesorio */}
+          <div 
+            onPointerDown={handlePointerDownMove}
+            className={`w-full h-full border-2 border-dashed ${
+              isAccessory 
+                ? 'border-pink-400 bg-pink-400/5 hover:bg-pink-400/10' 
+                : 'border-amber-400 bg-amber-400/5 hover:bg-amber-400/10'
+            } transition-colors flex items-center justify-center relative shadow-2xl`}
+          >
+            {/* Indicador central para mover con 1 dedo con tamaño constante en pantalla */}
+            <div 
+              style={{
+                transform: 'scale(var(--counter-scale, 1))',
+                transformOrigin: 'center center',
+              }}
+              className={`p-2.5 rounded-full ${
+                isAccessory ? 'bg-pink-500' : 'bg-amber-500'
+              } text-black shadow-2xl flex items-center justify-center pointer-events-none active:scale-95 transition-transform ring-4 ring-black/50`}
+            >
+              <Move size={16} />
+            </div>
+
+            {/* Píldora de ayuda gestual */}
+            <span 
+              style={{
+                transform: 'scale(var(--counter-scale, 1))',
+                transformOrigin: 'bottom center',
+              }}
+              className="absolute bottom-2 text-[10px] font-mono font-bold bg-black/90 text-amber-300 px-2.5 py-0.5 rounded-full pointer-events-none shadow-xl border border-amber-500/30 whitespace-nowrap"
+            >
+              1 dedo mueve • 2 dedos rotan y escalan
+            </span>
           </div>
 
-          <span className="absolute bottom-2 text-[10px] font-mono font-bold bg-black/85 text-amber-300 px-2.5 py-0.5 rounded-full pointer-events-none shadow-md">
-            Mueve con 1 dedo • Pellizca con 2 para zoom
-          </span>
+          {/* Tiradores en las 4 esquinas con touch target generoso (48px) y escala compensada */}
+          <div
+            onPointerDown={(e) => handlePointerDownCorner(e, 'tl')}
+            aria-label="Escalar esquina superior izquierda"
+            style={{
+              transform: 'scale(var(--counter-scale, 1))',
+              transformOrigin: 'center center',
+            }}
+            className={`absolute -top-3.5 -left-3.5 w-7 h-7 ${
+              isAccessory ? 'bg-pink-400' : 'bg-amber-400'
+            } border-2 border-black rounded-full shadow-2xl cursor-nwse-resize active:scale-125 transition-transform flex items-center justify-center touch-none ring-2 ring-white/60 before:absolute before:-inset-2.5 before:content-['']`}
+          />
+          <div
+            onPointerDown={(e) => handlePointerDownCorner(e, 'tr')}
+            aria-label="Escalar esquina superior derecha"
+            style={{
+              transform: 'scale(var(--counter-scale, 1))',
+              transformOrigin: 'center center',
+            }}
+            className={`absolute -top-3.5 -right-3.5 w-7 h-7 ${
+              isAccessory ? 'bg-pink-400' : 'bg-amber-400'
+            } border-2 border-black rounded-full shadow-2xl cursor-nesw-resize active:scale-125 transition-transform flex items-center justify-center touch-none ring-2 ring-white/60 before:absolute before:-inset-2.5 before:content-['']`}
+          />
+          <div
+            onPointerDown={(e) => handlePointerDownCorner(e, 'bl')}
+            aria-label="Escalar esquina inferior izquierda"
+            style={{
+              transform: 'scale(var(--counter-scale, 1))',
+              transformOrigin: 'center center',
+            }}
+            className={`absolute -bottom-3.5 -left-3.5 w-7 h-7 ${
+              isAccessory ? 'bg-pink-400' : 'bg-amber-400'
+            } border-2 border-black rounded-full shadow-2xl cursor-nesw-resize active:scale-125 transition-transform flex items-center justify-center touch-none ring-2 ring-white/60 before:absolute before:-inset-2.5 before:content-['']`}
+          />
+          <div
+            onPointerDown={(e) => handlePointerDownCorner(e, 'br')}
+            aria-label="Escalar esquina inferior derecha"
+            style={{
+              transform: 'scale(var(--counter-scale, 1))',
+              transformOrigin: 'center center',
+            }}
+            className={`absolute -bottom-3.5 -right-3.5 w-7 h-7 ${
+              isAccessory ? 'bg-pink-400' : 'bg-amber-400'
+            } border-2 border-black rounded-full shadow-2xl cursor-nwse-resize active:scale-125 transition-transform flex items-center justify-center touch-none ring-2 ring-white/60 before:absolute before:-inset-2.5 before:content-['']`}
+          />
         </div>
-
-        {/* Tiradores en las 4 esquinas con área táctil ampliada (36×36px) */}
-        <div
-          onPointerDown={(e) => handlePointerDownCorner(e, 'tl')}
-          aria-label="Escalar calco esquina superior izquierda"
-          className="absolute -top-4 -left-4 w-9 h-9 bg-amber-400 border-2 border-black rounded-full shadow-lg cursor-nwse-resize active:scale-125 transition-transform flex items-center justify-center touch-none ring-2 ring-white/50"
-        />
-        <div
-          onPointerDown={(e) => handlePointerDownCorner(e, 'tr')}
-          aria-label="Escalar calco esquina superior derecha"
-          className="absolute -top-4 -right-4 w-9 h-9 bg-amber-400 border-2 border-black rounded-full shadow-lg cursor-nesw-resize active:scale-125 transition-transform flex items-center justify-center touch-none ring-2 ring-white/50"
-        />
-        <div
-          onPointerDown={(e) => handlePointerDownCorner(e, 'bl')}
-          aria-label="Escalar calco esquina inferior izquierda"
-          className="absolute -bottom-4 -left-4 w-9 h-9 bg-amber-400 border-2 border-black rounded-full shadow-lg cursor-nesw-resize active:scale-125 transition-transform flex items-center justify-center touch-none ring-2 ring-white/50"
-        />
-        <div
-          onPointerDown={(e) => handlePointerDownCorner(e, 'br')}
-          aria-label="Escalar calco esquina inferior derecha"
-          className="absolute -bottom-4 -right-4 w-9 h-9 bg-amber-400 border-2 border-black rounded-full shadow-lg cursor-nwse-resize active:scale-125 transition-transform flex items-center justify-center touch-none ring-2 ring-white/50"
-        />
       </div>
 
-      {/* 2. Barra de controles reposicionada y minimizable para no estorbar el lienzo */}
-      <div 
-        style={{ pointerEvents: 'auto' }}
-        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 max-w-sm w-[94%] select-none transition-all duration-300"
-      >
-        {isMinimized ? (
-          /* MODO MINIMIZADO: Píldora ultra compacta que no tapa el dibujo */
-          <div className={`bg-[#14151df0] border ${
-            isAccessory ? 'border-pink-500/80' : 'border-amber-500/80'
-          } rounded-full px-3.5 py-2 shadow-2xl backdrop-blur-md flex items-center justify-between gap-2 text-white animate-fade-in`}>
-            <div className="flex items-center gap-2">
-              {isAccessory ? (
-                <span className="text-sm">🎀</span>
-              ) : (
-                <ImageIcon size={16} className="text-amber-400" />
-              )}
-              <span className={`text-xs font-bold ${isAccessory ? 'text-pink-300' : 'text-amber-300'}`}>
-                {isAccessory ? 'Accesorio' : 'Calco'}
-              </span>
-              <span className="text-[11px] font-mono font-semibold bg-[#202230] px-1.5 py-0.5 rounded text-gray-300">
-                {Math.round(tracing.opacity * 100)}%
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {/* Conmutador instantáneo de visibilidad */}
-              <button
-                onClick={() => onChangeTransform({ visible: !tracing.visible })}
-                className={`p-1.5 rounded-full border text-xs flex items-center gap-1 transition-all ${
-                  tracing.visible 
-                    ? 'bg-[#222432] border-gray-700 text-gray-200' 
-                    : `${isAccessory ? 'bg-pink-500/20 border-pink-400 text-pink-300' : 'bg-amber-500/20 border-amber-400 text-amber-300'}`
-                }`}
-                title={tracing.visible ? 'Ocultar temporalmente' : 'Mostrar'}
-              >
-                {tracing.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-              </button>
-
-              {/* Botón para expandir ajustes */}
-              <button
-                onClick={() => setIsMinimized(false)}
-                className="px-2.5 py-1 rounded-full bg-[#242738] hover:bg-[#2c2f42] text-xs font-semibold flex items-center gap-1 text-gray-200"
-              >
-                <Sliders size={13} />
-                <span>Ajustes</span>
-                <ChevronUp size={14} />
-              </button>
-
-              {/* Botón de Estampar o Fijar */}
-              {isAccessory ? (
-                <button
-                  onClick={onStampToActiveLayer || onConfirm}
-                  className="px-2.5 py-1 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all flex items-center gap-1"
-                  title="Estampar accesorio en la obra"
-                >
-                  <Sparkles size={13} />
-                  <span>Estampar</span>
-                </button>
-              ) : (
-                <button
-                  onClick={onConfirm}
-                  className="p-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-md active:scale-95 transition-all"
-                  title="Fijar y Empezar a Dibujar"
-                >
-                  <Check size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* MODO EXPANDIDO: Panel completo con opción de minimizar */
-          <div className={`bg-[#151620f5] border ${
-            isAccessory ? 'border-pink-500/60' : 'border-amber-500/60'
-          } rounded-3xl p-3.5 shadow-2xl backdrop-blur-md flex flex-col gap-2.5 animate-fade-in text-white`}>
-            {/* Cabecera con Minimizar y Descartar */}
-            <div className="flex items-center justify-between border-b border-[#292c3a] pb-2">
-              <div className="flex items-center gap-2">
-                {isAccessory ? (
-                  <span className="text-base">🎀</span>
-                ) : (
-                  <ImageIcon size={18} className="text-amber-400" />
-                )}
-                <h3 className={`text-xs font-bold uppercase tracking-wider ${
-                  isAccessory ? 'text-pink-300' : 'text-amber-300'
-                }`}>
-                  {isAccessory ? 'Ajustar Accesorio / Sticker' : 'Calibrar Foto de Calco'}
-                </h3>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                {/* Ocultar / Mostrar foto de calco */}
-                <button
-                  onClick={() => onChangeTransform({ visible: !tracing.visible })}
-                  className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-all ${
-                    tracing.visible 
-                      ? 'bg-[#222432] border-gray-700 text-gray-200' 
-                      : 'bg-amber-500/20 border-amber-400 text-amber-300'
-                  }`}
-                  title={tracing.visible ? 'Ocultar foto temporalmente' : 'Mostrar foto de calco'}
-                >
-                  {tracing.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-                  <span className="text-[10px]">{tracing.visible ? 'Visible' : 'Oculta'}</span>
-                </button>
-
-                <button
-                  onClick={onCenterImage}
-                  className="p-1.5 rounded-lg bg-[#222430] hover:bg-[#2b2d3d] text-gray-300 text-[10px] font-semibold flex items-center gap-1 transition-colors"
-                  title="Centrar en medio de la hoja"
-                >
-                  <RotateCcw size={12} />
-                  <span>Centrar</span>
-                </button>
-
-                {/* Minimizar panel para despejar la vista */}
-                <button
-                  onClick={() => setIsMinimized(true)}
-                  className="p-1.5 rounded-lg bg-[#222430] hover:bg-[#2b2d3d] text-gray-300 transition-colors"
-                  title="Minimizar panel para ver el dibujo completo"
-                >
-                  <ChevronDown size={15} />
-                </button>
-
-                <button
-                  onClick={onCancel}
-                  aria-label="Descartar foto de calco"
-                  className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 transition-colors"
-                  title="Descartar foto"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            </div>
-
-            {/* Selector de Pestañas: Transformación vs Filtros Wasm */}
-            <div className="grid grid-cols-2 gap-1.5 bg-[#101117] p-1 rounded-xl border border-[#232533]">
-              <button
-                onClick={() => setActiveTab('transform')}
-                className={`py-1 text-xs font-semibold rounded-lg transition-all ${
-                  activeTab === 'transform' ? 'bg-amber-500 text-black' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Opacidad y Ajuste
-              </button>
-              <button
-                onClick={() => setActiveTab('filters')}
-                className={`py-1 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-all ${
-                  activeTab === 'filters' ? 'bg-amber-500 text-black' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <Sparkles size={13} />
-                <span>Filtros Wasm</span>
-              </button>
-            </div>
-
-            {/* Pestaña 1: Slider de Opacidad con Chips de Acceso Rápido */}
-            {activeTab === 'transform' ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-300 font-medium">Opacidad del Calco:</span>
-                  <span className="font-mono font-bold text-amber-400">
-                    {Math.round(tracing.opacity * 100)}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="5"
-                  max="100"
-                  value={Math.round(tracing.opacity * 100)}
-                  onChange={(e) => onChangeTransform({ opacity: Number(e.target.value) / 100 })}
-                  className="w-full accent-amber-500 h-2 bg-[#252735] rounded-lg cursor-pointer"
-                />
-                <div className="flex justify-between gap-1 pt-0.5">
-                  {[15, 30, 40, 60, 85].map((preset) => (
-                    <button
-                      key={preset}
-                      onClick={() => onChangeTransform({ opacity: preset / 100 })}
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border transition-all ${
-                        Math.round(tracing.opacity * 100) === preset
-                          ? 'bg-amber-500 text-black font-bold border-amber-400'
-                          : 'bg-[#1b1d28] border-[#292c3a] text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      {preset}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              /* Pestaña 2: Filtros Inteligentes Wasm para Calcar */
-              <div className="grid grid-cols-4 gap-1.5">
+      {/* 2. BARRA DE CALIBRACIÓN COMPACTA NATIVA (Estilo IbisPaint X - Zero Desbordamiento) */}
+      {typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-x-0 bottom-0 z-50 pointer-events-auto select-none">
+          {/* Menú flotante emergente de Filtros Wasm (si está activo) */}
+          {showFiltersMenu && !isMinimized && (
+            <div className="px-3 pb-1.5 flex justify-center animate-in fade-in slide-in-from-bottom-2 duration-150">
+              <div className="bg-[#12131bf6] border border-amber-500/50 rounded-2xl p-1.5 shadow-2xl backdrop-blur-2xl flex items-center gap-1.5 max-w-sm w-full">
                 {[
-                  { mode: 'original', label: 'Color', desc: 'Foto original' },
-                  { mode: 'lineart', label: 'Lineart', desc: 'Bordes Sobel' },
-                  { mode: 'grayscale', label: 'B/N', desc: 'Monocromo' },
-                  { mode: 'contrast', label: 'Contraste', desc: 'Alto contraste' },
+                  { mode: 'original', label: 'Color', icon: '🎨' },
+                  { mode: 'lineart', label: 'Lineart', icon: '✒️' },
+                  { mode: 'grayscale', label: 'B/N', icon: '⬛' },
+                  { mode: 'contrast', label: 'Contraste', icon: '☀️' },
                 ].map((f) => (
                   <button
                     key={f.mode}
-                    onClick={() => onApplyFilter(f.mode as TracingFilterMode)}
-                    className={`py-2 px-1 rounded-xl text-center border flex flex-col items-center justify-center gap-0.5 transition-all ${
+                    type="button"
+                    onClick={() => {
+                      onApplyFilter(f.mode as TracingFilterMode);
+                      setShowFiltersMenu(false);
+                    }}
+                    className={`flex-1 py-1 px-1 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5 transition-all active:scale-95 ${
                       tracing.filterMode === f.mode
-                        ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-md ring-1 ring-amber-400/40'
-                        : 'bg-[#181a24] border-[#292c3a] text-gray-400 hover:text-white'
+                        ? 'bg-amber-500 text-black shadow-md'
+                        : 'bg-[#1b1d28] text-gray-300 hover:text-white border border-[#2b2e40]'
                     }`}
                   >
-                    <span className="text-[11px] font-bold">{f.label}</span>
-                    <span className="text-[8px] text-gray-500">{f.desc}</span>
+                    <span className="text-sm">{f.icon}</span>
+                    <span className="text-[10px]">{f.label}</span>
                   </button>
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Botones de Acción: Estampar en Obra Maestra vs Fijar Calco */}
-            <div className="flex flex-col gap-2 pt-1 border-t border-[#232635]">
-              {isAccessory ? (
-                /* ACCESORIO: Botones dedicados para estampar en capa activa o crear nueva capa */
-                <div className="grid grid-cols-2 gap-2">
+          {isMinimized ? (
+            /* MODO PÍLDORA ULTRA COMPACTA: No tapa nada del lienzo */
+            <div className="px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex justify-center animate-in fade-in slide-in-from-bottom-2 duration-150">
+              <div className={`bg-[#12131bf6] border ${
+                isAccessory ? 'border-pink-500/80 shadow-pink-900/30' : 'border-amber-500/80 shadow-amber-900/30'
+              } rounded-full px-4 py-2 shadow-2xl backdrop-blur-2xl flex items-center justify-between gap-2.5 text-white max-w-sm w-full`}>
+                <div className="flex items-center gap-2">
+                  {isAccessory ? <span className="text-base">🎀</span> : <ImageIcon size={16} className="text-amber-400" />}
+                  <span className={`text-xs font-bold ${isAccessory ? 'text-pink-300' : 'text-amber-300'}`}>
+                    {isAccessory ? 'Accesorio' : 'Calco'}
+                  </span>
+                  <span className="text-[11px] font-mono font-bold bg-[#1e202c] px-2 py-0.5 rounded-full text-amber-400 border border-[#2e3143]">
+                    {Math.round(tracing.opacity * 100)}%
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
                   <button
-                    onClick={onStampToActiveLayer}
-                    className="py-2.5 px-2 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-400 hover:to-rose-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all"
-                    title="Estampar en la capa actualmente seleccionada"
+                    type="button"
+                    onClick={() => onChangeTransform({ visible: !tracing.visible })}
+                    className={`h-8 px-2 rounded-full border text-xs font-semibold flex items-center gap-1 transition-all active:scale-90 ${
+                      tracing.visible 
+                        ? 'bg-[#1e202c] border-gray-700 text-amber-400' 
+                        : 'bg-red-500/20 text-red-300 border-red-500/40'
+                    }`}
                   >
-                    <Sparkles size={14} />
-                    <span>Estampar en Capa</span>
+                    {tracing.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                    <span className="text-[10px]">{tracing.visible ? 'Visible' : 'Oculto'}</span>
                   </button>
 
                   <button
-                    onClick={onStampAsNewLayer}
-                    className="py-2.5 px-2 bg-[#252838] hover:bg-[#2d3248] text-pink-200 border border-pink-500/40 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
-                    title="Crear una nueva capa dedicada para este accesorio"
+                    type="button"
+                    onClick={() => setIsMinimized(false)}
+                    className="h-8 px-2.5 rounded-full bg-[#252838] text-xs font-bold flex items-center gap-1 text-gray-200 border border-[#34384d] active:scale-95"
                   >
-                    <Layers size={14} />
-                    <span>+ Nueva Capa</span>
+                    <SlidersHorizontal size={13} className="text-amber-400" />
+                    <span>Ajustes</span>
+                    <ChevronUp size={14} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onConfirm}
+                    className="h-8 px-3 rounded-full bg-amber-500 text-black font-extrabold text-xs shadow-md active:scale-95 flex items-center gap-1"
+                  >
+                    <Check size={15} />
+                    <span>Fijar</span>
                   </button>
                 </div>
-              ) : (
-                /* CALCO: Fijar calco para dibujar encima o estampar */
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsMinimized(true)}
-                    className="py-2.5 px-3 rounded-xl bg-[#222432] hover:bg-[#2b2e40] text-gray-300 text-xs font-semibold flex items-center justify-center gap-1 border border-[#303346]"
-                    title="Minimizar panel para ver mejor el lienzo"
-                  >
-                    <ChevronDown size={14} />
-                    <span>Minimizar</span>
-                  </button>
+              </div>
+            </div>
+          ) : (
+            /* BARRA COMPACTA NATIVA ESTILO IBISPAINT (~105px) CON ZERO DESBORDAMIENTO EN 320PX-430PX */
+            <div className={`bg-[#12131bf6] border-t ${
+              isAccessory ? 'border-pink-500/50' : 'border-amber-500/50'
+            } shadow-[0_-8px_30px_rgba(0,0,0,0.85)] backdrop-blur-2xl flex flex-col gap-1.5 text-white w-full px-2.5 pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] animate-in slide-in-from-bottom duration-150`}>
+              
+              {/* FILA 1: Slider de Opacidad + Botones Icono Auxiliares (Ajuste Perfecto) */}
+              <div className="flex items-center gap-1.5 max-w-md mx-auto w-full overflow-hidden">
+                {/* Badge de Título y % */}
+                <div className="flex items-center gap-1 bg-[#1a1c26] px-2 py-1 rounded-lg border border-[#2e3143] shrink-0">
+                  <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                    isAccessory ? 'text-pink-300' : 'text-amber-400'
+                  }`}>
+                    {isAccessory ? '🎀' : '📷'}
+                  </span>
+                  <span className="text-xs font-mono font-black text-white">
+                    {Math.round(tracing.opacity * 100)}%
+                  </span>
+                </div>
 
-                  {onStampToActiveLayer && (
+                {/* Slider de Opacidad Táctil Fluido */}
+                <div className="flex-1 min-w-[50px] px-1 flex items-center">
+                  <input
+                    type="range"
+                    min="5"
+                    max="100"
+                    value={Math.round(tracing.opacity * 100)}
+                    onChange={(e) => onChangeTransform({ opacity: Number(e.target.value) / 100 })}
+                    className="w-full accent-amber-500 h-2 bg-[#202230] rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                {/* Botón Visibilidad Instantánea (Visible vs Oculto) */}
+                <button
+                  type="button"
+                  onClick={() => onChangeTransform({ visible: !tracing.visible })}
+                  className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all active:scale-95 shrink-0 ${
+                    tracing.visible 
+                      ? 'bg-[#1c1e2a] border-amber-500/50 text-amber-300 shadow-sm' 
+                      : 'bg-red-500/20 text-red-300 border-red-500/40'
+                  }`}
+                  title={tracing.visible ? 'Ocultar foto temporalmente' : 'Mostrar foto de calco'}
+                >
+                  {tracing.visible ? <Eye size={15} className="text-amber-400" /> : <EyeOff size={15} />}
+                </button>
+
+                {/* Botón Centrar */}
+                <button
+                  type="button"
+                  onClick={onCenterImage}
+                  className="w-8 h-8 rounded-xl bg-[#1c1e2a] hover:bg-[#252837] text-gray-300 border border-[#2e3143] flex items-center justify-center transition-colors active:scale-95 shrink-0"
+                  title="Centrar en el lienzo"
+                >
+                  <RotateCcw size={14} />
+                </button>
+
+                {/* Botón Filtros Wasm */}
+                <button
+                  type="button"
+                  onClick={() => setShowFiltersMenu(!showFiltersMenu)}
+                  className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-colors active:scale-95 shrink-0 ${
+                    showFiltersMenu || tracing.filterMode !== 'original'
+                      ? 'bg-amber-500 text-black border-amber-400 font-bold'
+                      : 'bg-[#1c1e2a] hover:bg-[#252837] text-gray-300 border-[#2e3143]'
+                  }`}
+                  title="Filtros inteligentes Wasm"
+                >
+                  <Sparkles size={14} />
+                </button>
+
+                {/* Minimizar */}
+                <button
+                  type="button"
+                  onClick={() => setIsMinimized(true)}
+                  className="w-8 h-8 rounded-xl bg-[#1c1e2a] hover:bg-[#252837] text-gray-300 border border-[#2e3143] flex items-center justify-center transition-colors active:scale-95 shrink-0"
+                  title="Minimizar barra para ver todo el lienzo"
+                >
+                  <ChevronDown size={16} />
+                </button>
+              </div>
+
+              {/* FILA 2: Acciones Principales en la Zona del Pulgar (100% Accesible sin Recorte) */}
+              <div className="flex items-center gap-1.5 max-w-md mx-auto w-full pt-0.5">
+                {/* Descartar: Botón icono compacto con acento rojo para no quitar espacio */}
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="h-10 w-10 min-w-[38px] rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 flex items-center justify-center active:scale-95 transition-all shrink-0"
+                  title="Eliminar foto de calco"
+                  aria-label="Descartar calco"
+                >
+                  <X size={18} />
+                </button>
+
+                {/* Restablecer Rotación a 0° */}
+                <button
+                  type="button"
+                  onClick={() => onChangeTransform({ rotation: 0 })}
+                  className="h-10 px-2 min-w-[36px] rounded-xl bg-[#181a24] text-[11px] font-semibold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
+                  title="Enderezar rotación a 0°"
+                >
+                  <RotateCw size={12} className="text-amber-400" />
+                  <span>0°</span>
+                </button>
+
+                {/* Restablecer Escala 100% */}
+                <button
+                  type="button"
+                  onClick={() => onChangeTransform({ scale: 1.0 })}
+                  className="h-10 px-2 min-w-[40px] rounded-xl bg-[#181a24] text-[11px] font-semibold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
+                  title="Escala 100%"
+                >
+                  <Maximize2 size={12} className="text-amber-400" />
+                  <span>100%</span>
+                </button>
+
+                {/* Acciones principales según tipo de calco o accesorio */}
+                {isAccessory ? (
+                  <>
                     <button
+                      type="button"
+                      onClick={onStampAsNewLayer}
+                      className="h-10 px-2.5 bg-[#202332] text-pink-300 border border-pink-500/40 rounded-xl font-bold text-xs flex items-center justify-center gap-1 active:scale-95 transition-all shrink-0"
+                      title="Crear capa dedicada con este accesorio"
+                    >
+                      <Layers size={13} />
+                      <span>+ Capa</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={onStampToActiveLayer}
-                      className="py-2.5 px-2.5 rounded-xl bg-[#222432] hover:bg-[#2b2e40] text-amber-300 text-xs font-semibold flex items-center justify-center gap-1 border border-amber-500/40"
-                      title="Estampar permanentemente en la capa activa"
+                      className="flex-1 min-w-[90px] h-10 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow-lg active:scale-95 transition-all"
                     >
                       <Sparkles size={14} />
                       <span>Estampar</span>
                     </button>
-                  )}
+                  </>
+                ) : (
+                  <>
+                    {/* Botón secundario estampar si aplica */}
+                    {onStampToActiveLayer && (
+                      <button
+                        type="button"
+                        onClick={onStampToActiveLayer}
+                        className="h-10 px-2.5 min-w-[38px] rounded-xl bg-[#1c1e2a] hover:bg-[#252838] text-amber-300 border border-amber-500/40 font-semibold text-xs flex items-center justify-center gap-1 active:scale-95 transition-all shrink-0"
+                        title="Estampar como trazo permanente en la capa activa"
+                        aria-label="Estampar trazo permanente"
+                      >
+                        <Sparkles size={14} />
+                        <span className="hidden sm:inline">Estampar</span>
+                      </button>
+                    )}
 
-                  <button
-                    onClick={onConfirm}
-                    className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all"
-                  >
-                    <Check size={16} />
-                    <span>Fijar Calco</span>
-                  </button>
-                </div>
-              )}
+                    {/* BOTÓN PRINCIPAL: SIEMPRE VISIBLE, EXPANDIBLE Y ACCESIBLE */}
+                    <button
+                      type="button"
+                      onClick={onConfirm}
+                      className="flex-1 min-w-[105px] h-10 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:brightness-110 text-black rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 active:scale-95 transition-all"
+                    >
+                      <Check size={16} className="stroke-[3]" />
+                      <span>Fijar Calco</span>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+          )}
+        </div>,
+        document.body
+      )}
+    </>
   );
 };
+

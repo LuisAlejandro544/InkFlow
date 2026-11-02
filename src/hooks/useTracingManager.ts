@@ -34,40 +34,69 @@ export function useTracingManager() {
       const src = e.target?.result as string;
       const img = new Image();
       img.onload = () => {
-        const fit = calculateInitialTracingFit(img.width, img.height, projectWidth, projectHeight);
+        const MAX_DIM = 2048;
 
-        const newTracing: TracingReference = {
-          id: `trace_${Date.now()}`,
-          image: img,
-          src,
-          x: fit.x,
-          y: fit.y,
-          width: img.width,
-          height: img.height,
-          scale: fit.scale,
-          rotation: 0,
-          opacity: 0.4,
-          visible: true,
-          isAdjusting: true,
-          filterMode: 'original',
+        const finalizeTracing = (finalImg: HTMLImageElement, finalSrc: string, finalW: number, finalH: number) => {
+          const fit = calculateInitialTracingFit(finalW, finalH, projectWidth, projectHeight);
+
+          const newTracing: TracingReference = {
+            id: `trace_${Date.now()}`,
+            image: finalImg,
+            src: finalSrc,
+            x: fit.x,
+            y: fit.y,
+            width: finalW,
+            height: finalH,
+            scale: fit.scale,
+            rotation: 0,
+            opacity: 0.4,
+            visible: true,
+            isAdjusting: true,
+            filterMode: 'original',
+          };
+
+          try {
+            const off = document.createElement('canvas');
+            off.width = Math.min(320, finalW);
+            off.height = Math.min(320, finalH);
+            const oCtx = off.getContext('2d');
+            if (oCtx) {
+              oCtx.drawImage(finalImg, 0, 0, off.width, off.height);
+              const data = oCtx.getImageData(0, 0, off.width, off.height);
+              newTracing.extractedColors = extractDominantColorsFromImage(data.data, 6);
+              newTracing.strokeAnalysis = analyzeImageStrokeThickness(data.data, off.width, off.height, fit.scale);
+            }
+          } catch {
+            // Ignorar restricciones
+          }
+
+          setTracingRef(newTracing);
         };
 
-        try {
-          const off = document.createElement('canvas');
-          off.width = Math.min(320, img.width);
-          off.height = Math.min(320, img.height);
-          const oCtx = off.getContext('2d');
-          if (oCtx) {
-            oCtx.drawImage(img, 0, 0, off.width, off.height);
-            const data = oCtx.getImageData(0, 0, off.width, off.height);
-            newTracing.extractedColors = extractDominantColorsFromImage(data.data, 6);
-            newTracing.strokeAnalysis = analyzeImageStrokeThickness(data.data, off.width, off.height, fit.scale);
+        if (img.width > MAX_DIM || img.height > MAX_DIM) {
+          const ratio = Math.min(MAX_DIM / img.width, MAX_DIM / img.height);
+          const finalW = Math.round(img.width * ratio);
+          const finalH = Math.round(img.height * ratio);
+          const down = document.createElement('canvas');
+          down.width = finalW;
+          down.height = finalH;
+          const dctx = down.getContext('2d');
+          if (dctx) {
+            dctx.imageSmoothingEnabled = true;
+            dctx.imageSmoothingQuality = 'high';
+            dctx.drawImage(img, 0, 0, finalW, finalH);
+            const finalSrc = down.toDataURL('image/jpeg', 0.92);
+            const optImg = new Image();
+            optImg.onload = () => {
+              finalizeTracing(optImg, finalSrc, finalW, finalH);
+            };
+            optImg.src = finalSrc;
+            return;
           }
-        } catch {
-          // Ignorar restricciones
         }
 
-        setTracingRef(newTracing);
+        // Si la imagen ya está en dimensiones seguras, img ya está cargada
+        finalizeTracing(img, src, img.width, img.height);
       };
       img.src = src;
     };
@@ -84,28 +113,55 @@ export function useTracingManager() {
       const src = e.target?.result as string;
       const img = new Image();
       img.onload = () => {
-        // Escalar el accesorio a aproximadamente el 45% del lienzo para que sea cómodo de manipular
-        const targetSize = Math.min(projectWidth, projectHeight) * 0.45;
-        const scale = Math.min(targetSize / img.width, targetSize / img.height, 1.0);
+        const MAX_DIM = 1536;
 
-        const newAccessory: TracingReference = {
-          id: `accessory_${Date.now()}`,
-          image: img,
-          src,
-          x: Math.round(projectWidth / 2),
-          y: Math.round(projectHeight / 2),
-          width: img.width,
-          height: img.height,
-          scale: Math.max(0.05, scale),
-          rotation: 0,
-          opacity: 1.0, // Accesorios inician 100% opacos
-          visible: true,
-          isAdjusting: true,
-          filterMode: 'original',
-          purpose: 'accessory',
+        const finalizeAccessory = (finalImg: HTMLImageElement, finalSrc: string, finalW: number, finalH: number) => {
+          const targetSize = Math.min(projectWidth, projectHeight) * 0.45;
+          const scale = Math.min(targetSize / finalW, targetSize / finalH, 1.0);
+
+          const newAccessory: TracingReference = {
+            id: `accessory_${Date.now()}`,
+            image: finalImg,
+            src: finalSrc,
+            x: Math.round(projectWidth / 2),
+            y: Math.round(projectHeight / 2),
+            width: finalW,
+            height: finalH,
+            scale: Math.max(0.05, scale),
+            rotation: 0,
+            opacity: 1.0,
+            visible: true,
+            isAdjusting: true,
+            filterMode: 'original',
+            purpose: 'accessory',
+          };
+
+          setTracingRef(newAccessory);
         };
 
-        setTracingRef(newAccessory);
+        if (img.width > MAX_DIM || img.height > MAX_DIM) {
+          const ratio = Math.min(MAX_DIM / img.width, MAX_DIM / img.height);
+          const finalW = Math.round(img.width * ratio);
+          const finalH = Math.round(img.height * ratio);
+          const down = document.createElement('canvas');
+          down.width = finalW;
+          down.height = finalH;
+          const dctx = down.getContext('2d');
+          if (dctx) {
+            dctx.imageSmoothingEnabled = true;
+            dctx.imageSmoothingQuality = 'high';
+            dctx.drawImage(img, 0, 0, finalW, finalH);
+            const finalSrc = down.toDataURL('image/png');
+            const optImg = new Image();
+            optImg.onload = () => {
+              finalizeAccessory(optImg, finalSrc, finalW, finalH);
+            };
+            optImg.src = finalSrc;
+            return;
+          }
+        }
+
+        finalizeAccessory(img, src, img.width, img.height);
       };
       img.src = src;
     };
