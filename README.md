@@ -82,10 +82,19 @@ Aplicación de dibujo e ilustración digital profesional para dispositivos móvi
   - Paneo y zoom fluido a 120 FPS sin re-decodificar cadenas Base64/PNG en cada frame, con política de desalojo LRU y desecho explícito de memoria mediante `.close()`.
 - **🛡️ Almacenamiento Persistente Blindado (`navigator.storage.persist()`):**
   - Al iniciar la app, solicita el estado de persistencia permanente al navegador para evitar que el sistema operativo móvil (Android o iOS) purgue la base de datos SQLite Wasm o el precaché en situaciones de almacenamiento bajo.
-- **🪣 Bote de Pintura Inteligente con Expansión de Borde (1 a 3 px):**
-  - Algoritmo Scanline Flood Fill de alto rendimiento con dilatación morfológica isotrópica (`dilateBinaryMask`) configurable en 1px (fino), 2px (recomendado manga/anime) y 3px (máximo).
+- **🪣 Bote de Pintura Inteligente con Expansión de Borde y Cierre de Huecos (Gap-Closing):**
+  - **Cierre Inteligente de Huecos (0 a 10 px):** Algoritmo de morfología binaria matemática en C++23 (`close_boundary_gaps`) y Wasm/TS (`generateClosedGapBarrierMask`). Puentea y sella automáticamente brechas abiertas en el lineart de 3px (fino), 6px (medio) y 10px (amplio), impidiendo que la pintura se desborde al exterior de la figura.
+  - **Expansión de Borde (1 a 3 px):** Algoritmo Scanline Flood Fill de alto rendimiento con dilatación morfológica isotrópica (`dilateBinaryMask`) configurable en 1px (fino), 2px (recomendado manga/anime) y 3px (máximo).
   - **Cero halos blancos:** Expande el color hacia el interior de las líneas de contorno anti-aliasing, eliminando los molestos rebordes blancos entre el lineart y el color plano.
-  - Píldora de control rápido flotante sobre el lienzo para alternar en 1 toque `[0px | 1px | 2px | 3px]` y panel con deslizador de tolerancia cromática en `ToolPickerModal`.
+  - **Controles táctiles instantáneos:** Píldora de control rápido flotante sobre el lienzo para alternar en 1 toque expansión `[🪣 Exp: 0|1|2|3px]` y cierre de huecos `[🛡️ Huecos: 0|3|6|10px]`, además de ajustes avanzados en `ToolPickerModal`.
+- **🎀 Sistema de Accesorios de Galería (Moños, Stickers y Adornos en tu Obra):**
+  - Selecciona cualquier accesorio, lazo, moño, sticker o adorno fotográfico desde la galería de tu teléfono y sitúalo directamente sobre tu ilustración.
+  - **Transformación táctil ergonómica:** Muévelo libremente con 1 dedo, escala y rota con 2 dedos o mediante deslizadores de precisión y tiradores de esquina.
+  - **Panel dedicado no invasivo:** `TracingAdjuster` adaptativo con indicación `🎀 Accesorio / Sticker`, minimización a micro-píldora y ajuste de opacidad.
+  - **Estampado permanente en tu arte:**
+    - `[✨ Estampar en Capa]`: Pinta el accesorio de forma permanente sobre la capa activa seleccionada, integrándolo a la resolución nativa de la obra.
+    - `[📑 + Nueva Capa]`: Crea una capa independiente llamada `Accesorio (Moño)` y plasma el adorno sin tocar tus trazos anteriores.
+  - Genera automáticamente un punto de guardado en el historial (Deshacer/Rehacer) y persiste atómicamente en SQLite Wasm sobre OPFS.
 - **📐 Expansión y Redimensionado Ergonómico de Hoja (Canvas Resize & Expand):**
   - Modal táctil `CanvasResizeModal` accesible desde el menú `[⋯]` para ampliar el ancho y alto del lienzo si el artista necesita más espacio para bocetos o viñetas.
   - **Presets en 1 toque:** `+25% Espacio`, `+50% Espacio`, `2x Doble Lienzo`, `1:1 Cuadrado`, `9:16 Manga/Móvil` y botones de incremento táctil rápido (`+100px`, `+300px`).
@@ -122,9 +131,9 @@ Abre `http://localhost:3000` en tu teléfono móvil y pulsa el botón **"Instala
 
 ## 🧪 Pruebas Unitarias de Lógica
 
-El proyecto cuenta con **40 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
+El proyecto cuenta con **43 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
 
-### Suite 1: Motor Gráfico, Calco, Wasm, Caché GPU & Expansión (35 tests)
+### Suite 1: Motor Gráfico, Calco, Wasm, Caché GPU, Expansión, Cierre de Huecos & Accesorios (38 tests)
 1. Interpolación lineal y cálculo euclidiano Wasm.
 2. Estabilizador exponencial anti-temblor S-Form.
 3. Simulación de curva de presión táctil por velocidad.
@@ -155,16 +164,24 @@ El proyecto cuenta con **40 pruebas unitarias automatizadas deterministas** con 
 28. Bote de Pintura: Dilatación y Expansión de Borde (1 a 3 px) para eliminar halos blancos.
 29. Expansión de Hoja: Cálculo de desplazamientos (Offsets) según punto de anclaje.
 30. Expansión de Hoja: Normalización y presets de espacio (+25%, +50%, 2x, 1:1, 9:16).
+31. Invarianza de Traslación Vectorial en Expansión (`offsetAllStrokes`).
+32. Mapeo Multitáctil Simultáneo con Rotación Inclinada (45°).
+33. Tolerancia Inversa en Des-rotación de Puntos con Ángulos Negativos.
+34. Auto-Crop: Preservación de margen estético mínimo.
+35. Caché VRAM: Desalojo LRU seguro ante desbordamiento de texturas.
+36. Cierre Inteligente de Huecos: Detección morfológica y unión de brechas (Gap Closing de 1 a 10px).
+37. Balde de Pintura: Contención de relleno sin fugas en trazados con huecos abiertos de 3px.
+38. Accesorios de Galería: Configuración y geometría de estampado en la obra (moños, stickers, adornos).
 
 ### Suite 2: Persistencia Masiva SQLite Wasm sobre OPFS (5 tests)
-36. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
-37. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
-38. Transacción ACID completa de proyectos con capas y orden z.
-39. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
-40. Eliminación limpia en cascada sin fugas de almacenamiento.
+39. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
+40. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
+41. Transacción ACID completa de proyectos con capas y orden z.
+42. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
+43. Eliminación limpia en cascada sin fugas de almacenamiento.
 
 ```bash
-# Ejecutar todas las pruebas deterministas (40 tests)
+# Ejecutar todas las pruebas deterministas (43 tests)
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 ```
 
@@ -174,10 +191,14 @@ npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 
 El repositorio incluye un workflow en `.github/workflows/deploy.yml` configurado para **activación exclusivamente manual** (`workflow_dispatch`).
 
-### Pasos:
+### Resiliencia de CI/CD (Sin dependencias de lockfile):
+- Se corrigió el fallo de `actions/setup-node@v4` eliminando la directiva estricta `cache: 'npm'` (que requiere obligatoriamente `package-lock.json`) y sustituyéndola por un paso de caché independiente con `actions/cache@v4` sobre el directorio `~/.npm` con hash de `package.json`.
+- Compilación e instalación sin fallos tanto en local como en GitHub Actions.
+
+### Pasos de Despliegue:
 1. Configura en GitHub Secrets: `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`.
 2. En GitHub ➔ pestaña **Actions** ➔ selecciona **"InkFlow - Compilar WebAssembly (C++, Rust, Kotlin) y Desplegar a Cloudflare Pages"** ➔ pulsa **"Run workflow"**.
-3. El runner compilará los núcleos Wasm de Rust (`wasm32-unknown-unknown`), C++23 con Emscripten (`simd128`), ejecutará las 37 pruebas unitarias deterministas, generará la PWA estática y la desplegará en tu cuenta de Cloudflare con **$0 de coste** y ancho de banda ilimitado.
+3. El runner compilará los núcleos Wasm de Rust (`wasm32-unknown-unknown`), C++23 con Emscripten (`simd128`), ejecutará las 43 pruebas unitarias deterministas, generará la PWA estática y la desplegará en tu cuenta de Cloudflare con **$0 de coste** y ancho de banda ilimitado.
 
 ---
 

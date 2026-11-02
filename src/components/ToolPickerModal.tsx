@@ -25,6 +25,8 @@ export interface ToolPickerModalProps {
   onChangeBucketExpansion?: (expansion: number) => void;
   bucketTolerance?: number;
   onChangeBucketTolerance?: (tolerance: number) => void;
+  bucketGapClosing?: number;
+  onChangeBucketGapClosing?: (gap: number) => void;
   onClose: () => void;
 }
 
@@ -47,6 +49,8 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
   onChangeBucketExpansion,
   bucketTolerance = 32,
   onChangeBucketTolerance,
+  bucketGapClosing = 3,
+  onChangeBucketGapClosing,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<MainTab>('tools');
@@ -232,13 +236,15 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
               })}
             </div>
 
-            {/* Subcomponente modular de Ajustes de Expansión de Borde para el Balde */}
+            {/* Subcomponente modular de Ajustes de Expansión de Borde y Cierre de Huecos para el Balde */}
             {activeTool === 'bucket' && (
               <BucketSettingsCard
                 bucketExpansion={bucketExpansion}
                 onChangeBucketExpansion={onChangeBucketExpansion}
                 bucketTolerance={bucketTolerance}
                 onChangeBucketTolerance={onChangeBucketTolerance}
+                bucketGapClosing={bucketGapClosing}
+                onChangeBucketGapClosing={onChangeBucketGapClosing}
                 triggerHaptic={triggerHaptic}
               />
             )}

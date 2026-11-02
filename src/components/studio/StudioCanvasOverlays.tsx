@@ -19,6 +19,8 @@ export interface StudioCanvasOverlaysProps {
   tracingRef: TracingReference | null;
   bucketExpansion?: number;
   onChangeBucketExpansion?: (expansion: number) => void;
+  bucketGapClosing?: number;
+  onChangeBucketGapClosing?: (gap: number) => void;
   showSizePreview: boolean;
   brushSize: number;
   showOpacityPreview: boolean;
@@ -34,6 +36,8 @@ export const StudioCanvasOverlays: React.FC<StudioCanvasOverlaysProps> = ({
   tracingRef,
   bucketExpansion = 2,
   onChangeBucketExpansion,
+  bucketGapClosing = 3,
+  onChangeBucketGapClosing,
   showSizePreview,
   brushSize,
   showOpacityPreview,
@@ -56,47 +60,72 @@ export const StudioCanvasOverlays: React.FC<StudioCanvasOverlaysProps> = ({
           className={`absolute top-4 right-4 z-40 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-2xl backdrop-blur-md border transition-all active:scale-95 ${
             tracingRef.visible
               ? 'bg-[#14151df0] border-gray-700/80 text-gray-300 hover:text-white'
-              : 'bg-amber-500 text-black border-amber-300 shadow-amber-500/40 ring-2 ring-amber-400/40'
+              : `${tracingRef.purpose === 'accessory' ? 'bg-pink-500 text-white border-pink-300 shadow-pink-500/40' : 'bg-amber-500 text-black border-amber-300 shadow-amber-500/40'} ring-2 ring-amber-400/40`
           }`}
-          title="Toca para ocultar o mostrar la foto de calco y comparar tu dibujo"
+          title="Toca para ocultar o mostrar la referencia y comparar tu dibujo"
         >
           {tracingRef.visible ? <Eye size={14} className="text-amber-400" /> : <EyeOff size={14} />}
-          <span>{tracingRef.visible ? 'Calco Visible' : 'Calco Oculto'}</span>
+          <span>{tracingRef.visible ? (tracingRef.purpose === 'accessory' ? 'Accesorio' : 'Calco') : 'Oculto'}</span>
         </button>
       )}
 
-      {/* Píldora Flotante Ergonómica: Expansión de Borde para Bote de Pintura (1 a 3 px) */}
+      {/* Píldora Flotante Ergonómica: Expansión de Borde y Cierre Inteligente de Huecos */}
       {activeTool === 'bucket' && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-[#13141cf5] border border-indigo-500/50 rounded-2xl py-1.5 px-3 flex items-center gap-2 shadow-2xl backdrop-blur-md max-w-[94vw] animate-in fade-in slide-in-from-top-2">
-          <span className="text-[11px] font-bold text-indigo-300 shrink-0">🪣 Expansión:</span>
-          <div className="flex items-center gap-1 bg-[#0b0c10] p-0.5 rounded-xl border border-[#222433]">
-            {[
-              { px: 0, label: '0px' },
-              { px: 1, label: '1px' },
-              { px: 2, label: '2px' },
-              { px: 3, label: '3px' },
-            ].map((item) => (
-              <button
-                key={item.px}
-                type="button"
-                onClick={() => {
-                  triggerHaptic(8);
-                  onChangeBucketExpansion?.(item.px);
-                }}
-                className={`px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all ${
-                  bucketExpansion === item.px
-                    ? 'bg-amber-500 text-black shadow-xs font-black'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-                title={`Expansión de ${item.px}px para sellar halos blancos`}
-              >
-                {item.label}
-              </button>
-            ))}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-[#13141cf5] border border-indigo-500/50 rounded-2xl py-1.5 px-3 flex items-center gap-2.5 shadow-2xl backdrop-blur-md max-w-[96vw] animate-in fade-in slide-in-from-top-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[11px] font-bold text-indigo-300">🪣 Exp:</span>
+            <div className="flex items-center gap-0.5 bg-[#0b0c10] p-0.5 rounded-xl border border-[#222433]">
+              {[0, 1, 2, 3].map((px) => (
+                <button
+                  key={px}
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic(8);
+                    onChangeBucketExpansion?.(px);
+                  }}
+                  className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all ${
+                    bucketExpansion === px
+                      ? 'bg-amber-500 text-black shadow-xs font-black'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                  title={`Expansión de ${px}px para sellar halos blancos`}
+                >
+                  {px}px
+                </button>
+              ))}
+            </div>
           </div>
-          <span className="text-[9px] text-gray-400 hidden sm:inline-block">
-            {bucketExpansion > 0 ? 'Sin halos blancos' : 'Exacto'}
-          </span>
+
+          <div className="w-[1px] h-3.5 bg-[#282a3c] shrink-0" />
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[11px] font-bold text-emerald-300">🛡️ Huecos:</span>
+            <div className="flex items-center gap-0.5 bg-[#0b0c10] p-0.5 rounded-xl border border-[#222433]">
+              {[
+                { px: 0, label: '0' },
+                { px: 3, label: '3px' },
+                { px: 6, label: '6px' },
+                { px: 10, label: '10px' },
+              ].map((item) => (
+                <button
+                  key={item.px}
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic(8);
+                    onChangeBucketGapClosing?.(item.px);
+                  }}
+                  className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all ${
+                    bucketGapClosing === item.px
+                      ? 'bg-emerald-500 text-black shadow-xs font-black'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                  title={`Cierre de huecos de ${item.px}px para lineart abierto`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

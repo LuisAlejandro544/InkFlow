@@ -29,6 +29,8 @@ interface TracingAdjusterProps {
   onCenterImage: () => void;
   onConfirm: () => void;
   onCancel: () => void;
+  onStampToActiveLayer?: () => void;
+  onStampAsNewLayer?: () => void;
 }
 
 export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
@@ -41,8 +43,11 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
   onCenterImage,
   onConfirm,
   onCancel,
+  onStampToActiveLayer,
+  onStampAsNewLayer,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const isAccessory = tracing.purpose === 'accessory';
   const dragStartRef = useRef<{
     pointerX: number;
     pointerY: number;
@@ -251,10 +256,18 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
       >
         {isMinimized ? (
           /* MODO MINIMIZADO: Píldora ultra compacta que no tapa el dibujo */
-          <div className="bg-[#14151df0] border border-amber-500/80 rounded-full px-3.5 py-2 shadow-2xl backdrop-blur-md flex items-center justify-between gap-2 text-white animate-fade-in">
+          <div className={`bg-[#14151df0] border ${
+            isAccessory ? 'border-pink-500/80' : 'border-amber-500/80'
+          } rounded-full px-3.5 py-2 shadow-2xl backdrop-blur-md flex items-center justify-between gap-2 text-white animate-fade-in`}>
             <div className="flex items-center gap-2">
-              <ImageIcon size={16} className="text-amber-400" />
-              <span className="text-xs font-bold text-amber-300">Calco</span>
+              {isAccessory ? (
+                <span className="text-sm">🎀</span>
+              ) : (
+                <ImageIcon size={16} className="text-amber-400" />
+              )}
+              <span className={`text-xs font-bold ${isAccessory ? 'text-pink-300' : 'text-amber-300'}`}>
+                {isAccessory ? 'Accesorio' : 'Calco'}
+              </span>
               <span className="text-[11px] font-mono font-semibold bg-[#202230] px-1.5 py-0.5 rounded text-gray-300">
                 {Math.round(tracing.opacity * 100)}%
               </span>
@@ -267,9 +280,9 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
                 className={`p-1.5 rounded-full border text-xs flex items-center gap-1 transition-all ${
                   tracing.visible 
                     ? 'bg-[#222432] border-gray-700 text-gray-200' 
-                    : 'bg-amber-500/20 border-amber-400 text-amber-300'
+                    : `${isAccessory ? 'bg-pink-500/20 border-pink-400 text-pink-300' : 'bg-amber-500/20 border-amber-400 text-amber-300'}`
                 }`}
-                title={tracing.visible ? 'Ocultar foto temporalmente' : 'Mostrar foto de calco'}
+                title={tracing.visible ? 'Ocultar temporalmente' : 'Mostrar'}
               >
                 {tracing.visible ? <Eye size={14} /> : <EyeOff size={14} />}
               </button>
@@ -284,25 +297,44 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
                 <ChevronUp size={14} />
               </button>
 
-              {/* Fijar directo */}
-              <button
-                onClick={onConfirm}
-                className="p-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-md active:scale-95 transition-all"
-                title="Fijar y Empezar a Dibujar"
-              >
-                <Check size={16} />
-              </button>
+              {/* Botón de Estampar o Fijar */}
+              {isAccessory ? (
+                <button
+                  onClick={onStampToActiveLayer || onConfirm}
+                  className="px-2.5 py-1 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all flex items-center gap-1"
+                  title="Estampar accesorio en la obra"
+                >
+                  <Sparkles size={13} />
+                  <span>Estampar</span>
+                </button>
+              ) : (
+                <button
+                  onClick={onConfirm}
+                  className="p-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-md active:scale-95 transition-all"
+                  title="Fijar y Empezar a Dibujar"
+                >
+                  <Check size={16} />
+                </button>
+              )}
             </div>
           </div>
         ) : (
           /* MODO EXPANDIDO: Panel completo con opción de minimizar */
-          <div className="bg-[#151620f5] border border-amber-500/60 rounded-3xl p-3.5 shadow-2xl backdrop-blur-md flex flex-col gap-2.5 animate-fade-in text-white">
-            {/* Cabecera del Calco con Minimizar y Descartar */}
+          <div className={`bg-[#151620f5] border ${
+            isAccessory ? 'border-pink-500/60' : 'border-amber-500/60'
+          } rounded-3xl p-3.5 shadow-2xl backdrop-blur-md flex flex-col gap-2.5 animate-fade-in text-white`}>
+            {/* Cabecera con Minimizar y Descartar */}
             <div className="flex items-center justify-between border-b border-[#292c3a] pb-2">
               <div className="flex items-center gap-2">
-                <ImageIcon size={18} className="text-amber-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300">
-                  Calibrar Foto de Calco
+                {isAccessory ? (
+                  <span className="text-base">🎀</span>
+                ) : (
+                  <ImageIcon size={18} className="text-amber-400" />
+                )}
+                <h3 className={`text-xs font-bold uppercase tracking-wider ${
+                  isAccessory ? 'text-pink-300' : 'text-amber-300'
+                }`}>
+                  {isAccessory ? 'Ajustar Accesorio / Sticker' : 'Calibrar Foto de Calco'}
                 </h3>
               </div>
 
@@ -429,24 +461,61 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
               </div>
             )}
 
-            {/* Botón de Confirmación Principal */}
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={() => setIsMinimized(true)}
-                className="py-2.5 px-3 rounded-xl bg-[#222432] hover:bg-[#2b2e40] text-gray-300 text-xs font-semibold flex items-center justify-center gap-1 border border-[#303346]"
-                title="Minimizar panel para ver mejor el lienzo"
-              >
-                <ChevronDown size={14} />
-                <span>Minimizar</span>
-              </button>
+            {/* Botones de Acción: Estampar en Obra Maestra vs Fijar Calco */}
+            <div className="flex flex-col gap-2 pt-1 border-t border-[#232635]">
+              {isAccessory ? (
+                /* ACCESORIO: Botones dedicados para estampar en capa activa o crear nueva capa */
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={onStampToActiveLayer}
+                    className="py-2.5 px-2 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-400 hover:to-rose-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all"
+                    title="Estampar en la capa actualmente seleccionada"
+                  >
+                    <Sparkles size={14} />
+                    <span>Estampar en Capa</span>
+                  </button>
 
-              <button
-                onClick={onConfirm}
-                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all"
-              >
-                <Check size={16} />
-                <span>Fijar Calco y Empezar a Dibujar</span>
-              </button>
+                  <button
+                    onClick={onStampAsNewLayer}
+                    className="py-2.5 px-2 bg-[#252838] hover:bg-[#2d3248] text-pink-200 border border-pink-500/40 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
+                    title="Crear una nueva capa dedicada para este accesorio"
+                  >
+                    <Layers size={14} />
+                    <span>+ Nueva Capa</span>
+                  </button>
+                </div>
+              ) : (
+                /* CALCO: Fijar calco para dibujar encima o estampar */
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsMinimized(true)}
+                    className="py-2.5 px-3 rounded-xl bg-[#222432] hover:bg-[#2b2e40] text-gray-300 text-xs font-semibold flex items-center justify-center gap-1 border border-[#303346]"
+                    title="Minimizar panel para ver mejor el lienzo"
+                  >
+                    <ChevronDown size={14} />
+                    <span>Minimizar</span>
+                  </button>
+
+                  {onStampToActiveLayer && (
+                    <button
+                      onClick={onStampToActiveLayer}
+                      className="py-2.5 px-2.5 rounded-xl bg-[#222432] hover:bg-[#2b2e40] text-amber-300 text-xs font-semibold flex items-center justify-center gap-1 border border-amber-500/40"
+                      title="Estampar permanentemente en la capa activa"
+                    >
+                      <Sparkles size={14} />
+                      <span>Estampar</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={onConfirm}
+                    className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all"
+                  >
+                    <Check size={16} />
+                    <span>Fijar Calco</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

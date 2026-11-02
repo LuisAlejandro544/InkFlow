@@ -77,12 +77,20 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # 8. Configurar Node.js 22 con caché automática de npm
-      - name: Configurar Node.js 22 con caché de npm
+      # 8. Configurar Node.js 22
+      - name: Configurar Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
+
+      # 8.1. Caché de dependencias npm resiliente (sin requerir package-lock.json obligatorio)
+      - name: Caché de dependencias npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
 
       # 9. Caché de compilación Vite para ultra velocidad
       - name: Caché de compilador Vite
@@ -103,7 +111,7 @@ jobs:
             npm install --legacy-peer-deps
           fi
 
-      # 11. Ejecución determinista de la suite completa de 35 pruebas unitarias (Motor + SQLite Wasm OPFS)
+      # 11. Ejecución determinista de la suite completa de pruebas unitarias (Motor + SQLite Wasm OPFS)
       - name: Ejecutar pruebas unitarias del motor y almacenamiento (node:test)
         run: npx tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 

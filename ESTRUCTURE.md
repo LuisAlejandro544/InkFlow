@@ -24,9 +24,9 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 ├── src/
 │   ├── cpp-core/                 # Código fuente en C++23 moderno (ISO/IEC 14882:2023)
 │   │   ├── include/
-│   │   │   └── IbisStrokeAnalyzer.hpp # Cabecera C++23 con conceptos, std::span y exportación C-ABI
+│   │   │   └── IbisStrokeAnalyzer.hpp # Cabecera C++23 con conceptos, std::span, cierre de huecos y C-ABI
 │   │   ├── src/
-│   │   │   └── IbisStrokeAnalyzer.cpp # Detección de grosor por percentiles y análisis transversal
+│   │   │   └── IbisStrokeAnalyzer.cpp # Detección de percentiles y cierre morfológico de huecos (gap closing)
 │   │   ├── CMakeLists.txt        # Configuración CMake con soporte Wasm SIMD128 y NDK 32/64 bits
 │   │   └── README.md             # Documentación técnica del módulo C++23
 │   ├── kotlin-core/              # Código fuente en Kotlin para WebAssembly (Kotlin/Wasm)
@@ -36,19 +36,19 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   └── src/
 │   │       └── lib.rs            # Matemática vectorial, estabilizador y buffers VBO
 │   ├── engine/                   # Motor gráfico central desacoplado de la interfaz
-│   │   ├── types.ts              # Definición de tipos: Layer, ToolType, Point, VectorStroke, TracingReference
+│   │   ├── types.ts              # Tipos: Layer, ToolType, Point, VectorStroke, TracingReference (calco o accesorio)
 │   │   ├── wasmEngine.ts         # Binario Wasm, estabilizador S-Form y cálculo de presión
 │   │   ├── wasmStreamingCompiler.ts # Compilador JIT streaming a código máquina CPU con caché nativa
 │   │   ├── bitmapCache.ts        # Caché VRAM en GPU con ImageBitmap off-thread y gestión LRU
 │   │   ├── transformMath.ts      # Matemática pura: zoom, rotación 2D, snapping, screenToCanvasCoords y auto-crop
 │   │   ├── canvasResizeMath.ts   # Matemática de expansión de lienzo: matriz de anclaje 3x3 y presets de espacio
-│   │   ├── floodFillEngine.ts    # [MODULAR] Scanline Flood Fill con dilatación/expansión 0-3px, cuentagotas y RGB
-│   │   ├── tracingEngine.ts      # Motor de calco: Extracción Sobel de Lineart, contraste y paletas Wasm
+│   │   ├── floodFillEngine.ts    # Scanline Flood Fill con dilatación 0-3px y Cierre de Huecos 0-10px (Gap Closing)
+│   │   ├── tracingEngine.ts      # Motor de calco y stickers: Sobel Lineart, contraste, monocromo y paletas Wasm
 │   │   ├── strokeAssistant.ts    # Asistente REAL de Grosor: Visión artificial, percentiles y muestreo local
 │   │   ├── kotlinWasmBridge.ts   # Puente de ejecución Kotlin/Wasm para Lápiz Vectorial (cero píxeles al zoom)
 │   │   ├── environmentDetector.ts# Detección determinista de PWA Standalone vs Navegador y excepción de Preview
-│   │   ├── webgpuEngine.ts       # [MODULAR] Pipeline WebGPU, shaders WGSL, composición multicapa y trazado
-│   │   └── engine.test.ts        # Suite de 35 pruebas unitarias deterministas de motor y expansión (node:test)
+│   │   ├── webgpuEngine.ts       # Pipeline WebGPU, shaders WGSL, composición multicapa, balde y trazado
+│   │   └── engine.test.ts        # Suite de 38 pruebas unitarias deterministas de motor, Wasm, huecos y accesorios
 │   ├── storage/                  # Motor de Persistencia Masiva SQLite Wasm & OPFS en Web Worker
 │   │   ├── sqliteTypes.ts        # Tipos y contratos IPC de serialización relacional
 │   │   ├── sqliteStorage.worker.ts # Web Worker dedicado ejecutando @sqlite.org/sqlite-wasm sobre OPFS
@@ -59,25 +59,25 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   ├── hooks/                    # [MODULAR] Hooks de dominio especializados desacoplados de la raíz
 │   │   ├── useLayerManager.ts    # Gestión integral de capas: creación, clonación, merge, eliminación y blend modes
 │   │   ├── useDrawingHistory.ts  # Historial reactivo de Deshacer/Rehacer con instantáneas ImageData
-│   │   └── useTracingManager.ts  # Ciclo de vida de fotos de calco: importación, alineación y filtros Wasm
+│   │   └── useTracingManager.ts  # Ciclo de vida de fotos de calco y accesorios (moños/stickers)
 │   ├── components/               # Componentes modulares de interfaz de usuario
 │   │   ├── studio/               # [MODULAR] Subcomponentes especializados de StudioScreen
 │   │   │   ├── StudioTopBar.tsx  # Barra superior móvil, deshacer/rehacer, zoom/rotación, calco y menú Pro
 │   │   │   ├── StudioBottomBar.tsx # Barra inferior móvil, deslizadores de grosor/opacidad y dock de 5 herramientas
-│   │   │   └── StudioCanvasOverlays.tsx # Píldora de expansión balde, burbujas de preview de pincel y modal iOS
+│   │   │   └── StudioCanvasOverlays.tsx # Píldoras de expansión/huecos, burbujas preview de pincel y modal iOS
 │   │   ├── tools/                # [MODULAR] Subcomponentes especializados de selección de herramientas
 │   │   │   ├── toolDefinitions.ts # Metadatos, iconos, badges y descripciones de las 9 herramientas de dibujo
-│   │   │   ├── BucketSettingsCard.tsx # Tarjeta de configuración de expansión de borde (0 a 3px) y tolerancia
+│   │   │   ├── BucketSettingsCard.tsx # Configuración de expansión de borde (0 a 3px), cierre de huecos (0 a 10px) y tolerancia
 │   │   │   └── StabilizerScratchpad.tsx # Calibrador S-Form con bloc táctil de pruebas y presets rápidos
 │   │   ├── WelcomeScreen.tsx     # Pantalla de bienvenida, catálogo de funciones pro y descarga PWA en navegador
-│   │   ├── StudioScreen.tsx      # [MODULAR] Mesa de dibujo táctil con gestos directos a 60-120 FPS
-│   │   ├── ToolPickerModal.tsx   # [MODULAR] Modal nativo segmentado en Herramientas y Estabilizador S-Form
+│   │   ├── StudioScreen.tsx      # Mesa de dibujo táctil con gestos directos a 60-120 FPS
+│   │   ├── ToolPickerModal.tsx   # Modal nativo segmentado en Herramientas y Estabilizador S-Form
 │   │   ├── CanvasResizeModal.tsx # Modal de expansión de hoja con matriz de anclaje 3x3 y presets rápidos
-│   │   ├── TracingAdjuster.tsx   # Superposición táctil minimizable para mover, rotar, escalar y filtrar foto
+│   │   ├── TracingAdjuster.tsx   # Ajustador táctil de calco y accesorios (moños/stickers) con estampado en capas
 │   │   ├── StrokeGuideAssistant.tsx # Barra ergonómica con recomendación calibrada por visión artificial
 │   │   ├── GalleryScreen.tsx     # Pantalla de galería y creación de nuevos lienzos
 │   │   ├── EngineInfoScreen.tsx  # Diagnóstico técnico de WebGPU, Kotlin/Wasm, Rust, C++23 y PWA
-│   │   ├── LayersModal.tsx       # Gestor de capas estilo IbisPaint con importador de calco
+│   │   ├── LayersModal.tsx       # Gestor de capas estilo IbisPaint con importador de calco y accesorios
 │   │   ├── ColorPickerModal.tsx  # Rueda HSV, sliders RGB y muestras de color de la foto
 │   │   ├── ExportModal.tsx       # Guardado de obra a galería con Hoja Completa vs Auto-crop y peso en KB/MB
 │   │   ├── ErrorBoundary.tsx     # Captura de excepciones de interfaz para evitar pantalla blanca
@@ -103,14 +103,17 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 ## 🔄 Flujo de Datos y Análisis de Grosor Real
 
 ```text
-[ Foto de Galería para Calco ]
+[ Foto de Galería para Calco o Accesorio/Moño ]
               │
-              ▼
-[ TracingEngine / StrokeAssistant (C++23 & Wasm/TS) ]
+              ├── Modo Calco: TracingEngine / StrokeAssistant (C++23 & Wasm/TS)
+              │   ├── Convolución y Luminancia BT.709
+              │   ├── Muestreo transversal ortogonal de líneas
+              │   └── Cálculo de percentiles (Silueta P92, Estructura P68, Detalles P38, Tramas P12)
               │
-              ├── Convolución y Luminancia BT.709
-              ├── Muestreo transversal ortogonal de líneas
-              └── Cálculo de percentiles (Silueta P92, Estructura P68, Detalles P38, Tramas P12)
+              └── Modo Accesorio/Sticker: TracingAdjuster (Transformación Táctil Móvil)
+                  ├── Gestos a 1 y 2 dedos (Pan, Pinch Scale, Rotación libre)
+                  ├── [✨ Estampar en Capa Activa]
+                  └── [📑 + Nueva Capa Dedicada ("Accesorio (Moño)")]
               │
               ▼
 [ StrokeGuideAssistant ] ──> Recomienda los 4 grosores medidos de tu foto en 1 toque
@@ -129,7 +132,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
    [ Estabilizador S-Form ]               ▼
          │                        [ Transformación matricial de hoja ]
          ├── Lápiz Vectorial: [ KotlinVectorEngine (Catmull-Rom C1) ]
-         ├── Balde de Pintura:[ FloodFillEngine (Scanline + Dilate 0-3px) ]
+         ├── Balde de Pintura:[ FloodFillEngine (Scanline + Dilate 0-3px + Gap-Closing 0-10px) ]
          └── Pincel / Goma:   [ WebGPU WGSL Shader / Canvas ]
                                           │
                                           ▼
@@ -146,7 +149,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 
 1. **Desacoplamiento Estricto:** La lógica matemática pura se aloja en `src/engine/`, `src/cpp-core/` y `src/kotlin-core/`. Los componentes de React únicamente renderizan y gestionan eventos.
 2. **Modularización de Componentes Complejos:**
-   - `webgpuEngine.ts` delega el algoritmo de flood fill y dilatación morfológica a `src/engine/floodFillEngine.ts`.
+   - `webgpuEngine.ts` delega el algoritmo de flood fill, dilatación morfológica y cierre de huecos a `src/engine/floodFillEngine.ts`.
    - `ToolPickerModal.tsx` delega en `src/components/tools/` (`toolDefinitions.ts`, `BucketSettingsCard.tsx`, `StabilizerScratchpad.tsx`).
    - `StudioScreen.tsx` delega en `src/components/studio/` (`StudioTopBar.tsx`, `StudioBottomBar.tsx`, `StudioCanvasOverlays.tsx`).
    - `App.tsx` delega en hooks dedicados en `src/hooks/` (`useLayerManager.ts`, `useDrawingHistory.ts`, `useTracingManager.ts`).
@@ -154,3 +157,4 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 4. **Ergonomía Móvil Extrema:** Cero truncamientos tipográficos en selectores modales, touch targets de al menos 48×48px y soporte seguro para `viewport-fit=cover`.
 5. **Manipulación Gestual Invariante:** Todo giro de la hoja mediante dedos preserva el trazo exacto bajo el puntero aplicando la transformación inversa en tiempo real sin desfasaje de píxeles.
 6. **Preservación y Respeto al Arte del Usuario:** El guardado a galería permite conservar la hoja original o recortar automáticamente los márgenes sobrantes para compartir la ilustración de inmediato con conocimiento de su peso exacto.
+7. **Estampado No Destructivo de Accesorios:** Los elementos de galería (moños, stickers) pueden estamparse de forma definitiva en la capa de trabajo o derivarse a una nueva capa separada con instantánea automática para deshacer/rehacer y almacenamiento ACID en SQLite Wasm sobre OPFS.

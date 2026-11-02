@@ -88,8 +88,91 @@ export function dilateBinaryMask(
 }
 
 /**
- * Algoritmo Scanline Flood Fill de alto rendimiento con tolerancia cromática
- * y expansión de borde configurable (1 a 3 px) para eliminar rebordes blancos bajo el lineart.
+ * Genera una máscara de barrera con cierre morfológico de huecos (Gap-Closing).
+ * Detecta líneas de contorno y crea puentes virtuales en aberturas menores a `gapSize` px
+ * para evitar que el Bote de Pintura se desborde fuera del dibujo.
+ */
+export function generateClosedGapBarrierMask(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  gapSize: number,
+  targetR: number,
+  targetG: number,
+  targetB: number,
+  targetA: number,
+  tolerance: number
+): Uint8Array | null {
+  if (gapSize <= 0) return null;
+
+  const total = width * height;
+  const barrier = new Uint8Array(total);
+
+  // 1. Identificar píxeles que difieren del color destino (barrera / líneas)
+  for (let i = 0, p = 0; p < total; i += 4, p++) {
+    const dr = Math.abs(data[i] - targetR);
+    const dg = Math.abs(data[i + 1] - targetG);
+    const db = Math.abs(data[i + 2] - targetB);
+    const da = Math.abs(data[i + 3] - targetA);
+    const diff = (dr + dg + db + da) / 4;
+    if (diff > tolerance || data[i + 3] > 60) {
+      barrier[p] = 1;
+    }
+  }
+
+  const radius = Math.min(8, Math.max(1, Math.ceil(gapSize / 2)));
+
+  // 2. Dilatación de la barrera para unir extremos desconectados
+  let dilated = new Uint8Array(barrier);
+  for (let r = 0; r < radius; r++) {
+    const next = new Uint8Array(dilated);
+    for (let y = 0; y < height; y++) {
+      const row = y * width;
+      for (let x = 0; x < width; x++) {
+        if (dilated[row + x] === 1) {
+          if (x > 0) next[row + (x - 1)] = 1;
+          if (x < width - 1) next[row + (x + 1)] = 1;
+          if (y > 0) next[(y - 1) * width + x] = 1;
+          if (y < height - 1) next[(y + 1) * width + x] = 1;
+          if (x > 0 && y > 0) next[(y - 1) * width + (x - 1)] = 1;
+          if (x < width - 1 && y > 0) next[(y - 1) * width + (x + 1)] = 1;
+          if (x > 0 && y < height - 1) next[(y + 1) * width + (x - 1)] = 1;
+          if (x < width - 1 && y < height - 1) next[(y + 1) * width + (x + 1)] = 1;
+        }
+      }
+    }
+    dilated = next;
+  }
+
+  // 3. Erosión de la barrera para restaurar el grosor original pero conservando los puentes
+  let closed = new Uint8Array(dilated);
+  for (let r = 0; r < radius; r++) {
+    const next = new Uint8Array(closed);
+    for (let y = 0; y < height; y++) {
+      const row = y * width;
+      for (let x = 0; x < width; x++) {
+        if (closed[row + x] === 1) {
+          if (
+            (x > 0 && closed[row + (x - 1)] === 0) ||
+            (x < width - 1 && closed[row + (x + 1)] === 0) ||
+            (y > 0 && closed[(y - 1) * width + x] === 0) ||
+            (y < height - 1 && closed[(y + 1) * width + x] === 0)
+          ) {
+            next[row + x] = 0;
+          }
+        }
+      }
+    }
+    closed = next;
+  }
+
+  return closed;
+}
+
+/**
+ * Algoritmo Scanline Flood Fill de alto rendimiento con tolerancia cromática,
+ * expansión de borde configurable (1 a 3 px) para eliminar rebordes blancos
+ * y Cierre Inteligente de Huecos (Gap-Closing de 0 a 10 px) para evitar fugas en lineart abierto.
  */
 export function scanlineFloodFill(
   layer: Layer,
@@ -97,7 +180,8 @@ export function scanlineFloodFill(
   startY: number,
   fillColorHex: string,
   tolerance: number = 32,
-  borderExpansion: number = 0
+  borderExpansion: number = 0,
+  gapClosing: number = 0
 ): boolean {
   const ctx = layer.ctx;
   const width = layer.canvas.width;
@@ -128,7 +212,16 @@ export function scanlineFloodFill(
     return false;
   }
 
-  const matchesTarget = (idx: number) => {
+  // Si se solicita cierre de huecos, calcular barrera morfológica virtual
+  const barrierMask = gapClosing > 0
+    ? generateClosedGapBarrierMask(data, width, height, gapClosing, targetR, targetG, targetB, targetA, tolerance)
+    : null;
+
+  const matchesTarget = (idx: number, pos: number = idx >> 2) => {
+    // Si la máscara de cierre de huecos detectó una barrera o puente virtual, actuar como borde
+    if (barrierMask && barrierMask[pos] === 1) {
+      return false;
+    }
     const dr = Math.abs(data[idx] - targetR);
     const dg = Math.abs(data[idx + 1] - targetG);
     const db = Math.abs(data[idx + 2] - targetB);

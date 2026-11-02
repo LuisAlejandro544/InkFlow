@@ -75,6 +75,44 @@ export function useTracingManager() {
   }, []);
 
   /**
+   * Importa un accesorio / sticker desde la galería (moño, accesorio, adorno, etc.)
+   * para posicionarlo y estamparlo de forma permanente en la obra maestra
+   */
+  const importAccessoryPhoto = useCallback((file: File, projectWidth: number, projectHeight: number) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        // Escalar el accesorio a aproximadamente el 45% del lienzo para que sea cómodo de manipular
+        const targetSize = Math.min(projectWidth, projectHeight) * 0.45;
+        const scale = Math.min(targetSize / img.width, targetSize / img.height, 1.0);
+
+        const newAccessory: TracingReference = {
+          id: `accessory_${Date.now()}`,
+          image: img,
+          src,
+          x: Math.round(projectWidth / 2),
+          y: Math.round(projectHeight / 2),
+          width: img.width,
+          height: img.height,
+          scale: Math.max(0.05, scale),
+          rotation: 0,
+          opacity: 1.0, // Accesorios inician 100% opacos
+          visible: true,
+          isAdjusting: true,
+          filterMode: 'original',
+          purpose: 'accessory',
+        };
+
+        setTracingRef(newAccessory);
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  /**
    * Actualiza propiedades del calco (posición, escala, rotación, opacidad, estado de ajuste)
    */
   const updateTracing = useCallback((update: Partial<TracingReference>) => {
@@ -175,6 +213,7 @@ export function useTracingManager() {
     tracingRef,
     setTracingRef,
     importTracingPhoto,
+    importAccessoryPhoto,
     updateTracing,
     applyTracingFilter,
     centerTracing,

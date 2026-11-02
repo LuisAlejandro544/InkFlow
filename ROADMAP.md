@@ -134,10 +134,32 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
 
 ---
 
+## 🎀 Fase 4.8: Cierre Inteligente de Huecos & Accesorios de Galería (Completada ✅)
+
+- [x] **Cierre Inteligente de Huecos en Balde de Pintura (Gap-Closing Flood Fill):**
+  - Implementación en C++23 (`close_boundary_gaps` e `ibis_close_boundary_gaps`) y en Wasm/TS (`generateClosedGapBarrierMask`).
+  - Dilatación y erosión morfológica para conectar brechas abiertas en el lineart de hasta 3px, 6px y 10px sin deformar las líneas existentes.
+  - Píldora de control rápido flotante sobre el lienzo `[🛡️ Huecos: 0|3|6|10px]` y selector en `BucketSettingsCard.tsx` y `ToolPickerModal.tsx`.
+  - Evita fugas de color accidentales cuando los trazos del ilustrador no se cierran completamente.
+- [x] **Poner Accesorios de Galería en el Dibujo (Moños, Stickers, Adornos):**
+  - Sistema de estampado permanente en la obra de elementos fotográficos o stickers importados desde la galería del teléfono.
+  - Transformación táctil intuitiva con gestos (mover con 1 dedo, rotación libre con 2 dedos, escalado focal, tiradores de esquinas).
+  - Panel ergonómico adaptativo `TracingAdjuster` con modo accesorio (`🎀 Ajustar Accesorio / Sticker`), minimización a píldora y controles de opacidad.
+  - Botón `[✨ Estampar en Capa]` para plasmar el accesorio directamente sobre la capa activa seleccionada.
+  - Botón `[📑 + Nueva Capa]` para generar automáticamente una capa dedicada llamada `Accesorio (Moño)` sin alterar los trazos previos.
+  - Creación de snapshot para historial (Deshacer/Rehacer) y persistencia atómica en SQLite Wasm OPFS.
+  - Accesos directos integrados en `LayersModal.tsx` (`[🎀 Poner Accesorio]`) y en el menú contextual de `StudioTopBar.tsx`.
+- [x] **Corrección de Resiliencia en GitHub Actions CI Workflow:**
+  - Solución del error `Dependencies lock file is not found`: remoción de `cache: 'npm'` de `setup-node` y reemplazo por `actions/cache@v4` con hash de `package.json`.
+- [x] **43 Pruebas Unitarias Deterministas:**
+  - 38 tests de motor gráfico, matemática, Wasm, expansión, cierre de huecos y accesorios + 5 tests de SQLite Wasm OPFS.
+
+---
+
 ## 🎨 Fase 5: Pipeline WebGPU Avanzado & Herramientas de Ilustración
 
 - [ ] Soporte para mapas de bits como puntas de pincel personalizadas (*Brush Dabs*).
-- [ ] Bote de pintura con cierre automático de huecos (*Gap Closing Flood Fill*).
 - [ ] Difuminador / Mezclador de color húmedo (*Smudge Tool*) acelerado en GPU.
 - [ ] Herramienta de Lazo de Selección (*Lasso Tool*) con transformación libre (rotación, escala y distorsión).
 - [ ] Grabación de lapso de tiempo (*Time-lapse Video Recorder*) del proceso de dibujo usando `MediaRecorder` o `WebCodecs`.
+- [ ] Filtros avanzados de post-procesamiento fotográfico (LUTs cromáticos manga y aberración cromática).

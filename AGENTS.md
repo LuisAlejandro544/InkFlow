@@ -13,7 +13,7 @@ Este documento define los 7 roles especializados del ciclo de vida del software 
 
 ## 🔨 02. El Constructor (Generación de Código)
 - **Misión:** Producir código limpio, tipado, modular y con manejo de errores completo listo para producción.
-- **Responsabilidad en el proyecto:** Implementar herramientas de dibujo (Lápiz Vectorial analítico, pinceles, modos de fusión, balde de pintura inteligente con expansión de borde 1-3px para eliminar halos blancos), controladores de gestos multitáctiles con los propios dedos (*pinch-to-zoom*, rotación, paneo), alternadores de modo Dibujar/Mover, expansor de dimensiones de hoja con matriz visual 3x3, modo calco ergonómico con controles minimizables y alternador instantáneo de visibilidad, selector de herramientas sin truncamiento, asistente de grosor de trazo, persistencia masiva relacional SQLite Wasm sobre OPFS y centinela de auto-guardado ante cierre o crash.
+- **Responsabilidad en el proyecto:** Implementar herramientas de dibujo (Lápiz Vectorial analítico, pinceles, modos de fusión, balde de pintura inteligente con expansión de borde 1-3px para eliminar halos blancos y **Cierre Inteligente de Huecos de 0 a 10px** para prevenir fugas de color), sistema de **Accesorios de Galería (Stickers, moños, adornos) con estampado permanente en la capa activa o nueva capa dedicada**, controladores de gestos multitáctiles con los propios dedos (*pinch-to-zoom*, rotación, paneo), alternadores de modo Dibujar/Mover, expansor de dimensiones de hoja con matriz visual 3x3, modo calco ergonómico con controles minimizables y alternador instantáneo de visibilidad, selector de herramientas sin truncamiento, asistente de grosor de trazo, persistencia masiva relacional SQLite Wasm sobre OPFS y centinela de auto-guardado ante cierre o crash.
 - **Comportamiento:** Aplica el principio de responsabilidad única, incluye tipos TypeScript y Kotlin estrictos y añade comentarios explicativos sobre la lógica interna.
 
 ---
@@ -41,8 +41,8 @@ Este documento define los 7 roles especializados del ciclo de vida del software 
 
 ## 🛡️ 06. El Escudo (Testing y Cobertura)
 - **Misión:** Diseñar y ejecutar suites de pruebas automatizadas deterministas con Node test runner (`node:test`).
-- **Responsabilidad en el proyecto:** Cobertura de las 4 categorías obligatorias: *Happy path*, *Edge cases* (coordenadas fuera de lienzo, velocidad cero, presiones extremas, dedos en pinch, calibración de fotos de calco, roles de trazo, dilatación morfológica en flood fill, offsets de expansión de lienzo, transacciones ACID en SQLite Wasm y rescate de crash), *Gestión de errores* y *Mocks*.
-- **Comando de ejecución:** `npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts` (40 pruebas deterministas pasando).
+- **Responsabilidad en el proyecto:** Cobertura de las 4 categorías obligatorias: *Happy path*, *Edge cases* (coordenadas fuera de lienzo, velocidad cero, presiones extremas, dedos en pinch, calibración de fotos de calco, roles de trazo, dilatación morfológica y cierre de huecos en flood fill, estampación de accesorios fotográficos, offsets de expansión de lienzo, transacciones ACID en SQLite Wasm y rescate de crash), *Gestión de errores* y *Mocks*.
+- **Comando de ejecución:** `npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts` (43 pruebas deterministas pasando: 38 de motor gráfico y transformaciones + 5 de SQLite Wasm OPFS).
 
 ---
 

@@ -29,6 +29,7 @@ interface LayersModalProps {
   onChangeBlendMode: (id: string, mode: BlendMode) => void;
   onMoveLayer: (id: string, direction: 'up' | 'down') => void;
   onTriggerImportPhoto?: () => void;
+  onTriggerImportAccessory?: () => void;
   onToggleTracingVisibility?: () => void;
   onReopenTracingAdjust?: () => void;
   onRemoveTracing?: () => void;
@@ -50,6 +51,7 @@ export const LayersModal: React.FC<LayersModalProps> = ({
   onChangeBlendMode,
   onMoveLayer,
   onTriggerImportPhoto,
+  onTriggerImportAccessory,
   onToggleTracingVisibility,
   onReopenTracingAdjust,
   onRemoveTracing,
@@ -79,19 +81,34 @@ export const LayersModal: React.FC<LayersModalProps> = ({
           </button>
         </div>
 
-        {/* Botón Destacado: Importar Foto de Galería para Calcar (Estilo Cámara IbisPaint) */}
-        {onTriggerImportPhoto && (
-          <button
-            onClick={() => {
-              onTriggerImportPhoto();
-              onClose();
-            }}
-            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all"
-          >
-            <Camera size={16} />
-            <span>📷 Importar Foto de Galería para Calcar</span>
-          </button>
-        )}
+        {/* Botones de Importación de Galería: Calco y Accesorios (Moño, etc.) */}
+        <div className="grid grid-cols-2 gap-2">
+          {onTriggerImportPhoto && (
+            <button
+              onClick={() => {
+                onTriggerImportPhoto();
+                onClose();
+              }}
+              className="py-2.5 px-2 rounded-xl bg-[#1c1e28] hover:bg-[#252838] border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+            >
+              <Camera size={15} />
+              <span>📷 Calcar Foto</span>
+            </button>
+          )}
+
+          {onTriggerImportAccessory && (
+            <button
+              onClick={() => {
+                onTriggerImportAccessory();
+                onClose();
+              }}
+              className="py-2.5 px-2 rounded-xl bg-gradient-to-r from-pink-500/20 to-rose-500/20 hover:from-pink-500/30 hover:to-rose-500/30 border border-pink-500/40 text-pink-300 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
+            >
+              <span className="text-sm">🎀</span>
+              <span>Poner Accesorio</span>
+            </button>
+          )}
+        </div>
 
         {/* Barra de acciones de capa */}
         <div className="grid grid-cols-5 gap-2 bg-[#121316] p-2 rounded-xl border border-[#262832]">

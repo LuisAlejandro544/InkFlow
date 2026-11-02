@@ -75,6 +75,10 @@ interface StudioScreenProps {
   onRemoveTracing: () => void;
   onToggleTracingVisibility: () => void;
   onTriggerImportPhoto: () => void;
+  onTriggerImportAccessory?: () => void;
+  onStampAccessory?: (asNewLayer: boolean) => void;
+  bucketGapClosing?: number;
+  onChangeBucketGapClosing?: (gap: number) => void;
 }
 
 export const StudioScreen: React.FC<StudioScreenProps> = ({
@@ -89,6 +93,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onChangeBucketExpansion,
   bucketTolerance = 32,
   onChangeBucketTolerance,
+  bucketGapClosing = 3,
+  onChangeBucketGapClosing,
   layers,
   activeLayerId,
   canUndo,
@@ -124,6 +130,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onRemoveTracing,
   onToggleTracingVisibility,
   onTriggerImportPhoto,
+  onTriggerImportAccessory,
+  onStampAccessory,
 }) => {
   const displayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -555,19 +563,20 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       return;
     }
 
-    // Herramienta Bote de Pintura (Flood Fill con Expansión de Borde)
-    if (activeTool === 'bucket') {
-      const coords = getCanvasCoords(e.clientX, e.clientY);
-      onSaveUndoSnapshot();
-      drawingEngine.floodFill(
-        activeLayer,
-        coords.x,
-        coords.y,
-        brushColor,
-        bucketTolerance,
-        bucketExpansion
-      );
-      renderComposite();
+      // Herramienta Bote de Pintura (Flood Fill con Expansión de Borde y Cierre Inteligente de Huecos)
+      if (activeTool === 'bucket') {
+        const coords = getCanvasCoords(e.clientX, e.clientY);
+        onSaveUndoSnapshot();
+        drawingEngine.floodFill(
+          activeLayer,
+          coords.x,
+          coords.y,
+          brushColor,
+          bucketTolerance,
+          bucketExpansion,
+          bucketGapClosing
+        );
+        renderComposite();
       updateThumbnail();
       triggerHaptic(15);
       if (onStrokeEnd) onStrokeEnd();
@@ -761,6 +770,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         onRedo={onRedo}
         onToggleFitOr100={toggleFitOr100}
         onTriggerImportPhoto={onTriggerImportPhoto}
+        onTriggerImportAccessory={onTriggerImportAccessory}
         onUpdateTracing={onUpdateTracing}
         onToggleTracingVisibility={onToggleTracingVisibility}
         onChangeStabilizer={onChangeStabilizer}
@@ -815,7 +825,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
             className="w-full h-full block touch-none"
           />
 
-          {/* Calibrador y transformador de foto de calco */}
+          {/* Calibrador y transformador de foto de calco o accesorio */}
           {tracingRef && tracingRef.isAdjusting && (
             <TracingAdjuster
               canvasWidth={project.width}
@@ -827,6 +837,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               onCenterImage={onCenterTracing}
               onConfirm={onConfirmTracing}
               onCancel={onRemoveTracing}
+              onStampToActiveLayer={() => onStampAccessory?.(false)}
+              onStampAsNewLayer={() => onStampAccessory?.(true)}
             />
           )}
         </div>
@@ -837,6 +849,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           tracingRef={tracingRef}
           bucketExpansion={bucketExpansion}
           onChangeBucketExpansion={onChangeBucketExpansion}
+          bucketGapClosing={bucketGapClosing}
+          onChangeBucketGapClosing={onChangeBucketGapClosing}
           showSizePreview={showSizePreview}
           brushSize={brushSize}
           showOpacityPreview={showOpacityPreview}

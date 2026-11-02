@@ -106,6 +106,7 @@ export interface TracingReference {
   visible: boolean;
   isAdjusting: boolean; // Si está activo el modo interactivo de mover/escalar con tiradores
   filterMode: TracingFilterMode;
+  purpose?: 'tracing' | 'accessory'; // Calco transparente de guía o Accesorio/Sticker para estampar en la obra
   extractedColors?: string[]; // Colores dominantes extraídos por Wasm
   strokeAnalysis?: {
     silhouettePx: number;

@@ -75,9 +75,10 @@ export default function App() {
   const [brushColor, setBrushColor] = useState<string>('#18181b');
   const [stabilizerLevel, setStabilizerLevel] = useState<number>(3);
   
-  // Configuración del Bote de Pintura (Bucket Fill con Expansión de Borde)
+  // Configuración del Bote de Pintura (Bucket Fill con Expansión de Borde y Cierre de Huecos)
   const [bucketExpansion, setBucketExpansion] = useState<number>(2); // 0 a 3 px (default 2px)
   const [bucketTolerance, setBucketTolerance] = useState<number>(32); // 0 a 100
+  const [bucketGapClosing, setBucketGapClosing] = useState<number>(3); // 0 a 10 px (default 3px)
 
   // Hooks modulares de arquitectura
   const {
@@ -110,6 +111,7 @@ export default function App() {
     tracingRef,
     setTracingRef,
     importTracingPhoto,
+    importAccessoryPhoto,
     updateTracing,
     applyTracingFilter,
     centerTracing,
@@ -125,8 +127,9 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isCanvasResizeModalOpen, setIsCanvasResizeModalOpen] = useState(false);
 
-  // Input oculto para galería de fotos
+  // Input oculto para galería de fotos y accesorios
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryImportModeRef = useRef<'tracing' | 'accessory'>('tracing');
 
   // Centinela de Crash y Recuperación de Emergencia
   const [crashRecovery, setCrashRecovery] = useState<CrashRecoveryRecord | null>(null);
@@ -482,9 +485,88 @@ export default function App() {
     [currentProject, layers, tracingRef, saveUndoSnapshot, setLayers, setTracingRef]
   );
 
-  const handleTriggerFileInput = () => {
+  const handleTriggerTracingInput = () => {
+    galleryImportModeRef.current = 'tracing';
     fileInputRef.current?.click();
   };
+
+  const handleTriggerAccessoryInput = () => {
+    galleryImportModeRef.current = 'accessory';
+    fileInputRef.current?.click();
+  };
+
+  /**
+   * Estampa el accesorio / sticker colocado sobre el lienzo de forma permanente en la obra maestra
+   */
+  const handleStampAccessory = useCallback((asNewLayer: boolean) => {
+    if (!tracingRef || !tracingRef.image) return;
+    saveUndoSnapshot();
+
+    const drawWidth = tracingRef.width * tracingRef.scale;
+    const drawHeight = tracingRef.height * tracingRef.scale;
+
+    if (asNewLayer) {
+      const newCanvas = document.createElement('canvas');
+      newCanvas.width = currentProject.width;
+      newCanvas.height = currentProject.height;
+      const newCtx = newCanvas.getContext('2d')!;
+
+      newCtx.save();
+      newCtx.translate(tracingRef.x, tracingRef.y);
+      if (tracingRef.rotation) {
+        newCtx.rotate(tracingRef.rotation);
+      }
+      newCtx.globalAlpha = Math.max(0.01, Math.min(1.0, tracingRef.opacity));
+      newCtx.drawImage(
+        tracingRef.image,
+        -drawWidth / 2,
+        -drawHeight / 2,
+        drawWidth,
+        drawHeight
+      );
+      newCtx.restore();
+
+      const newLayer: Layer = {
+        id: `layer_${Date.now()}`,
+        name: tracingRef.purpose === 'accessory' ? 'Accesorio (Moño)' : 'Calco Estampado',
+        visible: true,
+        opacity: 1.0,
+        blendMode: 'source-over',
+        canvas: newCanvas,
+        ctx: newCtx,
+      };
+
+      const updatedLayers = [...layers, newLayer];
+      setLayers(updatedLayers);
+      setActiveLayerId(newLayer.id);
+      sqliteStorageService.scheduleAutoSave(currentProject, updatedLayers, 500);
+    } else {
+      const activeLayer = layers.find((l) => l.id === activeLayerId) || layers[0];
+      if (activeLayer) {
+        const ctx = activeLayer.ctx;
+        ctx.save();
+        ctx.translate(tracingRef.x, tracingRef.y);
+        if (tracingRef.rotation) {
+          ctx.rotate(tracingRef.rotation);
+        }
+        ctx.globalAlpha = Math.max(0.01, Math.min(1.0, tracingRef.opacity));
+        ctx.drawImage(
+          tracingRef.image,
+          -drawWidth / 2,
+          -drawHeight / 2,
+          drawWidth,
+          drawHeight
+        );
+        ctx.restore();
+        sqliteStorageService.scheduleAutoSave(currentProject, layers, 500);
+      }
+    }
+
+    removeTracing();
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try { navigator.vibrate(15); } catch {}
+    }
+  }, [tracingRef, currentProject, layers, activeLayerId, saveUndoSnapshot, setLayers, setActiveLayerId, removeTracing]);
 
   /**
    * Gestión de Galería y Creación de Proyectos en SQLite Wasm
@@ -558,14 +640,18 @@ export default function App() {
 
   return (
     <div className="w-full h-full bg-[#0e1017]">
-      {/* Input de archivo nativo para seleccionar fotos desde la galería del teléfono */}
+      {/* Input de archivo nativo para seleccionar fotos o accesorios desde la galería */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
         onChange={(e) => {
           if (e.target.files && e.target.files[0]) {
-            importTracingPhoto(e.target.files[0], currentProject.width, currentProject.height);
+            if (galleryImportModeRef.current === 'accessory') {
+              importAccessoryPhoto(e.target.files[0], currentProject.width, currentProject.height);
+            } else {
+              importTracingPhoto(e.target.files[0], currentProject.width, currentProject.height);
+            }
             e.target.value = '';
           }
         }}
@@ -604,6 +690,8 @@ export default function App() {
           onChangeBucketExpansion={setBucketExpansion}
           bucketTolerance={bucketTolerance}
           onChangeBucketTolerance={setBucketTolerance}
+          bucketGapClosing={bucketGapClosing}
+          onChangeBucketGapClosing={setBucketGapClosing}
           layers={layers}
           activeLayerId={activeLayerId}
           canUndo={canUndo}
@@ -638,7 +726,9 @@ export default function App() {
           onConfirmTracing={confirmTracing}
           onRemoveTracing={removeTracing}
           onToggleTracingVisibility={toggleTracingVisibility}
-          onTriggerImportPhoto={handleTriggerFileInput}
+          onTriggerImportPhoto={handleTriggerTracingInput}
+          onTriggerImportAccessory={handleTriggerAccessoryInput}
+          onStampAccessory={handleStampAccessory}
         />
       )}
 
@@ -679,7 +769,8 @@ export default function App() {
           onChangeOpacity={changeOpacity}
           onChangeBlendMode={changeBlendMode}
           onMoveLayer={moveLayer}
-          onTriggerImportPhoto={handleTriggerFileInput}
+          onTriggerImportPhoto={handleTriggerTracingInput}
+          onTriggerImportAccessory={handleTriggerAccessoryInput}
           onToggleTracingVisibility={toggleTracingVisibility}
           onReopenTracingAdjust={() => {
             if (tracingRef) updateTracing({ isAdjusting: true });
@@ -711,6 +802,8 @@ export default function App() {
           onChangeBucketExpansion={setBucketExpansion}
           bucketTolerance={bucketTolerance}
           onChangeBucketTolerance={setBucketTolerance}
+          bucketGapClosing={bucketGapClosing}
+          onChangeBucketGapClosing={setBucketGapClosing}
           onClose={() => setIsToolPickerOpen(false)}
         />
       )}

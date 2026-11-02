@@ -17,13 +17,14 @@ Este documento proporciona instrucciones de compilación, patrones de arquitectu
 | **Asistente de Grosor Real** | Visión artificial de imagen, percentiles P92/P68/P38/P12 y muestreo local | `src/engine/strokeAssistant.ts` |
 | **Núcleo de Vértices** | Rust (Targets wasm32-unknown-unknown / SIMD128) | `src/rust-core/src/lib.rs`, `src/rust-core/Cargo.toml` |
 | **Gestos Multitáctiles & Mapeo Canónico** | Pinch-to-Zoom, Paneo, Rotación a 2 dedos y `screenToCanvasCoords` | `src/components/StudioScreen.tsx`, `src/engine/transformMath.ts` |
-| **Bote de Pintura con Expansión de Borde** | Scanline Flood Fill + Dilatación morfológica isotrópica (1 a 3 px) | `src/engine/webgpuEngine.ts`, `src/components/StudioScreen.tsx` |
+| **Bote de Pintura & Cierre de Huecos** | Scanline Flood Fill + Dilatación morfológica (1-3px) + Gap Closing C++23/TS (0-10px) | `src/engine/floodFillEngine.ts`, `src/engine/webgpuEngine.ts` |
+| **Accesorios y Stickers de Galería** | Estampado de moños y adornos en capa activa o nueva capa (`TracingAdjuster`) | `src/components/TracingAdjuster.tsx`, `src/hooks/useTracingManager.ts` |
 | **Expansión y Redimensionado de Hoja** | Matriz visual 3x3, cálculo de offsets y presets de espacio (+25%, +50%, 2x, 1:1, 9:16) | `src/components/CanvasResizeModal.tsx`, `src/engine/canvasResizeMath.ts` |
 | **Guardado de Obra a Galería** | Hoja Completa vs Auto-Crop + Cálculo de peso KB/MB en tiempo real | `src/components/ExportModal.tsx`, `src/engine/transformMath.ts` |
 | **Persistencia Masiva SQLite Wasm** | Base de datos ACID sobre OPFS en Web Worker dedicado + Centinela Crash | `src/storage/sqliteStorage.worker.ts`, `src/storage/sqliteStorageService.ts` |
 | **Caché Integral & Aceleración VRAM** | Workbox 10MB + Wasm Streaming JIT + Inmutabilidad Cloudflare + GPU ImageBitmap | `vite.config.ts`, `public/_headers`, `src/engine/wasmStreamingCompiler.ts`, `src/engine/bitmapCache.ts` |
-| **Arquitectura de App & CI/CD** | Progressive Web App (PWA) + GitHub Actions Wasm + Cloudflare Pages | `.github/workflows/deploy.yml`, `public/manifest.json`, `public/sw.js` |
-| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (40 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
+| **Arquitectura de App & CI/CD** | Progressive Web App (PWA) + GitHub Actions Wasm Resiliente + Cloudflare Pages | `.github/workflows/deploy.yml`, `public/manifest.json`, `public/sw.js` |
+| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (43 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
 
 ---
 
@@ -73,3 +74,7 @@ A diferencia de los pinceles raster que pintan píxeles en un mapa de bits está
 ### 6. Bote de Pintura con Expansión de Borde & Expansión de Hoja sin Pérdidas
 - `dilateBinaryMask` (`src/engine/webgpuEngine.ts`): Dilata morfológicamente la máscara de Flood Fill en radio de 1 a 3 px para cubrir el antialiasing y evitar los halos blancos bajo el contorno. Dispone de píldora rápida en el lienzo (`StudioScreen.tsx`) y ajustes en `ToolPickerModal.tsx`.
 - `CanvasResizeModal.tsx` & `src/engine/canvasResizeMath.ts`: Aplican traslación de píxeles en todas las capas con matriz de anclaje 3x3, desplazan las curvas vectoriales analíticas de Kotlin/Wasm (`offsetAllStrokes`), re-alinean el calco activo y sincronizan atómicamente con SQLite Wasm sobre OPFS sin pérdidas.
+
+### 7. Cierre Inteligente de Huecos & Accesorios / Stickers de Galería
+- `generateClosedGapBarrierMask` (`src/engine/floodFillEngine.ts`) & `close_boundary_gaps` (`src/cpp-core/`): Implementan cierre morfológico (dilatación y erosión topológica) sobre la máscara binaria de barrera con radio $R = \lceil \text{gapClosing} / 2 \rceil$. Une brechas abiertas de hasta 3, 6 y 10px antes del recorrido Scanline, conteniendo la inundación de pintura sin modificar el lineart dibujado.
+- `TracingAdjuster.tsx` & `useTracingManager.ts`: Soporta tanto imágenes de calco (`purpose: 'tracing'`) como accesorios / moños / stickers (`purpose: 'accessory'`). Permite manipular con gestos multitáctiles o deslizadores y estampar de forma permanente en la capa activa (`[✨ Estampar en Capa]`) o en una capa nueva (`[📑 + Nueva Capa]`), guardando el paso en el historial de deshacer y persistiendo atómicamente en SQLite Wasm sobre OPFS.

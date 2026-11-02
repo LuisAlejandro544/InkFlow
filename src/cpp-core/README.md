@@ -16,7 +16,11 @@ Este módulo aloja la biblioteca de visión por computadora y análisis geométr
      - **Estructura (P68):** Ropa, cabello y anatomía general.
      - **Detalles (P38):** Facciones finas, ojos y dedos.
      - **Tramas (P12):** Micro-líneas y achurado manga.
-3. **Compatibilidad de Arquitecturas:**
+3. **Cierre Inteligente de Huecos (*Gap-Closing Barrier Bridge*):**
+   - Detección y unión de brechas de contorno abiertas en lineart mediante operaciones de dilatación morfológica y erosión topológica en memoria plana continua (`close_boundary_gaps`).
+   - Función C-ABI `ibis_close_boundary_gaps` para puente WebAssembly directo (`wasm32` / `wasm64`).
+   - Evita la fuga de color en el bote de pintura cuando los trazos del artista no se tocan por 1 a 10 píxeles.
+4. **Compatibilidad de Arquitecturas:**
    - **Web:** WebAssembly 32-bit (`wasm32`) y 64-bit (`wasm64`) con aceleración vectorial SIMD de 128 bits (`-msimd128`).
    - **Móvil Android (32 y 64 bits):** `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`.
 

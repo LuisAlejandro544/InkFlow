@@ -263,7 +263,8 @@ export class DrawingEngine {
   }
 
   /**
-   * Herramienta de Cubo de Pintura (Bucket Fill) con Expansión de Borde (1 a 3 px).
+   * Herramienta de Cubo de Pintura (Bucket Fill) con Expansión de Borde (1 a 3 px)
+   * y Cierre Inteligente de Huecos (Gap-Closing).
    * Delegado al módulo especializado floodFillEngine.ts.
    */
   public floodFill(
@@ -272,9 +273,10 @@ export class DrawingEngine {
     startY: number,
     fillColorHex: string,
     tolerance: number = 32,
-    borderExpansion: number = 0
+    borderExpansion: number = 0,
+    gapClosing: number = 0
   ): boolean {
-    return scanlineFloodFill(layer, startX, startY, fillColorHex, tolerance, borderExpansion);
+    return scanlineFloodFill(layer, startX, startY, fillColorHex, tolerance, borderExpansion, gapClosing);
   }
 
   /**

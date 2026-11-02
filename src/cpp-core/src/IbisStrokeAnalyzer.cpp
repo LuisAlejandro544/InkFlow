@@ -187,6 +187,93 @@ namespace ibis::vision::stroke {
 
 } // namespace ibis::vision::stroke
 
+[[nodiscard]] auto StrokeAnalyzer::close_boundary_gaps(
+    std::span<const uint8_t> rgba_pixels,
+    int32_t width,
+    int32_t height,
+    int32_t max_gap_px,
+    std::span<uint8_t> output_closed_mask
+) const noexcept -> uint32_t {
+    if (width <= 2 || height <= 2 || max_gap_px <= 0) return 0;
+    const size_t total = static_cast<size_t>(width * height);
+    if (rgba_pixels.size() < total * 4 || output_closed_mask.size() < total) return 0;
+
+    std::vector<uint8_t> barrier(total, 0);
+
+    // 1. Extraer máscara de barrera (píxeles opacos de tinta o bordes)
+    for (size_t i = 0, p = 0; p < total; i += 4, ++p) {
+        const uint32_t a = rgba_pixels[i + 3];
+        if (a >= 64) {
+            const uint32_t r = rgba_pixels[i];
+            const uint32_t g = rgba_pixels[i + 1];
+            const uint32_t b = rgba_pixels[i + 2];
+            const uint32_t lum = (r * 54 + g * 183 + b * 19) >> 8;
+            if (lum < 160) {
+                barrier[p] = 1;
+            }
+        }
+    }
+
+    const int32_t radius = std::clamp((max_gap_px + 1) / 2, 1, 8);
+
+    // 2. Dilatación morfológica de la barrera (radio R)
+    std::vector<uint8_t> dilated = barrier;
+    for (int32_t r = 0; r < radius; ++r) {
+        std::vector<uint8_t> next = dilated;
+        for (int32_t y = 0; y < height; ++y) {
+            const int32_t row = y * width;
+            for (int32_t x = 0; x < width; ++x) {
+                if (dilated[row + x] == 1) {
+                    if (x > 0) next[row + (x - 1)] = 1;
+                    if (x < width - 1) next[row + (x + 1)] = 1;
+                    if (y > 0) next[(y - 1) * width + x] = 1;
+                    if (y < height - 1) next[(y + 1) * width + x] = 1;
+                    if (x > 0 && y > 0) next[(y - 1) * width + (x - 1)] = 1;
+                    if (x < width - 1 && y > 0) next[(y - 1) * width + (x + 1)] = 1;
+                    if (x > 0 && y < height - 1) next[(y + 1) * width + (x - 1)] = 1;
+                    if (x < width - 1 && y < height - 1) next[(y + 1) * width + (x + 1)] = 1;
+                }
+            }
+        }
+        dilated = std::move(next);
+    }
+
+    // 3. Erosión morfológica de la barrera dilatada (cierre topológico completo)
+    std::vector<uint8_t> closed = dilated;
+    for (int32_t r = 0; r < radius; ++r) {
+        std::vector<uint8_t> next = closed;
+        for (int32_t y = 0; y < height; ++y) {
+            const int32_t row = y * width;
+            for (int32_t x = 0; x < width; ++x) {
+                if (closed[row + x] == 1) {
+                    bool all_neighbors = true;
+                    if (x > 0 && closed[row + (x - 1)] == 0) all_neighbors = false;
+                    if (x < width - 1 && closed[row + (x + 1)] == 0) all_neighbors = false;
+                    if (y > 0 && closed[(y - 1) * width + x] == 0) all_neighbors = false;
+                    if (y < height - 1 && closed[(y + 1) * width + x] == 0) all_neighbors = false;
+                    if (!all_neighbors) {
+                        next[row + x] = 0;
+                    }
+                }
+            }
+        }
+        closed = std::move(next);
+    }
+
+    // 4. Escribir máscara final y contabilizar puentes generados
+    uint32_t bridge_pixels = 0;
+    for (size_t p = 0; p < total; ++p) {
+        output_closed_mask[p] = closed[p];
+        if (closed[p] == 1 && barrier[p] == 0) {
+            ++bridge_pixels;
+        }
+    }
+
+    return bridge_pixels;
+}
+
+} // namespace ibis::vision::stroke
+
 // ============================================================================
 // Enlaces C-ABI para JavaScript y WebAssembly
 // ============================================================================
@@ -225,6 +312,21 @@ float ibis_sample_point_thickness(
     ibis::vision::stroke::StrokeAnalyzer analyzer;
     auto val = analyzer.sample_local_thickness(view, width, height, x, y);
     return val.value_or(-1.0f);
+}
+
+int32_t ibis_close_boundary_gaps(
+    const uint8_t* rgba_data,
+    int32_t width,
+    int32_t height,
+    int32_t max_gap_px,
+    uint8_t* output_mask
+) {
+    if (!rgba_data || !output_mask || width <= 0 || height <= 0) return 0;
+    const size_t total = static_cast<size_t>(width * height);
+    std::span<const uint8_t> rgba_view(rgba_data, total * 4);
+    std::span<uint8_t> mask_view(output_mask, total);
+    ibis::vision::stroke::StrokeAnalyzer analyzer;
+    return static_cast<int32_t>(analyzer.close_boundary_gaps(rgba_view, width, height, max_gap_px, mask_view));
 }
 
 }

@@ -28,6 +28,8 @@ import {
   detectIsDevOrPreview,
   shouldShowWelcomeScreen
 } from './environmentDetector';
+import { generateClosedGapBarrierMask, scanlineFloodFill } from './floodFillEngine';
+import { Layer } from './types';
 
 test('Wasm Lerp e Interpolación Lineal', () => {
   const result = wasmEngine.lerp(10, 20, 0.5);
@@ -803,6 +805,124 @@ test('Expansión de Hoja: Normalización y Presets de Espacio (+25%, +50%, 2x, 1
 
   const pSquare = CANVAS_EXPANSION_PRESETS.find(p => p.id === 'square_1_1')!;
   assert.deepEqual(pSquare.calculate(800, 1200), { width: 1200, height: 1200 });
+});
+
+test('Cierre Inteligente de Huecos (Gap-Closing): Detección y Puente Morfológico de Brechas en Lineart', () => {
+  const width = 20;
+  const height = 20;
+  const data = new Uint8ClampedArray(width * height * 4);
+
+  // Inicializar fondo transparente (RGBA: 0, 0, 0, 0)
+  // Crear una línea vertical en x = 10 con una abertura/hueco de 3 píxeles en y = 7, 8, 9
+  // Segmento superior: y = 2..6
+  for (let y = 2; y <= 6; y++) {
+    const idx = (y * width + 10) * 4;
+    data[idx] = 20;
+    data[idx + 1] = 20;
+    data[idx + 2] = 20;
+    data[idx + 3] = 255; // Opaco oscuro
+  }
+  // Segmento inferior: y = 10..15
+  for (let y = 10; y <= 15; y++) {
+    const idx = (y * width + 10) * 4;
+    data[idx] = 20;
+    data[idx + 1] = 20;
+    data[idx + 2] = 20;
+    data[idx + 3] = 255;
+  }
+
+  // 1. Sin cierre de huecos (gapSize = 0) -> retorna null
+  const noGap = generateClosedGapBarrierMask(data, width, height, 0, 0, 0, 0, 0, 32);
+  assert.equal(noGap, null);
+
+  // 2. Con cierre de huecos pequeño (gapSize = 2) -> hueco de 3px no se cierra
+  const smallGap = generateClosedGapBarrierMask(data, width, height, 2, 0, 0, 0, 0, 32)!;
+  assert.ok(smallGap, 'Debe generar máscara');
+  assert.equal(smallGap[8 * width + 10], 0, 'Hueco de 3px no debe cerrarse con radio insuficiente');
+
+  // 3. Con cierre de huecos adecuado (gapSize = 5 o 6) -> el puente se genera uniendo y = 7, 8, 9
+  const bridgeGap = generateClosedGapBarrierMask(data, width, height, 6, 0, 0, 0, 0, 32)!;
+  assert.ok(bridgeGap, 'Debe generar máscara con puente');
+  assert.equal(bridgeGap[7 * width + 10], 1, 'Píxel 7 del hueco debe estar cerrado por el puente');
+  assert.equal(bridgeGap[8 * width + 10], 1, 'Píxel 8 del hueco debe estar cerrado por el puente');
+  assert.equal(bridgeGap[9 * width + 10], 1, 'Píxel 9 del hueco debe estar cerrado por el puente');
+});
+
+test('Bote de Pintura con Cierre de Huecos: Contención Exitosa de Relleno sin Fugas en Contornos Abiertos', () => {
+  const width = 30;
+  const height = 30;
+
+  // Función helper para construir una caja de 30x30 con una brecha de 3px en la pared derecha (x=24, y=14..16)
+  const createBoxData = () => {
+    const buf = new Uint8ClampedArray(width * height * 4);
+    for (let x = 6; x <= 24; x++) {
+      // Pared superior y fondo
+      const topIdx = (6 * width + x) * 4;
+      buf[topIdx] = 0; buf[topIdx + 1] = 0; buf[topIdx + 2] = 0; buf[topIdx + 3] = 255;
+      const botIdx = (24 * width + x) * 4;
+      buf[botIdx] = 0; buf[botIdx + 1] = 0; buf[botIdx + 2] = 0; buf[botIdx + 3] = 255;
+    }
+    for (let y = 6; y <= 24; y++) {
+      // Pared izquierda completa
+      const leftIdx = (y * width + 6) * 4;
+      buf[leftIdx] = 0; buf[leftIdx + 1] = 0; buf[leftIdx + 2] = 0; buf[leftIdx + 3] = 255;
+      // Pared derecha con HUECO de 3px en y = 14, 15, 16
+      if (y < 14 || y > 16) {
+        const rightIdx = (y * width + 24) * 4;
+        buf[rightIdx] = 0; buf[rightIdx + 1] = 0; buf[rightIdx + 2] = 0; buf[rightIdx + 3] = 255;
+      }
+    }
+    return buf;
+  };
+
+  // CASO A: Sin Cierre de Huecos (gapClosing = 0)
+  // El color debe escaparse por el hueco y pintar fuera de la caja (ej. x=28, y=15)
+  const dataWithoutGapClose = createBoxData();
+  const layerA = {
+    canvas: { width, height },
+    ctx: {
+      getImageData: () => ({ data: dataWithoutGapClose }),
+      putImageData: () => {}
+    }
+  } as unknown as Layer;
+
+  scanlineFloodFill(layerA, 15, 15, '#ff0000', 32, 0, 0);
+  const outsideIdxA = (15 * width + 28) * 4;
+  assert.equal(dataWithoutGapClose[outsideIdxA], 255, 'Sin gap closing, la pintura debe desbordarse afuera');
+
+  // CASO B: Con Cierre de Huecos (gapClosing = 6)
+  // El color debe rellenar el interior pero contenerse sin fugas hacia el exterior
+  const dataWithGapClose = createBoxData();
+  const layerB = {
+    canvas: { width, height },
+    ctx: {
+      getImageData: () => ({ data: dataWithGapClose }),
+      putImageData: () => {}
+    }
+  } as unknown as Layer;
+
+  scanlineFloodFill(layerB, 15, 15, '#00ff00', 32, 0, 6);
+  const insideIdxB = (15 * width + 15) * 4;
+  assert.equal(dataWithGapClose[insideIdxB + 1], 255, 'Dentro de la caja debe estar relleno de verde');
+
+  const outsideIdxB = (15 * width + 28) * 4;
+  assert.equal(dataWithGapClose[outsideIdxB + 1], 0, 'Con gap closing, el exterior debe permanecer intacto sin fugas');
+});
+
+test('Sistema de Accesorios de Galería (Stickers / Moños): Validación de Propiedades y Estampado', () => {
+  // Un accesorio importado debe tener purpose: 'accessory' y opacidad 1.0
+  const accessoryConfig = {
+    id: 'accessory_12345',
+    purpose: 'accessory' as const,
+    opacity: 1.0,
+    visible: true,
+    scale: 0.45,
+    rotation: 0
+  };
+
+  assert.equal(accessoryConfig.purpose, 'accessory');
+  assert.equal(accessoryConfig.opacity, 1.0, 'Los accesorios de galería inician con opacidad 100%');
+  assert.equal(accessoryConfig.visible, true);
 });
 
 

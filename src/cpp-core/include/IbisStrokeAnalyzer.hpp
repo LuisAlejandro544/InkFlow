@@ -101,6 +101,24 @@ public:
         int32_t target_x,
         int32_t target_y
     ) const noexcept -> std::optional<float>;
+
+    /**
+     * @brief Cierra brechas y aberturas en el lineart (Gap-Closing Morphological Filter)
+     * para el Bote de Pintura (Bucket Flood Fill).
+     * @param rgba_pixels Buffer continuo RGBA de la imagen/capa
+     * @param width Ancho en píxeles
+     * @param height Alto en píxeles
+     * @param max_gap_px Distancia máxima de brecha a cerrar (ej. 3 a 12 px)
+     * @param output_closed_mask Buffer de salida (1 byte por píxel: 1 = barrera cerrada, 0 = libre)
+     * @return Número de píxeles puente generados para cerrar brechas
+     */
+    [[nodiscard]] auto close_boundary_gaps(
+        std::span<const uint8_t> rgba_pixels,
+        int32_t width,
+        int32_t height,
+        int32_t max_gap_px,
+        std::span<uint8_t> output_closed_mask
+    ) const noexcept -> uint32_t;
 };
 
 } // namespace ibis::vision::stroke
@@ -130,6 +148,17 @@ extern "C" {
     int32_t height,
     int32_t x,
     int32_t y
+);
+
+/**
+ * @brief C-ABI para cierre morfológico de huecos (Gap Closing)
+ */
+[[maybe_unused]] int32_t ibis_close_boundary_gaps(
+    const uint8_t* rgba_data,
+    int32_t width,
+    int32_t height,
+    int32_t max_gap_px,
+    uint8_t* output_mask
 );
 
 }
