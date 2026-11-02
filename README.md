@@ -82,6 +82,15 @@ Aplicación de dibujo e ilustración digital profesional para dispositivos móvi
   - Paneo y zoom fluido a 120 FPS sin re-decodificar cadenas Base64/PNG en cada frame, con política de desalojo LRU y desecho explícito de memoria mediante `.close()`.
 - **🛡️ Almacenamiento Persistente Blindado (`navigator.storage.persist()`):**
   - Al iniciar la app, solicita el estado de persistencia permanente al navegador para evitar que el sistema operativo móvil (Android o iOS) purgue la base de datos SQLite Wasm o el precaché en situaciones de almacenamiento bajo.
+- **🪣 Bote de Pintura Inteligente con Expansión de Borde (1 a 3 px):**
+  - Algoritmo Scanline Flood Fill de alto rendimiento con dilatación morfológica isotrópica (`dilateBinaryMask`) configurable en 1px (fino), 2px (recomendado manga/anime) y 3px (máximo).
+  - **Cero halos blancos:** Expande el color hacia el interior de las líneas de contorno anti-aliasing, eliminando los molestos rebordes blancos entre el lineart y el color plano.
+  - Píldora de control rápido flotante sobre el lienzo para alternar en 1 toque `[0px | 1px | 2px | 3px]` y panel con deslizador de tolerancia cromática en `ToolPickerModal`.
+- **📐 Expansión y Redimensionado Ergonómico de Hoja (Canvas Resize & Expand):**
+  - Modal táctil `CanvasResizeModal` accesible desde el menú `[⋯]` para ampliar el ancho y alto del lienzo si el artista necesita más espacio para bocetos o viñetas.
+  - **Presets en 1 toque:** `+25% Espacio`, `+50% Espacio`, `2x Doble Lienzo`, `1:1 Cuadrado`, `9:16 Manga/Móvil` y botones de incremento táctil rápido (`+100px`, `+300px`).
+  - **Matriz de Anclaje Visual 3×3:** Permite elegir hacia qué dirección se expande el lienzo (Centro, Arriba, Abajo, Esquinas).
+  - **Migración sin pérdidas:** Reubica los píxeles de todas las capas (`drawImage`), traslada las curvas vectoriales analíticas de Kotlin/Wasm (`offsetAllStrokes`), desplaza la foto de calco activa y persiste el cambio atómicamente en SQLite Wasm (OPFS).
 - **💾 Guardado de Obra Maestra a Galería con Auto-Crop y Peso en Tiempo Real:**
   - **Hoja Completa vs Recortar al Dibujo:** Permite exportar toda la hoja de trabajo (incluyendo bordes intactos) o aplicar **Auto-Crop inteligente** que detecta la caja delimitadora (*bounding box*) de los trazos reales con margen armónico, eliminando espacio vacío innecesario.
   - **Indicador de Peso Exacto:** Muestra el peso proyectado del archivo resultante en B, KB o MB según el formato, escala y recorte seleccionado.
@@ -113,9 +122,9 @@ Abre `http://localhost:3000` en tu teléfono móvil y pulsa el botón **"Instala
 
 ## 🧪 Pruebas Unitarias de Lógica
 
-El proyecto cuenta con **37 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
+El proyecto cuenta con **40 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
 
-### Suite 1: Motor Gráfico, Calco, Wasm & Caché GPU (32 tests)
+### Suite 1: Motor Gráfico, Calco, Wasm, Caché GPU & Expansión (35 tests)
 1. Interpolación lineal y cálculo euclidiano Wasm.
 2. Estabilizador exponencial anti-temblor S-Form.
 3. Simulación de curva de presión táctil por velocidad.
@@ -143,16 +152,19 @@ El proyecto cuenta con **37 pruebas unitarias automatizadas deterministas** con 
 25. Decisión Determinista de Mostrar Pantalla de Bienvenida PWA vs Acceso Directo al Estudio.
 26. Compilación Streaming de WebAssembly (`WebAssembly.instantiateStreaming` & Wasm CPU Cache).
 27. Caché VRAM en GPU (`GPUBitmapCache`) con gestión LRU y liberación explícita vía `.close()`.
+28. Bote de Pintura: Dilatación y Expansión de Borde (1 a 3 px) para eliminar halos blancos.
+29. Expansión de Hoja: Cálculo de desplazamientos (Offsets) según punto de anclaje.
+30. Expansión de Hoja: Normalización y presets de espacio (+25%, +50%, 2x, 1:1, 9:16).
 
 ### Suite 2: Persistencia Masiva SQLite Wasm sobre OPFS (5 tests)
-28. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
-29. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
-30. Transacción ACID completa de proyectos con capas y orden z.
-31. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
-32. Eliminación limpia en cascada sin fugas de almacenamiento.
+36. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
+37. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
+38. Transacción ACID completa de proyectos con capas y orden z.
+39. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
+40. Eliminación limpia en cascada sin fugas de almacenamiento.
 
 ```bash
-# Ejecutar todas las pruebas deterministas (37 tests)
+# Ejecutar todas las pruebas deterministas (40 tests)
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 ```
 

@@ -2,27 +2,15 @@
  * @file StudioScreen.tsx
  * @description Pantalla principal de dibujo para IbisPaint WebGPU Studio.
  * 
- * Mejoras arquitectónicas de alto rendimiento:
- * 1. Focal-Point Locked Pinch-to-Zoom: El lienzo se expande y contrae anclado con precisión
- *    matemática al punto medio de los dedos del usuario, eliminando el desplazamiento o deriva indeseada.
- * 2. Gestos Multitáctiles a 60–120 FPS: Escucha de eventos con `{ passive: false }` y manipulación
- *    directa del DOM vía `translate3d + scale` en `requestAnimationFrame`, sin re-renderizados de React
- *    durante el movimiento continuo.
- * 3. Modo Calco / Foto de Referencia Interactiva: Importación directa desde la galería del teléfono,
- *    posicionamiento automático en el medio de la hoja, manipulación táctil con 1 dedo para mover,
- *    2 dedos para escalar/rotar, tiradores de esquina, ajuste de opacidad y filtros Wasm de extracción de Lineart.
- * 4. Atajo gestual nativo: Toque rápido con 2 dedos para Deshacer (Undo) y con 3 dedos para Rehacer (Redo).
- * 5. Barra superior e inferior ergonómicas estilo estudio nativo móvil (44px+ de área táctil por control).
- * 6. Soporte completo para Lápiz Vectorial Kotlin/Wasm analítico (cero pixelación al zoom) y pinceles WebGPU.
+ * Modularizado:
+ * - Barra superior, menús Pro y alertas de crash extraídos a `studio/StudioTopBar.tsx`.
+ * - Barra inferior, deslizadores y dock de herramientas extraídos a `studio/StudioBottomBar.tsx`.
+ * - Overlays flotantes (expansión balde, previews de grosor/opacidad, modal iOS) a `studio/StudioCanvasOverlays.tsx`.
+ * - Motor de gestos multitáctiles directos a 60-120 FPS sin re-renders en rAF.
+ * - Soporte para Lápiz Vectorial analítico Kotlin/Wasm, Pinceles WebGPU y TracingAdjuster.
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { 
-  ArrowLeft, Undo2, Redo2, Sliders, 
-  Layers as LayersIcon, Paintbrush, Eraser, 
-  Download, Cpu, Hand, Move, Smartphone, X, Share, PenTool, Check,
-  Camera, Image as ImageIcon, Eye, EyeOff, Sparkles, MoreHorizontal, RotateCcw
-} from 'lucide-react';
 import { Layer, ToolType, Point, ProjectData, VectorStroke, TracingReference, TracingFilterMode } from '../engine/types';
 import { wasmEngine } from '../engine/wasmEngine';
 import { drawingEngine } from '../engine/webgpuEngine';
@@ -32,13 +20,13 @@ import {
   calculateWheelZoom, 
   calculateTouchRotation, 
   snapRotationDegrees, 
-  unrotatePoint,
   screenToCanvasCoords 
 } from '../engine/transformMath';
-import { usePWAInstall } from './usePWAInstall';
 import { TracingAdjuster } from './TracingAdjuster';
-import { StrokeGuideAssistant } from './StrokeGuideAssistant';
 import { CrashRecoveryRecord } from '../storage/sqliteTypes';
+import { StudioTopBar } from './studio/StudioTopBar';
+import { StudioBottomBar } from './studio/StudioBottomBar';
+import { StudioCanvasOverlays } from './studio/StudioCanvasOverlays';
 
 interface StudioScreenProps {
   project: ProjectData;
@@ -48,6 +36,10 @@ interface StudioScreenProps {
   brushOpacity: number;
   brushColor: string;
   stabilizerLevel: number;
+  bucketExpansion?: number;
+  onChangeBucketExpansion?: (expansion: number) => void;
+  bucketTolerance?: number;
+  onChangeBucketTolerance?: (tolerance: number) => void;
   layers: Layer[];
   activeLayerId: string;
   canUndo: boolean;
@@ -71,6 +63,7 @@ interface StudioScreenProps {
   onOpenColorPicker: () => void;
   onOpenToolPicker: () => void;
   onOpenExportModal: () => void;
+  onOpenCanvasResizeModal?: () => void;
   onGoToGallery: () => void;
   onGoToEngine: () => void;
   onGoToWelcome?: () => void;
@@ -92,6 +85,10 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   brushOpacity,
   brushColor,
   stabilizerLevel,
+  bucketExpansion = 2,
+  onChangeBucketExpansion,
+  bucketTolerance = 32,
+  onChangeBucketTolerance,
   layers,
   activeLayerId,
   canUndo,
@@ -115,6 +112,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onOpenColorPicker,
   onOpenToolPicker,
   onOpenExportModal,
+  onOpenCanvasResizeModal,
   onGoToGallery,
   onGoToEngine,
   onGoToWelcome,
@@ -157,7 +155,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     initialPan: { x: number; y: number };
     initialCenter: { x: number; y: number };
     initialRotation: number;
-    initialAngle: number;
+    t0Initial: { x: number; y: number };
+    t1Initial: { x: number; y: number };
     startTime: number;
     hasMoved: boolean;
     active: boolean;
@@ -166,16 +165,11 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   // Control de rAF para 120 FPS
   const rafIdRef = useRef<number | null>(null);
 
-  // Previsualizaciones y menús emergentes
+  // Previsualizaciones y modales
   const [showSizePreview, setShowSizePreview] = useState(false);
   const [showOpacityPreview, setShowOpacityPreview] = useState(false);
-  const [showStabilizerMenu, setShowStabilizerMenu] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showIOSModal, setShowIOSModal] = useState(false);
   const [showStrokeGuide, setShowStrokeGuide] = useState(false);
-
-  // Hook de instalación PWA
-  const { isInstallable, isInstalled, isIOS, install: installPWA } = usePWAInstall();
+  const [showIOSModal, setShowIOSModal] = useState(false);
 
   // Sincronizar referencias
   useEffect(() => {
@@ -190,7 +184,6 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     rotationRef.current = rotation;
   }, [rotation]);
 
-  // Vibración háptica sutil para feedback en teléfono móvil
   const triggerHaptic = (duration = 10) => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
@@ -331,9 +324,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   };
 
   /**
-   * Conversión de coordenadas de puntero a píxeles exactos del lienzo,
-   * desrotando el punto y compensando escala y centro para que el trazo se pinte
-   * exactamente debajo del dedo del usuario en cualquier ángulo de rotación.
+   * Conversión de coordenadas de puntero a píxeles exactos del lienzo
    */
   const getCanvasCoords = (clientX: number, clientY: number, pressureValue = 0.5): Point => {
     const canvas = displayCanvasRef.current;
@@ -343,7 +334,6 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
 
-    // Mapeo analítico canónico exacto: elimina la distorsión del AABB bounding box en lienzos rotados
     const coords = screenToCanvasCoords(
       clientX,
       clientY,
@@ -378,7 +368,6 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     if (!container) return;
 
     const onNativeTouchStart = (e: TouchEvent) => {
-      // Si el calco está en modo interactivo de ajuste, dejamos que el usuario interactúe con él
       if (tracingRef && tracingRef.isAdjusting) {
         return;
       }
@@ -401,7 +390,6 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
         const centerX = (t0.clientX + t1.clientX) / 2 - rect.left - rect.width / 2;
         const centerY = (t0.clientY + t1.clientY) / 2 - rect.top - rect.height / 2;
-        const initialAngle = Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX);
 
         touchPinchRef.current = {
           initialDist: Math.max(10, dist),
@@ -409,7 +397,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           initialPan: { ...panRef.current },
           initialCenter: { x: centerX, y: centerY },
           initialRotation: rotationRef.current,
-          initialAngle,
+          t0Initial: { x: t0.clientX, y: t0.clientY },
+          t1Initial: { x: t1.clientX, y: t1.clientY },
           startTime: performance.now(),
           hasMoved: false,
           active: true,
@@ -438,29 +427,18 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         const currentCenterX = (t0.clientX + t1.clientX) / 2 - rect.left - rect.width / 2;
         const currentCenterY = (t0.clientY + t1.clientY) / 2 - rect.top - rect.height / 2;
 
-        const deltaDist = Math.abs(currentDist - touchPinchRef.current.initialDist);
-        const deltaCenter = Math.hypot(
-          currentCenterX - touchPinchRef.current.initialCenter.x,
-          currentCenterY - touchPinchRef.current.initialCenter.y
+        const rawRot = calculateTouchRotation(
+          touchPinchRef.current.t0Initial,
+          touchPinchRef.current.t1Initial,
+          { x: t0.clientX, y: t0.clientY },
+          { x: t1.clientX, y: t1.clientY },
+          touchPinchRef.current.initialRotation
         );
 
-        // Rotación continua con 2 dedos con normalización angular
-        const currentAngle = Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX);
-        let deltaRad = currentAngle - touchPinchRef.current.initialAngle;
-        while (deltaRad > Math.PI) deltaRad -= 2 * Math.PI;
-        while (deltaRad < -Math.PI) deltaRad += 2 * Math.PI;
-        const deltaAngleDeg = deltaRad * (180 / Math.PI);
-        let nextRot = (touchPinchRef.current.initialRotation + deltaAngleDeg) % 360;
-        if (nextRot < 0) nextRot += 360;
-        rotationRef.current = Number(nextRot.toFixed(1));
-
-        if (deltaDist > 8 || deltaCenter > 8 || Math.abs(deltaAngleDeg) > 4) {
-          touchPinchRef.current.hasMoved = true;
-        }
-
-        const result = calculateFocalZoomPan(
+        const currentFocal = { x: currentCenterX, y: currentCenterY };
+        const { scale: targetScale, pan: targetPan } = calculateFocalZoomPan(
           touchPinchRef.current.initialCenter,
-          { x: currentCenterX, y: currentCenterY },
+          currentFocal,
           touchPinchRef.current.initialDist,
           currentDist,
           touchPinchRef.current.initialScale,
@@ -469,78 +447,91 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           8.0
         );
 
-        scaleRef.current = result.scale;
-        panRef.current = result.pan;
+        const targetRot = snapRotationDegrees(rawRot, 3.5);
 
-        if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = requestAnimationFrame(() => {
-          applyTransformDirect(result.scale, result.pan, rotationRef.current);
-          updateZoomHUD(result.scale, rotationRef.current, true);
-        });
+        scaleRef.current = targetScale;
+        panRef.current = targetPan;
+        rotationRef.current = targetRot;
+
+        if (
+          Math.abs(currentDist - touchPinchRef.current.initialDist) > 8 || 
+          Math.abs(rawRot - touchPinchRef.current.initialRotation) > 2.5
+        ) {
+          touchPinchRef.current.hasMoved = true;
+        }
+
+        if (rafIdRef.current === null) {
+          rafIdRef.current = requestAnimationFrame(() => {
+            applyTransformDirect(scaleRef.current, panRef.current, rotationRef.current);
+            updateZoomHUD(scaleRef.current, rotationRef.current, true);
+            rafIdRef.current = null;
+          });
+        }
       }
     };
 
     const onNativeTouchEnd = (e: TouchEvent) => {
-      if (touchPinchRef.current?.active) {
-        const pinchData = touchPinchRef.current;
-        const elapsed = performance.now() - pinchData.startTime;
+      if (touchPinchRef.current && touchPinchRef.current.active) {
+        const wasQuickDoubleTap = 
+          !touchPinchRef.current.hasMoved && 
+          performance.now() - touchPinchRef.current.startTime < 320;
 
-        if (!pinchData.hasMoved && elapsed < 280 && canUndo) {
+        if (wasQuickDoubleTap && canUndo) {
           triggerHaptic(15);
           onUndo();
         }
 
-        const snappedRot = snapRotationDegrees(rotationRef.current, 4.5);
-        rotationRef.current = snappedRot;
-        setRotation(snappedRot);
-        setScale(scaleRef.current);
-        setPan(panRef.current);
-        applyTransformDirect(scaleRef.current, panRef.current, snappedRot);
-        updateZoomHUD(scaleRef.current, snappedRot, true);
         touchPinchRef.current = null;
-
-        suppressDrawingRef.current = true;
-        setTimeout(() => {
-          suppressDrawingRef.current = false;
-        }, 120);
+        setScale(scaleRef.current);
+        setPan({ ...panRef.current });
+        setRotation(rotationRef.current);
 
         setTimeout(() => {
-          if (zoomHudRef.current) zoomHudRef.current.style.opacity = '0';
-        }, 1000);
+          if (zoomHudRef.current) {
+            zoomHudRef.current.style.opacity = '0';
+          }
+        }, 1200);
       }
 
-      if (e.touches.length === 0 && e.changedTouches.length === 3 && canRedo) {
-        triggerHaptic(15);
-        onRedo();
+      if (e.touches.length === 0) {
+        setTimeout(() => {
+          suppressDrawingRef.current = false;
+        }, 80);
       }
     };
 
     container.addEventListener('touchstart', onNativeTouchStart, { passive: false });
     container.addEventListener('touchmove', onNativeTouchMove, { passive: false });
-    container.addEventListener('touchend', onNativeTouchEnd, { passive: false });
-    container.addEventListener('touchcancel', onNativeTouchEnd, { passive: false });
+    container.addEventListener('touchend', onNativeTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', onNativeTouchEnd, { passive: true });
 
     return () => {
       container.removeEventListener('touchstart', onNativeTouchStart);
       container.removeEventListener('touchmove', onNativeTouchMove);
       container.removeEventListener('touchend', onNativeTouchEnd);
       container.removeEventListener('touchcancel', onNativeTouchEnd);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
     };
-  }, [canUndo, canRedo, onUndo, onRedo, tracingRef]);
+  }, [canUndo, onUndo, tracingRef]);
 
   /**
-   * Manejador PointerDown en el lienzo
+   * Manejador PointerDown
    */
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (suppressDrawingRef.current) return;
-    if (tracingRef && tracingRef.isAdjusting) return;
+    if (suppressDrawingRef.current || (tracingRef && tracingRef.isAdjusting)) {
+      return;
+    }
 
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // Ignorar si no está soportado
+    }
+
+    // Modo Mano / Paneo táctil
     if (activeTool === 'hand') {
-      try {
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      } catch {
-        // Ignorar
-      }
       isPanningRef.current = true;
       panStartRef.current = {
         x: e.clientX,
@@ -551,55 +542,54 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       return;
     }
 
-    if (!activeLayer || !activeLayer.visible || activeLayer.locked) return;
-
-    try {
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      // Ignorar
+    // Herramienta Cuentagotas
+    if (activeTool === 'eyedropper') {
+      const coords = getCanvasCoords(e.clientX, e.clientY);
+      const color = drawingEngine.pickColor(activeLayer.ctx, coords.x, coords.y);
+      if (color) {
+        onChangeBrushColor(color);
+        triggerHaptic(12);
+        const safeTarget = lastDrawingTool && lastDrawingTool !== 'eyedropper' ? lastDrawingTool : 'brush';
+        onSelectTool(safeTarget);
+      }
+      return;
     }
-    isDrawingRef.current = true;
 
-    const point = getCanvasCoords(e.clientX, e.clientY, e.pressure);
-    lastPointRef.current = point;
-
+    // Herramienta Bote de Pintura (Flood Fill con Expansión de Borde)
     if (activeTool === 'bucket') {
+      const coords = getCanvasCoords(e.clientX, e.clientY);
       onSaveUndoSnapshot();
-      drawingEngine.floodFill(activeLayer, point.x, point.y, brushColor, 32);
+      drawingEngine.floodFill(
+        activeLayer,
+        coords.x,
+        coords.y,
+        brushColor,
+        bucketTolerance,
+        bucketExpansion
+      );
       renderComposite();
       updateThumbnail();
-      isDrawingRef.current = false;
+      triggerHaptic(15);
+      if (onStrokeEnd) onStrokeEnd();
       return;
     }
 
-    if (activeTool === 'eyedropper') {
-      const displayCanvas = displayCanvasRef.current;
-      if (displayCanvas) {
-        const ctx = displayCanvas.getContext('2d');
-        if (ctx) {
-          const picked = drawingEngine.pickColor(ctx, point.x, point.y);
-          onChangeBrushColor(picked);
-          const returnTool = lastDrawingTool && lastDrawingTool !== 'hand' && lastDrawingTool !== 'eyedropper'
-            ? lastDrawingTool
-            : 'brush';
-          onSelectTool(returnTool);
-          triggerHaptic(10);
-        }
-      }
-      isDrawingRef.current = false;
-      return;
-    }
-
+    // Herramientas de trazo
     onSaveUndoSnapshot();
+    isDrawingRef.current = true;
+
+    const pressure = e.pressure > 0.01 ? e.pressure : 0.5;
+    const startPoint = getCanvasCoords(e.clientX, e.clientY, pressure);
+    lastPointRef.current = startPoint;
 
     if (activeTool === 'vector_pencil') {
       currentVectorStrokeRef.current = {
-        id: `vstroke_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        id: `vstroke_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         layerId: activeLayer.id,
         color: brushColor,
         baseSize: brushSize,
         opacity: brushOpacity,
-        points: [point],
+        points: [startPoint],
         segments: [],
         createdAt: Date.now(),
       };
@@ -607,8 +597,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
     drawingEngine.drawStrokeSegment(
       activeLayer,
-      point,
-      point,
+      startPoint,
+      startPoint,
       activeTool,
       brushColor,
       brushSize,
@@ -621,21 +611,26 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
    * Manejador PointerMove
    */
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isPanningRef.current && panStartRef.current) {
-      const dx = e.clientX - panStartRef.current.x;
-      const dy = e.clientY - panStartRef.current.y;
-      const nextPan = {
-        x: panStartRef.current.panX + dx,
-        y: panStartRef.current.panY + dy,
-      };
-      panRef.current = nextPan;
-      applyTransformDirect(scaleRef.current, nextPan);
+    if (suppressDrawingRef.current || (tracingRef && tracingRef.isAdjusting)) {
       return;
     }
 
-    if (!isDrawingRef.current || !lastPointRef.current || !activeLayer || activeTool === 'hand') return;
+    if (isPanningRef.current && panStartRef.current) {
+      const dx = e.clientX - panStartRef.current.x;
+      const dy = e.clientY - panStartRef.current.y;
+      const newPan = {
+        x: panStartRef.current.panX + dx,
+        y: panStartRef.current.panY + dy,
+      };
+      panRef.current = newPan;
+      applyTransformDirect(scaleRef.current, newPan, rotationRef.current);
+      return;
+    }
 
-    const rawPoint = getCanvasCoords(e.clientX, e.clientY, e.pressure);
+    if (!isDrawingRef.current || !lastPointRef.current) return;
+
+    const rawPressure = e.pressure > 0.01 ? e.pressure : 0.5;
+    const rawPoint = getCanvasCoords(e.clientX, e.clientY, rawPressure);
     const smoothPoint = wasmEngine.stabilizePoint(rawPoint, lastPointRef.current, stabilizerLevel);
 
     if (activeTool === 'vector_pencil' && currentVectorStrokeRef.current) {
@@ -748,385 +743,39 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     }, 1000);
   };
 
-  const handleInstallClick = async () => {
-    triggerHaptic(15);
-    if (isIOS) {
-      setShowIOSModal(true);
-    } else {
-      const ok = await installPWA();
-      if (!ok && !isInstallable) {
-        alert('Para instalar: Pulsa en los tres puntos del navegador (⋮) y selecciona "Instalar aplicación" o "Añadir a la pantalla de inicio".');
-      }
-    }
-  };
-
   return (
     <div className="relative w-screen h-screen h-[100dvh] max-h-[100dvh] bg-[#0d0e12] text-[#e5e7eb] flex flex-col overflow-hidden select-none touch-none pb-[env(safe-area-inset-bottom)]">
-      
-      {/* 1. BARRA SUPERIOR ELEGANTE Y ESPACIOSA ESTILO APP NATIVA MÓVIL */}
-      {/* 1. BARRA SUPERIOR MÓVIL NATIVA ESTILO IBISPAINT (CERO DESBORDES) */}
-      <header className="h-12 px-2 bg-[#111217]/95 border-b border-[#1e2029] flex items-center justify-between z-30 shrink-0 shadow-sm backdrop-blur-md gap-1 max-w-full overflow-x-auto no-scrollbar">
-        
-        {/* Lado Izquierdo: Volver, Deshacer y Rehacer */}
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => {
-              triggerHaptic(8);
-              onGoToGallery();
-            }}
-            aria-label="Ir a galería de proyectos"
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#191a22] hover:bg-[#232530] text-gray-300 hover:text-white border border-[#262835] flex items-center justify-center transition-all active:scale-90 shrink-0"
-            title="Galería"
-          >
-            <ArrowLeft size={16} />
-          </button>
+      {/* 1. BARRA SUPERIOR MODULAR NATIVA */}
+      <StudioTopBar
+        project={project}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        scale={scale}
+        rotation={rotation}
+        tracingRef={tracingRef}
+        stabilizerLevel={stabilizerLevel}
+        showStrokeGuide={showStrokeGuide}
+        crashRecovery={crashRecovery}
+        onGoToGallery={onGoToGallery}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        onToggleFitOr100={toggleFitOr100}
+        onTriggerImportPhoto={onTriggerImportPhoto}
+        onUpdateTracing={onUpdateTracing}
+        onToggleTracingVisibility={onToggleTracingVisibility}
+        onChangeStabilizer={onChangeStabilizer}
+        onToggleStrokeGuide={() => setShowStrokeGuide(!showStrokeGuide)}
+        onResetRotation={resetRotation}
+        onOpenCanvasResizeModal={onOpenCanvasResizeModal}
+        onGoToEngine={onGoToEngine}
+        onGoToWelcome={onGoToWelcome}
+        onOpenExportModal={onOpenExportModal}
+        onRestoreCrash={onRestoreCrash}
+        onDismissCrash={onDismissCrash}
+        triggerHaptic={triggerHaptic}
+      />
 
-          <button
-            onClick={() => {
-              triggerHaptic(8);
-              onUndo();
-            }}
-            disabled={!canUndo}
-            aria-label="Deshacer trazo"
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
-              canUndo 
-                ? 'bg-[#191a22] hover:bg-[#232530] text-amber-400 border-[#262835] active:scale-90' 
-                : 'bg-[#14151b] text-gray-600 border-transparent cursor-not-allowed opacity-30'
-            }`}
-            title="Deshacer (Toque con 2 dedos)"
-          >
-            <Undo2 size={16} />
-          </button>
-
-          <button
-            onClick={() => {
-              triggerHaptic(8);
-              onRedo();
-            }}
-            disabled={!canRedo}
-            aria-label="Rehacer trazo"
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
-              canRedo 
-                ? 'bg-[#191a22] hover:bg-[#232530] text-amber-400 border-[#262835] active:scale-90' 
-                : 'bg-[#14151b] text-gray-600 border-transparent cursor-not-allowed opacity-30'
-            }`}
-            title="Rehacer (Toque con 3 dedos)"
-          >
-            <Redo2 size={16} />
-          </button>
-        </div>
-
-        {/* Centro: Indicador interactivo de Zoom/Rotación y Botón de Calco */}
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={toggleFitOr100}
-            aria-label="Ajustar o centrar lienzo y enderezar rotación"
-            className="h-8 px-2 rounded-full bg-[#181922] hover:bg-[#222430] border border-[#272937] text-xs font-mono font-bold text-amber-400 active:scale-95 transition-all shadow-xs flex items-center gap-1 shrink-0"
-            title="Toca para ajustar o enderezar rotación a 0°"
-          >
-            <span>{Math.round(scale * 100)}%</span>
-            {Math.round(rotation) !== 0 && (
-              <span className="text-[10px] text-amber-300 font-semibold">• {Math.round(rotation)}°</span>
-            )}
-          </button>
-
-          {/* BOTÓN CALCO (Compacto / Nativo) */}
-          <button
-            onClick={() => {
-              triggerHaptic(10);
-              if (!tracingRef) {
-                onTriggerImportPhoto();
-              } else {
-                onUpdateTracing({ isAdjusting: !tracingRef.isAdjusting });
-              }
-            }}
-            aria-label="Calcar foto"
-            className={`h-8 px-2 rounded-xl border text-xs font-bold active:scale-95 transition-all flex items-center gap-1 shrink-0 ${
-              tracingRef
-                ? tracingRef.isAdjusting
-                  ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
-                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                : 'bg-[#191a22] hover:bg-[#232530] text-gray-300 border-[#262835]'
-            }`}
-            title={tracingRef ? 'Calco activo (Toca para ajustar)' : 'Calcar foto de galería'}
-          >
-            <Camera size={13} className={tracingRef?.isAdjusting ? 'text-black' : 'text-amber-400'} />
-            <span className="text-[11px]">Calco</span>
-            {tracingRef && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            )}
-          </button>
-
-          {/* CONMUTADOR DE VISIBILIDAD DE CALCO */}
-          {tracingRef && (
-            <button
-              onClick={() => {
-                triggerHaptic(10);
-                onToggleTracingVisibility();
-              }}
-              aria-label={tracingRef.visible ? 'Ocultar calco' : 'Ver calco'}
-              className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all active:scale-95 shrink-0 ${
-                tracingRef.visible
-                  ? 'bg-[#191a22] text-gray-300 border-[#262835]'
-                  : 'bg-amber-500 text-black border-amber-400 shadow-sm'
-              }`}
-              title={tracingRef.visible ? 'Ocultar foto de calco' : 'Mostrar foto de calco'}
-            >
-              {tracingRef.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-            </button>
-          )}
-        </div>
-
-        {/* Lado Derecho: Estabilizador, Menú Más Opciones y Botón Guardar SIEMPRE VISIBLE */}
-        <div className="flex items-center gap-1 shrink-0">
-          {/* Estabilizador S-Form en 1 sola línea */}
-          <button
-            onClick={() => {
-              triggerHaptic(8);
-              setShowStabilizerMenu(!showStabilizerMenu);
-              setShowMoreMenu(false);
-            }}
-            aria-label="Estabilizador S-Form"
-            className={`h-8 px-2 rounded-xl border text-xs font-semibold active:scale-95 transition-all flex items-center gap-1 shrink-0 ${
-              showStabilizerMenu
-                ? 'bg-amber-500 text-black border-amber-400 font-bold'
-                : 'bg-[#191a22] hover:bg-[#232530] text-amber-400 border-[#262835]'
-            }`}
-            title="Ajustar Estabilizador S-Form"
-          >
-            <Sliders size={12} />
-            <span className="font-mono font-bold text-[11px] whitespace-nowrap">S{stabilizerLevel}</span>
-          </button>
-
-          {/* Menú Más Opciones (Agrupa Asistente IA, Enderezar Lienzo y Diagnóstico) */}
-          <button
-            onClick={() => {
-              triggerHaptic(8);
-              setShowMoreMenu(!showMoreMenu);
-              setShowStabilizerMenu(false);
-            }}
-            aria-label="Más herramientas y opciones"
-            className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all active:scale-95 shrink-0 ${
-              showMoreMenu || showStrokeGuide
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                : 'bg-[#191a22] hover:bg-[#232530] text-gray-300 hover:text-white border-[#262835]'
-            }`}
-            title="Más opciones de estudio"
-          >
-            <MoreHorizontal size={15} />
-          </button>
-
-          {/* BOTÓN GUARDAR OBRA MAESTRA - SIEMPRE VISIBLE Y RESALTADO */}
-          <button
-            onClick={() => {
-              triggerHaptic(10);
-              onOpenExportModal();
-            }}
-            aria-label="Guardar obra maestra en tu galería"
-            className="h-8 px-2.5 sm:px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center gap-1.5 shadow-md shrink-0 active:scale-95 transition-all"
-            title="Guardar / Exportar Obra Maestra"
-          >
-            <Download size={14} className="stroke-[2.5]" />
-            <span className="tracking-wide">Guardar</span>
-          </button>
-        </div>
-      </header>
-
-      {/* BANNER DE RECUPERACIÓN TRAS SALIDA ABRUPTA O CRASH */}
-      {crashRecovery && (
-        <aside
-          aria-label="Aviso de dibujo recuperado de sesión anterior"
-          className="fixed top-14 left-3 right-3 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-md z-40 bg-[#191a24] border border-amber-500/60 rounded-2xl p-2.5 shadow-2xl flex items-center justify-between gap-2.5 animate-in fade-in slide-in-from-top-2 backdrop-blur-md"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-              <Sparkles size={16} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-amber-300 truncate">
-                ¡Dibujo recuperado de sesión anterior!
-              </p>
-              <p className="text-[10px] text-gray-400 truncate">
-                Resguardado en SQLite Wasm (OPFS) • {crashRecovery.layerCount} capa(s)
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => {
-                triggerHaptic(12);
-                onRestoreCrash?.();
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer"
-            >
-              Restaurar
-            </button>
-            <button
-              onClick={() => {
-                triggerHaptic(8);
-                onDismissCrash?.();
-              }}
-              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all cursor-pointer"
-              title="Descartar"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </aside>
-      )}
-
-      {/* POPUP FLOTANTE NATIVO: ESTABILIZADOR S-FORM (EN CONTENEDOR CON KEY PARA RECONCILIACIÓN SEGURA) */}
-      {showStabilizerMenu && (
-        <div key="stabilizer-menu-modal" className="fixed inset-0 z-50 pointer-events-auto">
-          <div 
-            onClick={() => setShowStabilizerMenu(false)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs animate-fade-in"
-          />
-          <div className="fixed top-13 right-16 z-50 bg-[#181922] border border-[#2e313f] rounded-2xl p-3 shadow-2xl w-52 flex flex-col gap-1.5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-1.5 border-b border-[#272935]">
-              <span className="text-[11px] font-bold text-gray-200">Estabilizador S-Form</span>
-              <button 
-                onClick={() => setShowStabilizerMenu(false)} 
-                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            {[
-              { level: 0, label: 'S-0: Directo' },
-              { level: 3, label: 'S-3: Natural (Boceto)' },
-              { level: 6, label: 'S-6: Suave (Ilustración)' },
-              { level: 10, label: 'S-10: Manga (Firme)' },
-            ].map((item) => (
-              <button
-                key={item.level}
-                onClick={() => {
-                  triggerHaptic(10);
-                  onChangeStabilizer(item.level);
-                  setShowStabilizerMenu(false);
-                }}
-                className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-                  stabilizerLevel === item.level
-                    ? 'bg-amber-500 text-black font-bold shadow-xs'
-                    : 'text-gray-200 hover:bg-[#232530] active:scale-95'
-                }`}
-              >
-                <span>{item.label}</span>
-                {stabilizerLevel === item.level && <Check size={14} className="stroke-[3]" />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* POPUP FLOTANTE NATIVO: MENÚ MÁS OPCIONES [ ... ] (EN CONTENEDOR CON KEY PARA RECONCILIACIÓN SEGURA) */}
-      {showMoreMenu && (
-        <div key="more-menu-modal" className="fixed inset-0 z-50 pointer-events-auto">
-          <div 
-            onClick={() => setShowMoreMenu(false)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs animate-fade-in"
-          />
-          <div className="fixed top-13 right-2 z-50 bg-[#161720] border border-[#2b2d3d] rounded-2xl p-2.5 shadow-2xl w-60 flex flex-col gap-1.5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between px-2 py-1 border-b border-[#242635] mb-0.5">
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Herramientas Pro</span>
-              <button 
-                onClick={() => setShowMoreMenu(false)} 
-                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            {/* Opción 1: Asistente de Grosor de Trazo por IA */}
-            <button
-              onClick={() => {
-                triggerHaptic(8);
-                setShowStrokeGuide(!showStrokeGuide);
-                setShowMoreMenu(false);
-              }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left active:scale-98 ${
-                showStrokeGuide
-                  ? 'bg-amber-500 text-black font-bold shadow-xs'
-                  : 'text-gray-200 hover:bg-[#20222f]'
-              }`}
-            >
-              <Sparkles size={16} className={showStrokeGuide ? 'text-black' : 'text-amber-400'} />
-              <div className="flex-1 min-w-0">
-                <span className="block leading-tight">Guía de Grosor IA</span>
-                <span className={`text-[9px] block ${showStrokeGuide ? 'text-black/80 font-medium' : 'text-gray-400'}`}>
-                  {showStrokeGuide ? 'Activo en barra inferior' : 'Calibración por visión'}
-                </span>
-              </div>
-            </button>
-
-            {/* Opción 2: Enderezar Lienzo a 0° */}
-            <button
-              onClick={() => {
-                resetRotation();
-                setShowMoreMenu(false);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-200 hover:bg-[#20222f] active:scale-98 transition-all text-left"
-            >
-              <RotateCcw size={16} className="text-amber-400" />
-              <div className="flex-1 min-w-0">
-                <span className="block leading-tight">Enderezar Lienzo</span>
-                <span className="text-[9px] text-gray-400 block">
-                  Restablecer rotación a 0°
-                </span>
-              </div>
-            </button>
-
-            {/* Opción 3: Diagnóstico del Motor */}
-            <button
-              onClick={() => {
-                triggerHaptic(8);
-                setShowMoreMenu(false);
-                onGoToEngine();
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-200 hover:bg-[#20222f] active:scale-98 transition-all text-left"
-            >
-              <Cpu size={16} className="text-amber-400" />
-              <div className="flex-1 min-w-0">
-                <span className="block leading-tight">Diagnóstico Motor</span>
-                <span className="text-[9px] text-gray-400 block">
-                  WebGPU, Kotlin/Wasm & Rust
-                </span>
-              </div>
-            </button>
-
-            {/* Opción 4: Acerca de / Instalar PWA */}
-            <button
-              onClick={() => {
-                triggerHaptic(8);
-                setShowMoreMenu(false);
-                if (onGoToWelcome) onGoToWelcome();
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-200 hover:bg-[#20222f] active:scale-98 transition-all text-left"
-            >
-              <Smartphone size={16} className="text-amber-400" />
-              <div className="flex-1 min-w-0">
-                <span className="block leading-tight">Presentación & PWA</span>
-                <span className="text-[9px] text-gray-400 block">
-                  Instalar en pantalla de inicio
-                </span>
-              </div>
-            </button>
-
-            {/* Estado de Persistencia SQLite Wasm / OPFS */}
-            <div className="mt-1 pt-2 border-t border-[#252737] px-2 flex items-center justify-between text-[10px]">
-              <div className="flex items-center gap-1.5 text-gray-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span className="font-semibold">SQLite Wasm (OPFS)</span>
-              </div>
-              <span className="text-emerald-400 font-mono text-[9px] bg-emerald-950/60 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
-                Auto-Guardado
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. ÁREA DE MESA DE DIBUJO LIMPIA, EXPANSIVA Y SIN OBSTRUCCIONES */}
+      {/* 2. ÁREA DE MESA DE DIBUJO LIMPIA Y EXPANSIVA */}
       <main 
         ref={containerRef}
         onWheel={handleWheel}
@@ -1135,32 +784,13 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           cursor: activeTool === 'hand' ? 'grab' : 'crosshair'
         }}
       >
-        {/* HUD flotante de porcentaje de zoom y rotación ultra fluido (controlado 100% por ref, sin hijos React para prevenir removeChild error) */}
+        {/* HUD flotante de zoom y rotación directo en DOM por ref */}
         <div 
           ref={zoomHudRef}
           className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-[#161722e0] backdrop-blur-md border border-amber-500/60 text-amber-300 px-3.5 py-1 rounded-full text-xs font-mono font-bold shadow-2xl pointer-events-none opacity-0 transition-opacity duration-200"
         />
 
-        {/* Conmutador flotante rápido para alternar calco y ver las líneas limpias al instante */}
-        {tracingRef && !tracingRef.isAdjusting && (
-          <button
-            onClick={() => {
-              triggerHaptic(10);
-              onToggleTracingVisibility();
-            }}
-            className={`absolute top-4 right-4 z-40 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-2xl backdrop-blur-md border transition-all active:scale-95 ${
-              tracingRef.visible
-                ? 'bg-[#14151df0] border-gray-700/80 text-gray-300 hover:text-white'
-                : 'bg-amber-500 text-black border-amber-300 shadow-amber-500/40 ring-2 ring-amber-400/40'
-            }`}
-            title="Toca para ocultar o mostrar la foto de calco y comparar tu dibujo"
-          >
-            {tracingRef.visible ? <Eye size={14} className="text-amber-400" /> : <EyeOff size={14} />}
-            <span>{tracingRef.visible ? 'Calco Visible' : 'Calco Oculto'}</span>
-          </button>
-        )}
-
-        {/* Contenedor del Lienzo con aceleración por hardware pura y rotación */}
+        {/* Contenedor del Lienzo con aceleración por hardware pura */}
         <div 
           ref={canvasWrapperRef}
           className="relative shrink-0 select-none"
@@ -1185,7 +815,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
             className="w-full h-full block touch-none"
           />
 
-          {/* Superposición interactiva para mover, escalar y calibrar la foto de calco */}
+          {/* Calibrador y transformador de foto de calco */}
           {tracingRef && tracingRef.isAdjusting && (
             <TracingAdjuster
               canvasWidth={project.width}
@@ -1201,236 +831,46 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           )}
         </div>
 
-        {/* Burbuja flotante de previsualización de grosor al ajustar slider */}
-        {showSizePreview && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-40 bg-[#161722f0] border border-amber-500/80 rounded-2xl p-3.5 flex flex-col items-center gap-2 shadow-2xl backdrop-blur-md pointer-events-none animate-fade-in">
-            <div 
-              className="rounded-full bg-amber-500 border-2 border-white shadow-md"
-              style={{ width: `${Math.min(80, Math.max(4, brushSize))}px`, height: `${Math.min(80, Math.max(4, brushSize))}px` }}
-            />
-            <span className="text-xs font-bold font-mono text-white">{brushSize} px</span>
-          </div>
-        )}
-
-        {/* Burbuja flotante de previsualización de opacidad al ajustar slider */}
-        {showOpacityPreview && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-40 bg-[#161722f0] border border-amber-500/80 rounded-2xl px-5 py-2.5 text-xs font-bold font-mono text-white shadow-2xl backdrop-blur-md pointer-events-none animate-fade-in">
-            Opacidad: {Math.round(brushOpacity * 100)}%
-          </div>
-        )}
+        {/* Overlays flotantes (Píldora del balde, previews de sliders, guía iOS) */}
+        <StudioCanvasOverlays
+          activeTool={activeTool}
+          tracingRef={tracingRef}
+          bucketExpansion={bucketExpansion}
+          onChangeBucketExpansion={onChangeBucketExpansion}
+          showSizePreview={showSizePreview}
+          brushSize={brushSize}
+          showOpacityPreview={showOpacityPreview}
+          brushOpacity={brushOpacity}
+          showIOSModal={showIOSModal}
+          setShowIOSModal={setShowIOSModal}
+          onToggleTracingVisibility={onToggleTracingVisibility}
+          triggerHaptic={triggerHaptic}
+        />
       </main>
 
-      {/* 3. BARRA INFERIOR ERGONÓMICA ESTILO IBISPAINT CON CONTROLES TÁCTILES CÓMODOS */}
-      <footer className="bg-[#13141a] border-t border-[#22242e] flex flex-col z-30 shrink-0 shadow-2xl pb-[max(0.35rem,env(safe-area-inset-bottom))]">
-        
-        {/* Asistente Inteligente de Grosor de Trazo (Opcional y Calibrado por Imagen) */}
-        {showStrokeGuide && (
-          <StrokeGuideAssistant
-            currentBrushSize={brushSize}
-            hasTracingPhoto={!!tracingRef}
-            imageAnalysis={tracingRef?.strokeAnalysis}
-            onSelectSize={(size) => {
-              triggerHaptic(8);
-              onChangeBrushSize(size);
-            }}
-            onClose={() => setShowStrokeGuide(false)}
-          />
-        )}
-
-        {/* Nivel Superior: Deslizadores Ergonómicos de Grosor y Opacidad (Filas dedicadas estilo IbisPaint) */}
-        <div className="px-3 py-2 border-b border-[#1c1d28] bg-[#0d0e14]/95 flex flex-col gap-2 max-w-lg mx-auto w-full">
-          {/* Fila 1: Grosor de Trazo con Recorrido Amplio para el Pulgar */}
-          <div className="flex items-center gap-2.5 w-full">
-            <div className="flex items-center gap-1.5 w-16 shrink-0">
-              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 shadow-xs" />
-              <span className="text-[10px] text-gray-300 font-bold tracking-wider uppercase">Grosor</span>
-            </div>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              value={brushSize}
-              onMouseDown={() => setShowSizePreview(true)}
-              onMouseUp={() => setShowSizePreview(false)}
-              onTouchStart={() => setShowSizePreview(true)}
-              onTouchEnd={() => setShowSizePreview(false)}
-              onChange={(e) => onChangeBrushSize(Number(e.target.value))}
-              className="flex-1 accent-amber-500 h-2 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
-            />
-            <span className="text-[11px] font-mono font-bold text-amber-300 bg-[#161722] border border-[#262836] px-2 py-0.5 rounded-md min-w-[44px] text-center shrink-0">
-              {brushSize}px
-            </span>
-          </div>
-
-          {/* Fila 2: Opacidad de Trazo con Recorrido Amplio para el Pulgar */}
-          <div className="flex items-center gap-2.5 w-full">
-            <div className="flex items-center gap-1.5 w-16 shrink-0">
-              <span className="w-2 h-2 rounded-full border border-amber-400/80 shrink-0" />
-              <span className="text-[10px] text-gray-300 font-bold tracking-wider uppercase">Opacidad</span>
-            </div>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              value={Math.round(brushOpacity * 100)}
-              onMouseDown={() => setShowOpacityPreview(true)}
-              onMouseUp={() => setShowOpacityPreview(false)}
-              onTouchStart={() => setShowOpacityPreview(true)}
-              onTouchEnd={() => setShowOpacityPreview(false)}
-              onChange={(e) => onChangeBrushOpacity(Number(e.target.value) / 100)}
-              className="flex-1 accent-amber-500 h-2 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
-            />
-            <span className="text-[11px] font-mono font-bold text-amber-300 bg-[#161722] border border-[#262836] px-2 py-0.5 rounded-md min-w-[44px] text-center shrink-0">
-              {Math.round(brushOpacity * 100)}%
-            </span>
-          </div>
-        </div>
-
-        {/* Nivel Inferior: Dock de Herramientas Estilo Nativo IbisPaint (Grid de 5 columnas balanceadas, cero truncamiento) */}
-        <div className="h-14 px-2 grid grid-cols-5 gap-1.5 max-w-lg mx-auto w-full items-center">
-          
-          {/* 1. Herramienta Principal de Trazo / Borrador (Alternador rápido en 1 toque) */}
-          <button
-            onClick={() => {
-              triggerHaptic(10);
-              onToggleBrushEraser();
-            }}
-            aria-label="Alternar entre pincel y borrador"
-            className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
-              activeTool === 'eraser' 
-                ? 'bg-red-950/40 border-red-500/60 text-red-300' 
-                : activeTool === 'vector_pencil'
-                ? 'bg-amber-500/15 border-amber-400/70 text-amber-300'
-                : 'bg-amber-500/10 border-amber-500/40 text-amber-400'
-            }`}
-            title="Alternar Trazo / Goma"
-          >
-            {activeTool === 'eraser' ? (
-              <Eraser size={18} />
-            ) : activeTool === 'vector_pencil' ? (
-              <PenTool size={18} className="text-amber-300" />
-            ) : (
-              <Paintbrush size={18} />
-            )}
-            <span className="text-[9px] font-bold uppercase tracking-wider">
-              {activeTool === 'eraser' ? 'Goma' : activeTool === 'vector_pencil' ? 'Vector' : 'Pincel'}
-            </span>
-          </button>
-
-          {/* 2. Catálogo de Herramientas */}
-          <button
-            onClick={() => {
-              triggerHaptic(10);
-              onOpenToolPicker();
-            }}
-            aria-label="Abrir panel de herramientas"
-            className="h-11 rounded-xl bg-[#171821] hover:bg-[#20222d] text-gray-300 border border-[#242634] transition-all flex flex-col items-center justify-center gap-0.5 active:scale-95"
-            title="Herramientas y Pinceles"
-          >
-            <Sliders size={18} className="text-gray-300" />
-            <span className="text-[9px] font-bold text-gray-400 tracking-wider">Pinceles</span>
-          </button>
-
-          {/* 3. Alternador de Navegación Libre (Mover con 1 dedo) */}
-          <button
-            onClick={() => {
-              triggerHaptic(10);
-              if (onToggleHandMode) {
-                onToggleHandMode();
-              } else if (activeTool === 'hand') {
-                const safeTarget = lastDrawingTool && lastDrawingTool !== 'hand' ? lastDrawingTool : 'brush';
-                onSelectTool(safeTarget);
-              } else {
-                onSelectTool('hand');
-              }
-            }}
-            aria-label="Alternar modo mover lienzo"
-            className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
-              activeTool === 'hand'
-                ? 'bg-amber-500/25 border-amber-400 text-amber-300 shadow-sm'
-                : 'bg-[#171821] border-[#242634] text-gray-300 hover:text-white'
-            }`}
-            title="Mover con 1 dedo"
-          >
-            {activeTool === 'hand' ? <Hand size={18} /> : <Move size={18} />}
-            <span className="text-[9px] font-bold tracking-wider">
-              {activeTool === 'hand' ? 'Moviendo' : 'Mover'}
-            </span>
-          </button>
-
-          {/* 4. Selector de Color Actual */}
-          <button
-            onClick={() => {
-              triggerHaptic(10);
-              onOpenColorPicker();
-            }}
-            aria-label="Abrir selector de color"
-            className="h-11 rounded-xl bg-[#171821] hover:bg-[#20222d] border border-[#242634] transition-all flex flex-col items-center justify-center gap-0.5 active:scale-95"
-            title="Color Actual"
-          >
-            <div 
-              className="w-4 h-4 rounded-full border border-white shadow-sm shrink-0"
-              style={{ backgroundColor: brushColor }}
-            />
-            <span className="text-[9px] font-bold text-gray-400 tracking-wider font-mono truncate max-w-full px-1">
-              {brushColor.toUpperCase()}
-            </span>
-          </button>
-
-          {/* 5. Gestor de Capas */}
-          <button
-            onClick={() => {
-              triggerHaptic(10);
-              onOpenLayersModal();
-            }}
-            aria-label="Abrir gestor de capas"
-            className="h-11 rounded-xl bg-[#171821] border border-[#242634] text-gray-200 hover:text-white relative transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5 shrink-0"
-            title="Capas del Lienzo"
-          >
-            <div className="relative">
-              <LayersIcon size={18} className="text-amber-400" />
-              <span className="absolute -top-1 -right-2 text-[8px] font-bold font-mono bg-amber-500 text-black px-1 rounded-full">
-                {layers.length}
-              </span>
-            </div>
-            <span className="text-[9px] font-bold text-gray-300">
-              {layers.length === 1 ? '1 Capa' : `${layers.length} Capas`}
-            </span>
-          </button>
-        </div>
-      </footer>
-
-      {/* Modal de Guía de Instalación para iOS Safari */}
-      {showIOSModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="bg-[#181922] border border-[#2e313f] rounded-3xl p-5 max-w-sm w-full text-white shadow-2xl flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-[#272935] pb-2">
-              <div className="flex items-center gap-2 text-amber-400">
-                <Smartphone size={20} />
-                <h3 className="font-bold text-base">Instalar en iPhone / iPad</h3>
-              </div>
-              <button
-                onClick={() => setShowIOSModal(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="text-xs space-y-2 text-gray-300">
-              <p>1. Pulsa el botón <strong>Compartir</strong> (icono <Share size={13} className="inline text-amber-400" />) en la barra de Safari.</p>
-              <p>2. Desplázate hacia abajo y selecciona <strong>"Añadir a la pantalla de inicio"</strong>.</p>
-              <p>3. Pulsa <strong>"Añadir"</strong> en la esquina superior derecha.</p>
-              <p className="text-amber-400 pt-1 font-medium">¡Listo! La app se ejecutará a pantalla completa como una app nativa.</p>
-            </div>
-            <button
-              onClick={() => setShowIOSModal(false)}
-              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs active:scale-95 transition-transform"
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
+      {/* 3. BARRA INFERIOR MODULAR ERGONÓMICA */}
+      <StudioBottomBar
+        activeTool={activeTool}
+        lastDrawingTool={lastDrawingTool}
+        brushSize={brushSize}
+        brushOpacity={brushOpacity}
+        brushColor={brushColor}
+        layers={layers}
+        tracingRef={tracingRef}
+        showStrokeGuide={showStrokeGuide}
+        onToggleBrushEraser={onToggleBrushEraser}
+        onOpenToolPicker={onOpenToolPicker}
+        onToggleHandMode={onToggleHandMode}
+        onSelectTool={onSelectTool}
+        onOpenColorPicker={onOpenColorPicker}
+        onOpenLayersModal={onOpenLayersModal}
+        onChangeBrushSize={onChangeBrushSize}
+        onChangeBrushOpacity={onChangeBrushOpacity}
+        onCloseStrokeGuide={() => setShowStrokeGuide(false)}
+        setShowSizePreview={setShowSizePreview}
+        setShowOpacityPreview={setShowOpacityPreview}
+        triggerHaptic={triggerHaptic}
+      />
     </div>
   );
 };

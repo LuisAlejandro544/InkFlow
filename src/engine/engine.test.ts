@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wasmEngine } from './wasmEngine';
-import { drawingEngine } from './webgpuEngine';
+import { drawingEngine, dilateBinaryMask } from './webgpuEngine';
 import { kotlinVectorEngine } from './kotlinWasmBridge';
 import { ToolNavigationStateManager } from './toolNavigationState';
 import { 
@@ -18,6 +18,11 @@ import {
   screenToCanvasCoords,
   canvasToScreenCoords
 } from './transformMath';
+import {
+  calculateResizeOffsets,
+  clampCanvasDimension,
+  CANVAS_EXPANSION_PRESETS
+} from './canvasResizeMath';
 import {
   detectIsStandalone,
   detectIsDevOrPreview,
@@ -714,6 +719,92 @@ test('Caché VRAM en GPU (GPUBitmapCache) con gestión de memoria y LRU', () => 
   assert.equal(closedB, true, 'Debe invocar close() en todos los bitmaps al limpiar la caché');
   assert.equal(cache.getStats().cachedBitmapsCount, 0);
 });
+
+test('Bote de Pintura: Dilatación y Expansión de Borde (1 a 3 px) para Eliminar Halos Blancos', () => {
+  const width = 10;
+  const height = 10;
+  const mask = new Uint8Array(width * height);
+  
+  // Marcar un solo píxel en el centro (x=5, y=5)
+  mask[5 * width + 5] = 1;
+
+  // 1. Expansión 0 px (Exacto): solo 1 píxel activo
+  const noExpand = dilateBinaryMask(mask, width, height, 0);
+  assert.equal(noExpand[5 * width + 5], 1);
+  assert.equal(noExpand[5 * width + 4], 0);
+
+  // 2. Expansión 1 px (Fino): debe expandir a los vecinos inmediatos (3x3 = 9 píxeles)
+  const expand1 = dilateBinaryMask(mask, width, height, 1);
+  assert.equal(expand1[5 * width + 5], 1);
+  assert.equal(expand1[5 * width + 4], 1, 'Píxel izquierdo debe estar marcado');
+  assert.equal(expand1[5 * width + 6], 1, 'Píxel derecho debe estar marcado');
+  assert.equal(expand1[4 * width + 5], 1, 'Píxel superior debe estar marcado');
+  assert.equal(expand1[6 * width + 5], 1, 'Píxel inferior debe estar marcado');
+  assert.equal(expand1[4 * width + 4], 1, 'Diagonal sup-izq debe estar marcada');
+  assert.equal(expand1[3 * width + 3], 0, 'Píxel a 2px de distancia NO debe estar marcado a radio 1');
+
+  // 3. Expansión 2 px (Recomendado): debe alcanzar píxeles a 2 de distancia (5x5)
+  const expand2 = dilateBinaryMask(mask, width, height, 2);
+  assert.equal(expand2[3 * width + 3], 1, 'Píxel a distancia 2 debe estar marcado a radio 2');
+  assert.equal(expand2[2 * width + 2], 0, 'Píxel a distancia 3 NO debe estar marcado a radio 2');
+
+  // 4. Expansión 3 px (Máximo)
+  const expand3 = dilateBinaryMask(mask, width, height, 3);
+  assert.equal(expand3[2 * width + 2], 1, 'Píxel a distancia 3 debe estar marcado a radio 3');
+});
+
+test('Expansión de Hoja: Cálculo de Desplazamientos (Offsets) según Punto de Anclaje', () => {
+  const oldW = 800;
+  const oldH = 1200;
+  const newW = 1200;
+  const newH = 1600;
+
+  // Anclaje Centro: debe centrar el dibujo viejo (añade 200px a cada lado)
+  const center = calculateResizeOffsets(oldW, oldH, newW, newH, 'center');
+  assert.equal(center.offsetX, 200);
+  assert.equal(center.offsetY, 200);
+
+  // Anclaje Top-Left: nuevo espacio a la derecha y abajo (offset 0, 0)
+  const topLeft = calculateResizeOffsets(oldW, oldH, newW, newH, 'top-left');
+  assert.equal(topLeft.offsetX, 0);
+  assert.equal(topLeft.offsetY, 0);
+
+  // Anclaje Bottom-Right: nuevo espacio arriba y a la izquierda
+  const bottomRight = calculateResizeOffsets(oldW, oldH, newW, newH, 'bottom-right');
+  assert.equal(bottomRight.offsetX, 400);
+  assert.equal(bottomRight.offsetY, 400);
+
+  // Anclaje Top: centrado horizontal, fijado arriba
+  const top = calculateResizeOffsets(oldW, oldH, newW, newH, 'top');
+  assert.equal(top.offsetX, 200);
+  assert.equal(top.offsetY, 0);
+
+  // Anclaje Bottom: centrado horizontal, fijado abajo
+  const bottom = calculateResizeOffsets(oldW, oldH, newW, newH, 'bottom');
+  assert.equal(bottom.offsetX, 200);
+  assert.equal(bottom.offsetY, 400);
+});
+
+test('Expansión de Hoja: Normalización y Presets de Espacio (+25%, +50%, 2x, 1:1, 9:16)', () => {
+  // Clamping seguro para GPUs móviles
+  assert.equal(clampCanvasDimension(50), 100, 'Debe cumplir mínimo 100px');
+  assert.equal(clampCanvasDimension(5000), 4096, 'Debe limitar a máximo 4096px');
+  assert.equal(clampCanvasDimension(800.7), 801, 'Debe redondear enteros');
+
+  // Presets
+  const p25 = CANVAS_EXPANSION_PRESETS.find(p => p.id === 'plus_25')!;
+  assert.deepEqual(p25.calculate(800, 1200), { width: 1000, height: 1500 });
+
+  const p50 = CANVAS_EXPANSION_PRESETS.find(p => p.id === 'plus_50')!;
+  assert.deepEqual(p50.calculate(800, 1200), { width: 1200, height: 1800 });
+
+  const pDouble = CANVAS_EXPANSION_PRESETS.find(p => p.id === 'double')!;
+  assert.deepEqual(pDouble.calculate(800, 1200), { width: 1600, height: 2400 });
+
+  const pSquare = CANVAS_EXPANSION_PRESETS.find(p => p.id === 'square_1_1')!;
+  assert.deepEqual(pSquare.calculate(800, 1200), { width: 1200, height: 1200 });
+});
+
 
 
 

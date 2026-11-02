@@ -167,6 +167,42 @@ export class KotlinWasmVectorBridge {
   }
 
   /**
+   * Obtiene todos los trazos vectoriales de todas las capas
+   */
+  public getAllStrokes(): VectorStroke[] {
+    const all: VectorStroke[] = [];
+    for (const list of this.strokesMap.values()) {
+      all.push(...list);
+    }
+    return all;
+  }
+
+  /**
+   * Desplaza todos los trazos vectoriales según el offset de expansión de la hoja
+   */
+  public offsetAllStrokes(offsetX: number, offsetY: number) {
+    if (offsetX === 0 && offsetY === 0) return;
+    for (const list of this.strokesMap.values()) {
+      for (const stroke of list) {
+        for (const p of stroke.points) {
+          p.x += offsetX;
+          p.y += offsetY;
+        }
+        for (const seg of stroke.segments) {
+          seg.p0.x += offsetX;
+          seg.p0.y += offsetY;
+          seg.cp1.x += offsetX;
+          seg.cp1.y += offsetY;
+          seg.cp2.x += offsetX;
+          seg.cp2.y += offsetY;
+          seg.p1.x += offsetX;
+          seg.p1.y += offsetY;
+        }
+      }
+    }
+  }
+
+  /**
    * Renderiza los trazos vectoriales sobre un contexto 2D a cualquier escala arbitraria.
    * Al ser vectorial, se re-calcula con antialiasing de precisión submétrica sin pixelarse jamás.
    */

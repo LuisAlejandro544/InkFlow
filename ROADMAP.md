@@ -119,6 +119,21 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
 
 ---
 
+## 🪣 Fase 4.7: Bote de Pintura Inteligente & Expansión de Hoja (Completada ✅)
+
+- [x] **Expansión de Borde en Bote de Pintura (1 a 3 px):**
+  - Algoritmo Scanline Flood Fill acelerado con dilatación morfológica isotrópica (`dilateBinaryMask`) en radio 1px, 2px y 3px.
+  - Elimina los halos y rebordes blancos entre el lineart y el color de relleno.
+  - Píldora de control rápido flotante sobre el lienzo para alternar expansión en 1 toque y ajustes avanzados en `ToolPickerModal`.
+- [x] **Expansión de Hoja de Dibujo (Canvas Resize & Expand):**
+  - Módulo matemático `src/engine/canvasResizeMath.ts` con cálculo de offsets para matriz visual de anclaje 3×3 (`center`, `top-left`, etc.).
+  - Diálogo modal nativo móvil `src/components/CanvasResizeModal.tsx` con presets rápidos (+25%, +50%, 2x Doble Lienzo, 1:1, 9:16) y botones táctiles (+100px, +300px).
+  - Migración atómica sin pérdidas de capas, curvas vectoriales Kotlin/Wasm (`offsetAllStrokes`) y foto de calco activa.
+- [x] **40 Pruebas Unitarias Deterministas:**
+  - 35 tests de motor gráfico, transformaciones, Wasm y expansión + 5 tests de persistencia relacional SQLite Wasm sobre OPFS.
+
+---
+
 ## 🎨 Fase 5: Pipeline WebGPU Avanzado & Herramientas de Ilustración
 
 - [ ] Soporte para mapas de bits como puntas de pincel personalizadas (*Brush Dabs*).

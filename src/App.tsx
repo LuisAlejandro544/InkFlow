@@ -1,21 +1,17 @@
 /**
  * @file App.tsx
  * @description Componente raíz de IbisPaint WebGPU Studio.
- * Conecta el estado global, el ciclo de vida de capas, el sistema de historial (Deshacer/Rehacer),
- * el subsistema de fotos de referencia para calco (Tracing Engine) con filtros Wasm,
- * y la navegación fluida entre la pantalla de Dibujo (Studio), Galería de Obras y Diagnóstico del Motor.
+ * 
+ * Modularizado:
+ * - Gestión de capas extraída a `useLayerManager.ts`.
+ * - Historial y pila de Deshacer/Rehacer extraídos a `useDrawingHistory.ts`.
+ * - Subsistema de fotos de referencia y filtros Wasm extraído a `useTracingManager.ts`.
+ * - Conecta persistencia SQLite Wasm sobre OPFS, centinela de crash y navegación por pantallas.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Layer, ToolType, BlendMode, ProjectData, TracingReference, TracingFilterMode } from './engine/types';
+import { ToolType, ProjectData, Layer } from './engine/types';
 import { kotlinVectorEngine } from './engine/kotlinWasmBridge';
-import { 
-  calculateInitialTracingFit, 
-  extractLineartFromPixels, 
-  applyContrastFilter, 
-  extractDominantColorsFromImage 
-} from './engine/tracingEngine';
-import { analyzeImageStrokeThickness } from './engine/strokeAssistant';
 import { DEFAULT_PROJECT } from './store/drawingStore';
 import { StudioScreen } from './components/StudioScreen';
 import { GalleryScreen } from './components/GalleryScreen';
@@ -24,47 +20,40 @@ import { LayersModal } from './components/LayersModal';
 import { ColorPickerModal } from './components/ColorPickerModal';
 import { ToolPickerModal } from './components/ToolPickerModal';
 import { ExportModal } from './components/ExportModal';
+import { CanvasResizeModal } from './components/CanvasResizeModal';
+import { CanvasAnchor, calculateResizeOffsets } from './engine/canvasResizeMath';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { detectIsStandalone, detectIsDevOrPreview, shouldShowWelcomeScreen } from './engine/environmentDetector';
 import { sqliteStorageService } from './storage/sqliteStorageService';
 import { CrashRecoveryRecord, StoredProjectPayload } from './storage/sqliteTypes';
 import { gpuBitmapCache } from './engine/bitmapCache';
-
-interface UndoSnapshot {
-  layerId: string;
-  imageData: ImageData;
-}
+import { useLayerManager } from './hooks/useLayerManager';
+import { useDrawingHistory } from './hooks/useDrawingHistory';
+import { useTracingManager } from './hooks/useTracingManager';
 
 export default function App() {
   // Pantalla activa: 'welcome' | 'studio' | 'gallery' | 'engine'
   const [currentScreen, setCurrentScreen] = useState<'welcome' | 'studio' | 'gallery' | 'engine'>(() => {
     if (typeof window === 'undefined') return 'studio';
 
-    // 1. Detección de standalone PWA instalada
     const isStandalone = detectIsStandalone(
       window.matchMedia('(display-mode: standalone)').matches,
       (window.navigator as unknown as { standalone?: boolean })?.standalone,
       document.referrer || ''
     );
 
-    // 2. Detección de entorno de desarrollo / previsualización (localhost, *.run.app, aistudio)
     const isDevOrPreview = detectIsDevOrPreview(window.location.hostname, window.location.search);
 
-    // 3. Forzar bienvenida si se especifica explícitamente en la URL
     if (window.location.search.includes('screen=welcome')) {
       return 'welcome';
     }
 
-    // 4. Si el usuario ya entró en la sesión actual
     const hasDismissed = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('inkflow_welcome_dismissed') === 'true';
 
-    // 5. Excepción para el entorno de desarrollo de AI Studio / localhost:
-    // Permite al usuario/evaluador probar la app directamente sin obligar a instalar PWA
     if (isDevOrPreview && !window.location.search.includes('force_welcome=true')) {
       return 'studio';
     }
 
-    // 6. En el navegador web estándar (ej: producción inkflow-ezp.pages.dev sin instalar PWA)
     const showWelcome = shouldShowWelcomeScreen({
       isStandalone,
       isDevOrPreview,
@@ -85,60 +74,62 @@ export default function App() {
   const [brushOpacity, setBrushOpacity] = useState<number>(1.0);
   const [brushColor, setBrushColor] = useState<string>('#18181b');
   const [stabilizerLevel, setStabilizerLevel] = useState<number>(3);
+  
+  // Configuración del Bote de Pintura (Bucket Fill con Expansión de Borde)
+  const [bucketExpansion, setBucketExpansion] = useState<number>(2); // 0 a 3 px (default 2px)
+  const [bucketTolerance, setBucketTolerance] = useState<number>(32); // 0 a 100
 
-  // Capas del proyecto (Garantizado: 1 capa limpia al inicio)
-  const [layers, setLayers] = useState<Layer[]>([]);
-  const [activeLayerId, setActiveLayerId] = useState<string>('');
+  // Hooks modulares de arquitectura
+  const {
+    layers,
+    setLayers,
+    activeLayerId,
+    setActiveLayerId,
+    initProjectLayers,
+    addLayer,
+    duplicateLayer,
+    mergeDown,
+    deleteLayer,
+    clearLayer,
+    toggleVisibility,
+    changeOpacity,
+    changeBlendMode,
+    moveLayer,
+  } = useLayerManager();
 
-  // Foto de referencia para calco (Tracing Reference)
-  const [tracingRef, setTracingRef] = useState<TracingReference | null>(null);
+  const {
+    canUndo,
+    canRedo,
+    saveUndoSnapshot,
+    undo,
+    redo,
+    resetHistory,
+  } = useDrawingHistory(layers, activeLayerId, setLayers);
+
+  const {
+    tracingRef,
+    setTracingRef,
+    importTracingPhoto,
+    updateTracing,
+    applyTracingFilter,
+    centerTracing,
+    confirmTracing,
+    removeTracing,
+    toggleTracingVisibility,
+  } = useTracingManager();
 
   // Modales
   const [isLayersModalOpen, setIsLayersModalOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isToolPickerOpen, setIsToolPickerOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isCanvasResizeModalOpen, setIsCanvasResizeModalOpen] = useState(false);
 
   // Input oculto para galería de fotos
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Historial de Deshacer / Rehacer
-  const undoStackRef = useRef<UndoSnapshot[]>([]);
-  const redoStackRef = useRef<UndoSnapshot[]>([]);
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
-
   // Centinela de Crash y Recuperación de Emergencia
   const [crashRecovery, setCrashRecovery] = useState<CrashRecoveryRecord | null>(null);
-
-  /**
-   * Inicializa exactamente 1 capa limpia por defecto
-   */
-  const initProjectLayers = useCallback((proj: ProjectData) => {
-    const layerCanvas = document.createElement('canvas');
-    layerCanvas.width = proj.width;
-    layerCanvas.height = proj.height;
-    const ctx = layerCanvas.getContext('2d')!;
-
-    const initialLayer: Layer = {
-      id: `layer_${Date.now()}_1`,
-      name: 'Capa 1',
-      visible: true,
-      opacity: 1.0,
-      blendMode: 'source-over',
-      canvas: layerCanvas,
-      ctx: ctx,
-    };
-
-    setLayers([initialLayer]);
-    setActiveLayerId(initialLayer.id);
-
-    undoStackRef.current = [];
-    redoStackRef.current = [];
-    setCanUndo(false);
-    setCanRedo(false);
-    return [initialLayer];
-  }, []);
 
   /**
    * Carga un proyecto con todas sus capas reconstruidas fielmente desde SQLite Wasm (OPFS)
@@ -248,10 +239,7 @@ export default function App() {
 
         setLayers(reconstructedLayers);
         setActiveLayerId(reconstructedLayers[0]?.id || '');
-        undoStackRef.current = [];
-        redoStackRef.current = [];
-        setCanUndo(false);
-        setCanRedo(false);
+        resetHistory();
         return;
       }
     } catch (err) {
@@ -259,8 +247,9 @@ export default function App() {
     }
 
     const created = initProjectLayers(proj);
+    resetHistory();
     sqliteStorageService.scheduleAutoSave(proj, created, 800);
-  }, [initProjectLayers]);
+  }, [initProjectLayers, resetHistory, setActiveLayerId, setLayers]);
 
   // Arranque del motor SQLite Wasm & Comprobación de Crash previo
   useEffect(() => {
@@ -268,20 +257,17 @@ export default function App() {
 
     async function bootstrap() {
       try {
-        // Solicitar persistencia permanente al navegador para evitar purgas del SO móvil
         if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
           navigator.storage.persist().catch(() => {});
         }
 
         await sqliteStorageService.init();
 
-        // 1. Centinela: Verificar si ocurrió un crash o salida abrupta previa
         const recovery = await sqliteStorageService.checkCrashRecovery();
         if (recovery && !isCancelled) {
           setCrashRecovery(recovery);
         }
 
-        // 2. Cargar proyectos almacenados en SQLite
         const dbProjects = await sqliteStorageService.getAllProjects();
         if (!isCancelled && dbProjects && dbProjects.length > 0) {
           setProjects(dbProjects);
@@ -291,15 +277,16 @@ export default function App() {
           return;
         }
 
-        // 3. Si es la primera vez, inicializar proyecto por defecto
         if (!isCancelled) {
           const created = initProjectLayers(DEFAULT_PROJECT);
+          resetHistory();
           sqliteStorageService.saveProject(DEFAULT_PROJECT, created);
         }
       } catch (err) {
         console.warn('Fallo en inicialización de almacenamiento SQLite:', err);
         if (!isCancelled) {
           initProjectLayers(DEFAULT_PROJECT);
+          resetHistory();
         }
       }
     }
@@ -309,7 +296,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [initProjectLayers, loadProjectWithLayers]);
+  }, [initProjectLayers, loadProjectWithLayers, resetHistory]);
 
   /**
    * Restaura la obra de arte desde el punto de guardado de emergencia ante crash
@@ -375,13 +362,14 @@ export default function App() {
 
       setLayers(restoredLayers);
       setActiveLayerId(restoredLayers[0]?.id || '');
+      resetHistory();
       setCrashRecovery(null);
       await sqliteStorageService.clearCrashRecovery();
       setCurrentScreen('studio');
     } catch (err) {
       console.error('Error al restaurar sesión recuperada:', err);
     }
-  }, [crashRecovery]);
+  }, [crashRecovery, resetHistory, setActiveLayerId, setLayers]);
 
   const handleDismissCrash = useCallback(async () => {
     setCrashRecovery(null);
@@ -397,75 +385,9 @@ export default function App() {
     }
   }, [currentProject, layers]);
 
-  /**
-   * Guarda un estado en la pila de Deshacer antes de modificar la capa activa
-   */
-  const handleSaveUndoSnapshot = useCallback(() => {
-    const activeLayer = layers.find(l => l.id === activeLayerId);
-    if (!activeLayer) return;
-
-    try {
-      const snap = activeLayer.ctx.getImageData(0, 0, activeLayer.canvas.width, activeLayer.canvas.height);
-      undoStackRef.current.push({ layerId: activeLayer.id, imageData: snap });
-      if (undoStackRef.current.length > 25) {
-        undoStackRef.current.shift();
-      }
-      redoStackRef.current = [];
-      setCanUndo(true);
-      setCanRedo(false);
-    } catch {
-      // Ignorar si el canvas está manchado
-    }
-  }, [layers, activeLayerId]);
-
-  /**
-   * Deshacer acción
-   */
-  const handleUndo = useCallback(() => {
-    if (undoStackRef.current.length === 0) return;
-    const lastSnap = undoStackRef.current.pop()!;
-    const targetLayer = layers.find(l => l.id === lastSnap.layerId);
-
-    if (targetLayer) {
-      const currentSnap = targetLayer.ctx.getImageData(0, 0, targetLayer.canvas.width, targetLayer.canvas.height);
-      redoStackRef.current.push({ layerId: targetLayer.id, imageData: currentSnap });
-
-      targetLayer.ctx.putImageData(lastSnap.imageData, 0, 0);
-      kotlinVectorEngine.popStrokeForLayer(targetLayer.id);
-      setLayers([...layers]);
-    }
-
-    setCanUndo(undoStackRef.current.length > 0);
-    setCanRedo(true);
-  }, [layers]);
-
-  /**
-   * Rehacer acción
-   */
-  const handleRedo = useCallback(() => {
-    if (redoStackRef.current.length === 0) return;
-    const nextSnap = redoStackRef.current.pop()!;
-    const targetLayer = layers.find(l => l.id === nextSnap.layerId);
-
-    if (targetLayer) {
-      const currentSnap = targetLayer.ctx.getImageData(0, 0, targetLayer.canvas.width, targetLayer.canvas.height);
-      undoStackRef.current.push({ layerId: targetLayer.id, imageData: currentSnap });
-
-      targetLayer.ctx.putImageData(nextSnap.imageData, 0, 0);
-      setLayers([...layers]);
-    }
-
-    setCanUndo(true);
-    setCanRedo(redoStackRef.current.length > 0);
-  }, [layers]);
-
-  // Referencia para recordar exactamente la herramienta activa previa antes de activar el modo Mover (Mano)
+  // Herramienta previa antes de activar el modo Mano
   const previousToolBeforeHandRef = useRef<ToolType>('brush');
 
-  /**
-   * Alternar rápido entre pincel y borrador (como en IbisPaint)
-   * Garantiza que lastDrawingTool nunca almacene 'hand' ni 'eraser'.
-   */
   const handleToggleBrushEraser = () => {
     if (activeTool === 'eraser') {
       const target = lastDrawingTool && lastDrawingTool !== 'eraser' && lastDrawingTool !== 'hand'
@@ -473,7 +395,6 @@ export default function App() {
         : 'brush';
       setActiveTool(target);
     } else {
-      // Solo preservar como lastDrawingTool si la herramienta actual es de dibujo (no hand)
       if (activeTool !== 'hand') {
         setLastDrawingTool(activeTool);
       }
@@ -481,10 +402,6 @@ export default function App() {
     }
   };
 
-  /**
-   * Selección protegida de herramienta.
-   * Evita que 'hand' o 'eraser' corrompan lastDrawingTool y registra la herramienta previa antes de mover.
-   */
   const handleSelectTool = useCallback((tool: ToolType) => {
     if (tool === 'hand') {
       if (activeTool !== 'hand') {
@@ -498,15 +415,8 @@ export default function App() {
     setActiveTool(tool);
   }, [activeTool]);
 
-  /**
-   * Alternador exclusivo del Modo Mover (Navegación libre con 1 dedo).
-   * Al dejar de moverse, restaura estrictamente la herramienta que el usuario tenía activa
-   * antes de mover (brush, pencil, marker, airbrush, vector_pencil o eraser),
-   * eliminando por completo cualquier cambio involuntario a 'vector_pencil'.
-   */
   const handleToggleHandMode = useCallback(() => {
     if (activeTool === 'hand') {
-      // Restaurar herramienta previa exacta
       const restoreTool = previousToolBeforeHandRef.current && previousToolBeforeHandRef.current !== 'hand'
         ? previousToolBeforeHandRef.current
         : (lastDrawingTool && lastDrawingTool !== 'hand' ? lastDrawingTool : 'brush');
@@ -518,243 +428,59 @@ export default function App() {
   }, [activeTool, lastDrawingTool]);
 
   /**
-   * Gestión de Capas
+   * Expansión de dimensiones del lienzo (Canvas Resize & Expansion).
    */
-  const handleAddLayer = () => {
-    const newCanvas = document.createElement('canvas');
-    newCanvas.width = currentProject.width;
-    newCanvas.height = currentProject.height;
-    const newCtx = newCanvas.getContext('2d')!;
+  const handleApplyCanvasResize = useCallback(
+    (newWidth: number, newHeight: number, anchor: CanvasAnchor) => {
+      const oldWidth = currentProject.width;
+      const oldHeight = currentProject.height;
 
-    const newLayer: Layer = {
-      id: `layer_${Date.now()}`,
-      name: `Capa ${layers.length + 1}`,
-      visible: true,
-      opacity: 1.0,
-      blendMode: 'source-over',
-      canvas: newCanvas,
-      ctx: newCtx,
-    };
+      if (newWidth === oldWidth && newHeight === oldHeight) return;
 
-    const updated = [...layers, newLayer];
-    setLayers(updated);
-    setActiveLayerId(newLayer.id);
-  };
+      const { offsetX, offsetY } = calculateResizeOffsets(oldWidth, oldHeight, newWidth, newHeight, anchor);
 
-  const handleDuplicateLayer = (id: string) => {
-    const srcLayer = layers.find(l => l.id === id);
-    if (!srcLayer) return;
+      saveUndoSnapshot();
 
-    const dupCanvas = document.createElement('canvas');
-    dupCanvas.width = currentProject.width;
-    dupCanvas.height = currentProject.height;
-    const dupCtx = dupCanvas.getContext('2d')!;
-    dupCtx.drawImage(srcLayer.canvas, 0, 0);
+      const resizedLayers: Layer[] = layers.map((layer) => {
+        const newCanvas = document.createElement('canvas');
+        newCanvas.width = newWidth;
+        newCanvas.height = newHeight;
+        const newCtx = newCanvas.getContext('2d')!;
 
-    const dupLayer: Layer = {
-      id: `layer_${Date.now()}`,
-      name: `${srcLayer.name} (Copia)`,
-      visible: srcLayer.visible,
-      opacity: srcLayer.opacity,
-      blendMode: srcLayer.blendMode,
-      canvas: dupCanvas,
-      ctx: dupCtx,
-    };
+        newCtx.drawImage(layer.canvas, offsetX, offsetY);
 
-    const idx = layers.findIndex(l => l.id === id);
-    const updated = [...layers];
-    updated.splice(idx + 1, 0, dupLayer);
-    setLayers(updated);
-    setActiveLayerId(dupLayer.id);
-  };
-
-  const handleMergeDown = (id: string) => {
-    const idx = layers.findIndex(l => l.id === id);
-    if (idx <= 0) return;
-
-    handleSaveUndoSnapshot();
-    const upperLayer = layers[idx];
-    const lowerLayer = layers[idx - 1];
-
-    lowerLayer.ctx.save();
-    lowerLayer.ctx.globalAlpha = upperLayer.opacity;
-    lowerLayer.ctx.globalCompositeOperation = upperLayer.blendMode as GlobalCompositeOperation;
-    lowerLayer.ctx.drawImage(upperLayer.canvas, 0, 0);
-    lowerLayer.ctx.restore();
-
-    const updated = layers.filter(l => l.id !== upperLayer.id);
-    setLayers(updated);
-    setActiveLayerId(lowerLayer.id);
-  };
-
-  const handleDeleteLayer = (id: string) => {
-    if (layers.length <= 1) return;
-    const updated = layers.filter(l => l.id !== id);
-    setLayers(updated);
-    if (activeLayerId === id) {
-      setActiveLayerId(updated[updated.length - 1].id);
-    }
-  };
-
-  const handleClearLayer = (id: string) => {
-    const layer = layers.find(l => l.id === id);
-    if (!layer) return;
-    handleSaveUndoSnapshot();
-    layer.ctx.clearRect(0, 0, currentProject.width, currentProject.height);
-    setLayers([...layers]);
-  };
-
-  const handleToggleVisibility = (id: string) => {
-    setLayers(layers.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
-  };
-
-  const handleChangeOpacity = (id: string, opacity: number) => {
-    setLayers(layers.map(l => l.id === id ? { ...l, opacity } : l));
-  };
-
-  const handleChangeBlendMode = (id: string, mode: BlendMode) => {
-    setLayers(layers.map(l => l.id === id ? { ...l, blendMode: mode } : l));
-  };
-
-  const handleMoveLayer = (id: string, direction: 'up' | 'down') => {
-    const idx = layers.findIndex(l => l.id === id);
-    if (idx === -1) return;
-    const targetIdx = direction === 'up' ? idx + 1 : idx - 1;
-    if (targetIdx < 0 || targetIdx >= layers.length) return;
-
-    const updated = [...layers];
-    const [moved] = updated.splice(idx, 1);
-    updated.splice(targetIdx, 0, moved);
-    setLayers(updated);
-  };
-
-  /**
-   * SUBSISTEMA DE CALCO / FOTO DE REFERENCIA
-   */
-  const handleImportTracingPhoto = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const src = e.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        // Cálculo de posición centrada en la hoja y escala proporcional inicial
-        const fit = calculateInitialTracingFit(img.width, img.height, currentProject.width, currentProject.height);
-        
-        const newTracing: TracingReference = {
-          id: `trace_${Date.now()}`,
-          image: img,
-          src,
-          x: fit.x,
-          y: fit.y,
-          width: img.width,
-          height: img.height,
-          scale: fit.scale,
-          rotation: 0,
-          opacity: 0.4, // Opacidad recomendada para calcar
-          visible: true,
-          isAdjusting: true,
-          filterMode: 'original',
+        return {
+          ...layer,
+          canvas: newCanvas,
+          ctx: newCtx,
         };
+      });
 
-        // Extraer automáticamente los colores dominantes y realizar análisis real de grosor de trazo
-        try {
-          const off = document.createElement('canvas');
-          off.width = Math.min(320, img.width);
-          off.height = Math.min(320, img.height);
-          const oCtx = off.getContext('2d');
-          if (oCtx) {
-            oCtx.drawImage(img, 0, 0, off.width, off.height);
-            const data = oCtx.getImageData(0, 0, off.width, off.height);
-            newTracing.extractedColors = extractDominantColorsFromImage(data.data, 6);
-            // Análisis real de los 4 roles de grosor de trazo en base a los píxeles de la foto
-            newTracing.strokeAnalysis = analyzeImageStrokeThickness(data.data, off.width, off.height, fit.scale);
-          }
-        } catch {
-          // Ignorar si el canvas está manchado
-        }
+      kotlinVectorEngine.offsetAllStrokes(offsetX, offsetY);
 
-        setTracingRef(newTracing);
-      };
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleUpdateTracing = (update: Partial<TracingReference>) => {
-    if (!tracingRef) return;
-    setTracingRef({ ...tracingRef, ...update });
-  };
-
-  const handleApplyTracingFilter = (mode: TracingFilterMode) => {
-    if (!tracingRef) return;
-    if (mode === 'original') {
-      const orig = new Image();
-      orig.onload = () => {
-        setTracingRef({ ...tracingRef, image: orig, filterMode: 'original' });
-      };
-      orig.src = tracingRef.src;
-      return;
-    }
-
-    const off = document.createElement('canvas');
-    off.width = tracingRef.width;
-    off.height = tracingRef.height;
-    const ctx = off.getContext('2d');
-    if (!ctx) return;
-
-    const base = new Image();
-    base.onload = () => {
-      ctx.drawImage(base, 0, 0);
-      const imgData = ctx.getImageData(0, 0, off.width, off.height);
-
-      if (mode === 'lineart') {
-        const lineart = extractLineartFromPixels(imgData.data, off.width, off.height, true, 34);
-        imgData.data.set(lineart);
-      } else if (mode === 'contrast') {
-        const contrast = applyContrastFilter(imgData.data, 1.8);
-        imgData.data.set(contrast);
-      } else if (mode === 'grayscale') {
-        for (let i = 0; i < imgData.data.length; i += 4) {
-          const g = 0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2];
-          imgData.data[i] = g;
-          imgData.data[i + 1] = g;
-          imgData.data[i + 2] = g;
-        }
+      if (tracingRef && (offsetX !== 0 || offsetY !== 0)) {
+        setTracingRef({
+          ...tracingRef,
+          x: tracingRef.x + offsetX,
+          y: tracingRef.y + offsetY,
+        });
       }
 
-      ctx.putImageData(imgData, 0, 0);
-      const filtered = new Image();
-      filtered.onload = () => {
-        setTracingRef({ ...tracingRef, image: filtered, filterMode: mode });
+      const updatedProj: ProjectData = {
+        ...currentProject,
+        width: newWidth,
+        height: newHeight,
+        updatedAt: Date.now(),
       };
-      filtered.src = off.toDataURL();
-    };
-    base.src = tracingRef.src;
-  };
 
-  const handleCenterTracing = () => {
-    if (!tracingRef) return;
-    setTracingRef({
-      ...tracingRef,
-      x: Math.round(currentProject.width / 2),
-      y: Math.round(currentProject.height / 2),
-    });
-  };
+      setCurrentProject(updatedProj);
+      setLayers(resizedLayers);
 
-  const handleConfirmTracing = () => {
-    if (!tracingRef) return;
-    // Salir del modo de ajuste con tiradores y fijar la foto de guía
-    setTracingRef({ ...tracingRef, isAdjusting: false });
-  };
-
-  const handleRemoveTracing = () => {
-    setTracingRef(null);
-  };
-
-  const handleToggleTracingVisibility = () => {
-    if (!tracingRef) return;
-    setTracingRef({ ...tracingRef, visible: !tracingRef.visible });
-  };
+      setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
+      sqliteStorageService.scheduleAutoSave(updatedProj, resizedLayers, 500);
+    },
+    [currentProject, layers, tracingRef, saveUndoSnapshot, setLayers, setTracingRef]
+  );
 
   const handleTriggerFileInput = () => {
     fileInputRef.current?.click();
@@ -766,7 +492,7 @@ export default function App() {
   const handleOpenProject = async (proj: ProjectData) => {
     setCurrentProject(proj);
     await loadProjectWithLayers(proj);
-    setTracingRef(null);
+    removeTracing();
     setCurrentScreen('studio');
   };
 
@@ -785,10 +511,10 @@ export default function App() {
     setProjects(updated);
     setCurrentProject(newProj);
     const createdLayers = initProjectLayers(newProj);
-    setTracingRef(null);
+    resetHistory();
+    removeTracing();
     setCurrentScreen('studio');
 
-    // Persistir nuevo proyecto en SQLite Wasm (OPFS)
     try {
       await sqliteStorageService.saveProject(newProj, createdLayers);
     } catch (e) {
@@ -819,7 +545,7 @@ export default function App() {
     if (currentProject.id === id) {
       setCurrentProject(updated[0]);
       await loadProjectWithLayers(updated[0]);
-      setTracingRef(null);
+      removeTracing();
     }
   };
 
@@ -839,14 +565,14 @@ export default function App() {
         accept="image/*"
         onChange={(e) => {
           if (e.target.files && e.target.files[0]) {
-            handleImportTracingPhoto(e.target.files[0]);
+            importTracingPhoto(e.target.files[0], currentProject.width, currentProject.height);
             e.target.value = '';
           }
         }}
         className="hidden"
       />
 
-      {/* Pantalla 0: Bienvenida y Presentación PWA (para navegadores web estándar) */}
+      {/* Pantalla 0: Bienvenida y Presentación PWA */}
       {currentScreen === 'welcome' && (
         <WelcomeScreen
           onEnterStudio={() => {
@@ -874,6 +600,10 @@ export default function App() {
           brushOpacity={brushOpacity}
           brushColor={brushColor}
           stabilizerLevel={stabilizerLevel}
+          bucketExpansion={bucketExpansion}
+          onChangeBucketExpansion={setBucketExpansion}
+          bucketTolerance={bucketTolerance}
+          onChangeBucketTolerance={setBucketTolerance}
           layers={layers}
           activeLayerId={activeLayerId}
           canUndo={canUndo}
@@ -887,9 +617,9 @@ export default function App() {
           onChangeBrushOpacity={setBrushOpacity}
           onChangeBrushColor={setBrushColor}
           onChangeStabilizer={setStabilizerLevel}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
-          onSaveUndoSnapshot={handleSaveUndoSnapshot}
+          onUndo={undo}
+          onRedo={redo}
+          onSaveUndoSnapshot={saveUndoSnapshot}
           onStrokeEnd={handleStrokeEnd}
           onRestoreCrash={handleRestoreCrash}
           onDismissCrash={handleDismissCrash}
@@ -897,16 +627,17 @@ export default function App() {
           onOpenColorPicker={() => setIsColorPickerOpen(true)}
           onOpenToolPicker={() => setIsToolPickerOpen(true)}
           onOpenExportModal={() => setIsExportModalOpen(true)}
+          onOpenCanvasResizeModal={() => setIsCanvasResizeModalOpen(true)}
           onGoToGallery={() => setCurrentScreen('gallery')}
           onGoToEngine={() => setCurrentScreen('engine')}
           onGoToWelcome={() => setCurrentScreen('welcome')}
           onUpdateProjectThumbnail={handleUpdateProjectThumbnail}
-          onUpdateTracing={handleUpdateTracing}
-          onApplyTracingFilter={handleApplyTracingFilter}
-          onCenterTracing={handleCenterTracing}
-          onConfirmTracing={handleConfirmTracing}
-          onRemoveTracing={handleRemoveTracing}
-          onToggleTracingVisibility={handleToggleTracingVisibility}
+          onUpdateTracing={updateTracing}
+          onApplyTracingFilter={applyTracingFilter}
+          onCenterTracing={() => centerTracing(currentProject.width, currentProject.height)}
+          onConfirmTracing={confirmTracing}
+          onRemoveTracing={removeTracing}
+          onToggleTracingVisibility={toggleTracingVisibility}
           onTriggerImportPhoto={handleTriggerFileInput}
         />
       )}
@@ -939,21 +670,21 @@ export default function App() {
           activeLayerId={activeLayerId}
           tracingRef={tracingRef}
           onSelectLayer={setActiveLayerId}
-          onAddLayer={handleAddLayer}
-          onDuplicateLayer={handleDuplicateLayer}
-          onMergeDown={handleMergeDown}
-          onDeleteLayer={handleDeleteLayer}
-          onClearLayer={handleClearLayer}
-          onToggleVisibility={handleToggleVisibility}
-          onChangeOpacity={handleChangeOpacity}
-          onChangeBlendMode={handleChangeBlendMode}
-          onMoveLayer={handleMoveLayer}
+          onAddLayer={() => addLayer(currentProject.width, currentProject.height)}
+          onDuplicateLayer={(id) => duplicateLayer(id, currentProject.width, currentProject.height)}
+          onMergeDown={(id) => mergeDown(id, saveUndoSnapshot)}
+          onDeleteLayer={deleteLayer}
+          onClearLayer={(id) => clearLayer(id, currentProject.width, currentProject.height, saveUndoSnapshot)}
+          onToggleVisibility={toggleVisibility}
+          onChangeOpacity={changeOpacity}
+          onChangeBlendMode={changeBlendMode}
+          onMoveLayer={moveLayer}
           onTriggerImportPhoto={handleTriggerFileInput}
-          onToggleTracingVisibility={handleToggleTracingVisibility}
+          onToggleTracingVisibility={toggleTracingVisibility}
           onReopenTracingAdjust={() => {
-            if (tracingRef) setTracingRef({ ...tracingRef, isAdjusting: true });
+            if (tracingRef) updateTracing({ isAdjusting: true });
           }}
-          onRemoveTracing={handleRemoveTracing}
+          onRemoveTracing={removeTracing}
           onClose={() => setIsLayersModalOpen(false)}
         />
       )}
@@ -976,6 +707,10 @@ export default function App() {
           }}
           stabilizerLevel={stabilizerLevel}
           onChangeStabilizer={setStabilizerLevel}
+          bucketExpansion={bucketExpansion}
+          onChangeBucketExpansion={setBucketExpansion}
+          bucketTolerance={bucketTolerance}
+          onChangeBucketTolerance={setBucketTolerance}
           onClose={() => setIsToolPickerOpen(false)}
         />
       )}
@@ -987,6 +722,15 @@ export default function App() {
           height={currentProject.height}
           projectName={currentProject.name}
           onClose={() => setIsExportModalOpen(false)}
+        />
+      )}
+
+      {isCanvasResizeModalOpen && (
+        <CanvasResizeModal
+          currentWidth={currentProject.width}
+          currentHeight={currentProject.height}
+          onApplyResize={handleApplyCanvasResize}
+          onClose={() => setIsCanvasResizeModalOpen(false)}
         />
       )}
     </div>

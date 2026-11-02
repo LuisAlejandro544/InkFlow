@@ -16,6 +16,15 @@ import { Layer, Point, ToolType, BlendMode, TracingReference } from './types';
 import { wasmEngine } from './wasmEngine';
 import { kotlinVectorEngine } from './kotlinWasmBridge';
 import { gpuBitmapCache } from './bitmapCache';
+import { 
+  scanlineFloodFill, 
+  dilateBinaryMask, 
+  hexToRgb, 
+  rgbToHex, 
+  pickCanvasColor 
+} from './floodFillEngine';
+
+export { dilateBinaryMask, hexToRgb, rgbToHex, scanlineFloodFill, pickCanvasColor };
 
 // WGSL Shader para sellos de pincel con cálculo de atenuación radial en GPU
 export const BRUSH_WGSL_SHADER = /* wgsl */ `
@@ -254,149 +263,33 @@ export class DrawingEngine {
   }
 
   /**
-   * Herramienta de Cubo de Pintura (Bucket Fill) usando algoritmo Scanline Flood Fill.
+   * Herramienta de Cubo de Pintura (Bucket Fill) con Expansión de Borde (1 a 3 px).
+   * Delegado al módulo especializado floodFillEngine.ts.
    */
   public floodFill(
     layer: Layer,
     startX: number,
     startY: number,
     fillColorHex: string,
-    tolerance: number = 32
+    tolerance: number = 32,
+    borderExpansion: number = 0
   ): boolean {
-    const ctx = layer.ctx;
-    const width = layer.canvas.width;
-    const height = layer.canvas.height;
-
-    const x = Math.floor(startX);
-    const y = Math.floor(startY);
-
-    if (x < 0 || x >= width || y < 0 || y >= height) return false;
-
-    const imgData = ctx.getImageData(0, 0, width, height);
-    const data = imgData.data;
-
-    const fillRgb = this.hexToRgb(fillColorHex);
-    const targetIdx = (y * width + x) * 4;
-    const targetR = data[targetIdx];
-    const targetG = data[targetIdx + 1];
-    const targetB = data[targetIdx + 2];
-    const targetA = data[targetIdx + 3];
-
-    // Si ya tiene el mismo color exacto, evitar bucle infinito
-    if (
-      Math.abs(targetR - fillRgb.r) < 2 &&
-      Math.abs(targetG - fillRgb.g) < 2 &&
-      Math.abs(targetB - fillRgb.b) < 2 &&
-      targetA > 250
-    ) {
-      return false;
-    }
-
-    const matchesTarget = (idx: number) => {
-      const dr = Math.abs(data[idx] - targetR);
-      const dg = Math.abs(data[idx + 1] - targetG);
-      const db = Math.abs(data[idx + 2] - targetB);
-      const da = Math.abs(data[idx + 3] - targetA);
-      return (dr + dg + db + da) / 4 <= tolerance;
-    };
-
-    const pixelStack: [number, number][] = [[x, y]];
-    const seen = new Uint8Array(width * height);
-
-    while (pixelStack.length > 0) {
-      const [curX, curY] = pixelStack.pop()!;
-      let newY = curY;
-      let idx = (newY * width + curX) * 4;
-
-      // Buscar el borde superior
-      while (newY >= 0 && matchesTarget(idx)) {
-        newY--;
-        idx -= width * 4;
-      }
-      newY++;
-      idx += width * 4;
-
-      let spanLeft = false;
-      let spanRight = false;
-
-      while (newY < height && matchesTarget(idx)) {
-        // Colorear pixel
-        data[idx] = fillRgb.r;
-        data[idx + 1] = fillRgb.g;
-        data[idx + 2] = fillRgb.b;
-        data[idx + 3] = 255;
-        seen[newY * width + curX] = 1;
-
-        // Comprobar pixel a la izquierda
-        if (curX > 0) {
-          const leftIdx = idx - 4;
-          const leftPos = newY * width + (curX - 1);
-          if (matchesTarget(leftIdx)) {
-            if (!spanLeft && !seen[leftPos]) {
-              pixelStack.push([curX - 1, newY]);
-              spanLeft = true;
-            }
-          } else if (spanLeft) {
-            spanLeft = false;
-          }
-        }
-
-        // Comprobar pixel a la derecha
-        if (curX < width - 1) {
-          const rightIdx = idx + 4;
-          const rightPos = newY * width + (curX + 1);
-          if (matchesTarget(rightIdx)) {
-            if (!spanRight && !seen[rightPos]) {
-              pixelStack.push([curX + 1, newY]);
-              spanRight = true;
-            }
-          } else if (spanRight) {
-            spanRight = false;
-          }
-        }
-
-        newY++;
-        idx += width * 4;
-      }
-    }
-
-    ctx.putImageData(imgData, 0, 0);
-    return true;
+    return scanlineFloodFill(layer, startX, startY, fillColorHex, tolerance, borderExpansion);
   }
 
   /**
-   * Muestrea el color RGB en un punto específico de un canvas.
+   * Muestrea el color RGB en un punto específico de un canvas (Eyedropper).
    */
   public pickColor(ctx: CanvasRenderingContext2D, x: number, y: number): string {
-    const px = Math.floor(x);
-    const py = Math.floor(y);
-    try {
-      const pixel = ctx.getImageData(px, py, 1, 1).data;
-      return this.rgbToHex(pixel[0], pixel[1], pixel[2]);
-    } catch {
-      return '#000000';
-    }
+    return pickCanvasColor(ctx, x, y);
   }
 
   public hexToRgb(hex: string): { r: number; g: number; b: number } {
-    let cleanHex = hex.replace('#', '');
-    if (cleanHex.length === 3) {
-      cleanHex = cleanHex.split('').map(c => c + c).join('');
-    }
-    const num = parseInt(cleanHex, 16);
-    return {
-      r: (num >> 16) & 255,
-      g: (num >> 8) & 255,
-      b: num & 255
-    };
+    return hexToRgb(hex);
   }
 
   public rgbToHex(r: number, g: number, b: number): string {
-    const toHex = (n: number) => {
-      const h = Math.max(0, Math.min(255, Math.round(n))).toString(16);
-      return h.length === 1 ? '0' + h : h;
-    };
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    return rgbToHex(r, g, b);
   }
 }
 

@@ -1,6 +1,6 @@
 {
-  "name": "WebPaint",
-  "description": "A high-performance mobile drawing app powered by WebGPU, Rust, and WebAssembly for a smooth, professional digital art experience.",
+  "name": "InkFlow Studio",
+  "description": "Aplicación de dibujo e ilustración digital móvil acelerada por WebGPU y WebAssembly en formato PWA nativa.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
