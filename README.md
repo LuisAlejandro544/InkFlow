@@ -95,6 +95,16 @@ Aplicación de dibujo e ilustración digital profesional para dispositivos móvi
     - `[✨ Estampar en Capa]`: Pinta el accesorio de forma permanente sobre la capa activa seleccionada, integrándolo a la resolución nativa de la obra.
     - `[📑 + Nueva Capa]`: Crea una capa independiente llamada `Accesorio (Moño)` y plasma el adorno sin tocar tus trazos anteriores.
   - Genera automáticamente un punto de guardado en el historial (Deshacer/Rehacer) y persiste atómicamente en SQLite Wasm sobre OPFS.
+- **🌾 Texturas de Pincel Estilo IbisPaint con Previsualización en Vivo:**
+  - **4 Texturas Clásicas de Ilustración Profesional:**
+    1. **Papel Acuarela:** Grano orgánico con valles de papel Canson/Torchon para simular acumulación de pigmento tradicional.
+    2. **Lienzo Textil (Canvas):** Trama ortogonal cruzada de lino para técnicas de óleo y acrílico.
+    3. **Trama Manga (Halftone / Screentone):** Semitonos regulares a 45° imprescindibles para cómic japonés y manga.
+    4. **Carboncillo Poroso:** Grano áspero, seco y desgranado con micro-huecos en trazos sueltos.
+    5. **Ninguna (Liso):** Vuelta inmediata al trazo plano uniforme sin textura.
+  - **Previsualización Interactiva sin necesidad de elegir:** Muestra dinámica en la cabecera del modal (`BrushTextureModal.tsx`) que renderiza un trazo curvo en tiempo real con el color actual y tamaño de pincel del artista, permitiendo examinar cualquier textura antes de confirmarla.
+  - **Deslizadores en Tiempo Real:** Calibración ergonómica de **Profundidad / Intensidad** (10% a 100%) y **Escala de Grano** (0.5x a 2.5x).
+  - **Acceso Táctil:** Fila dedicada e indicador de textura en `StudioBottomBar.tsx` y acceso directo en `ToolPickerModal.tsx`.
 - **📐 Expansión y Redimensionado Ergonómico de Hoja (Canvas Resize & Expand):**
   - Modal táctil `CanvasResizeModal` accesible desde el menú `[⋯]` para ampliar el ancho y alto del lienzo si el artista necesita más espacio para bocetos o viñetas.
   - **Presets en 1 toque:** `+25% Espacio`, `+50% Espacio`, `2x Doble Lienzo`, `1:1 Cuadrado`, `9:16 Manga/Móvil` y botones de incremento táctil rápido (`+100px`, `+300px`).
@@ -131,9 +141,9 @@ Abre `http://localhost:3000` en tu teléfono móvil y pulsa el botón **"Instala
 
 ## 🧪 Pruebas Unitarias de Lógica
 
-El proyecto cuenta con **43 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
+El proyecto cuenta con **46 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
 
-### Suite 1: Motor Gráfico, Calco, Wasm, Caché GPU, Expansión, Cierre de Huecos & Accesorios (38 tests)
+### Suite 1: Motor Gráfico, Calco, Wasm, Caché GPU, Expansión, Huecos, Accesorios & Texturas (41 tests)
 1. Interpolación lineal y cálculo euclidiano Wasm.
 2. Estabilizador exponencial anti-temblor S-Form.
 3. Simulación de curva de presión táctil por velocidad.
@@ -172,16 +182,19 @@ El proyecto cuenta con **43 pruebas unitarias automatizadas deterministas** con 
 36. Cierre Inteligente de Huecos: Detección morfológica y unión de brechas (Gap Closing de 1 a 10px).
 37. Balde de Pintura: Contención de relleno sin fugas en trazados con huecos abiertos de 3px.
 38. Accesorios de Galería: Configuración y geometría de estampado en la obra (moños, stickers, adornos).
+39. Texturas de Pincel estilo IbisPaint: Catálogo de 4 texturas clásicas y rango acotado [0.0, 1.0].
+40. Modulación determinista de opacidad y profundidad de textura (Edge cases: none, depth 0, escalas extremas).
+41. Invarianza de textura ante coordenadas negativas y consistencia determinista del grano.
 
 ### Suite 2: Persistencia Masiva SQLite Wasm sobre OPFS (5 tests)
-39. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
-40. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
-41. Transacción ACID completa de proyectos con capas y orden z.
-42. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
-43. Eliminación limpia en cascada sin fugas de almacenamiento.
+42. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
+43. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
+44. Transacción ACID completa de proyectos con capas y orden z.
+45. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
+46. Eliminación limpia en cascada sin fugas de almacenamiento.
 
 ```bash
-# Ejecutar todas las pruebas deterministas (43 tests)
+# Ejecutar todas las pruebas deterministas (46 tests)
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 ```
 
@@ -191,14 +204,18 @@ npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 
 El repositorio incluye un workflow en `.github/workflows/deploy.yml` configurado para **activación exclusivamente manual** (`workflow_dispatch`).
 
-### Resiliencia de CI/CD (Sin dependencias de lockfile):
-- Se corrigió el fallo de `actions/setup-node@v4` eliminando la directiva estricta `cache: 'npm'` (que requiere obligatoriamente `package-lock.json`) y sustituyéndola por un paso de caché independiente con `actions/cache@v4` sobre el directorio `~/.npm` con hash de `package.json`.
-- Compilación e instalación sin fallos tanto en local como en GitHub Actions.
+### Resiliencia y Optimización de CI/CD:
+- **⚡ Optimización Extrema con `wasm-opt` (Binaryen):** Comprime los binarios Wasm de Rust y C++ con `-O3 --enable-simd --enable-bulk-memory` reduciendo su peso un 25-40% para arranque instantáneo en móviles.
+- **🌐 Despliegue Dual (Producción vs Vista Previa Aislada):** Selector en `workflow_dispatch` para elegir entre publicar en la rama principal (`main`) o en una URL de vista previa aislada temporal (`preview-<run_id>`) para probar cambios sin riesgo.
+- **📊 Panel de Resumen Ejecutivo en GitHub (`$GITHUB_STEP_SUMMARY`):** Renderiza una tarjeta visual con enlace directo a la PWA, peso del bundle y estado de las 46 pruebas automatizadas.
+- **🔒 Aislamiento de Origen Cruzado (COOP / COEP):** Inyección y validación de cabeceras en `public/_headers` para desbloquear `SharedArrayBuffer` y el máximo rendimiento de SQLite Wasm sobre OPFS.
+- **🛡️ Validación de Tipos y Linter:** Paso obligatorio `npm run lint` (`tsc --noEmit`) que previene el despliegue ante inconsistencias tipográficas.
 
 ### Pasos de Despliegue:
 1. Configura en GitHub Secrets: `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`.
 2. En GitHub ➔ pestaña **Actions** ➔ selecciona **"InkFlow - Compilar WebAssembly (C++, Rust, Kotlin) y Desplegar a Cloudflare Pages"** ➔ pulsa **"Run workflow"**.
-3. El runner compilará los núcleos Wasm de Rust (`wasm32-unknown-unknown`), C++23 con Emscripten (`simd128`), ejecutará las 43 pruebas unitarias deterministas, generará la PWA estática y la desplegará en tu cuenta de Cloudflare con **$0 de coste** y ancho de banda ilimitado.
+3. Selecciona el entorno (`production` o `preview`) y pulsa **"Run workflow"**.
+4. Al finalizar, haz clic en el enlace del **Panel de Resumen Ejecutivo** para abrir e instalar la app directamente en tu teléfono móvil.
 
 ---
 

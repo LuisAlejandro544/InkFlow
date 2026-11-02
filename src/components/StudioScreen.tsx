@@ -11,7 +11,7 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Layer, ToolType, Point, ProjectData, VectorStroke, TracingReference, TracingFilterMode } from '../engine/types';
+import { Layer, ToolType, Point, ProjectData, VectorStroke, TracingReference, TracingFilterMode, BrushTextureConfig } from '../engine/types';
 import { wasmEngine } from '../engine/wasmEngine';
 import { drawingEngine } from '../engine/webgpuEngine';
 import { kotlinVectorEngine } from '../engine/kotlinWasmBridge';
@@ -79,6 +79,8 @@ interface StudioScreenProps {
   onStampAccessory?: (asNewLayer: boolean) => void;
   bucketGapClosing?: number;
   onChangeBucketGapClosing?: (gap: number) => void;
+  brushTexture?: BrushTextureConfig;
+  onOpenTextureModal?: () => void;
 }
 
 export const StudioScreen: React.FC<StudioScreenProps> = ({
@@ -88,6 +90,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   brushSize,
   brushOpacity,
   brushColor,
+  brushTexture,
   stabilizerLevel,
   bucketExpansion = 2,
   onChangeBucketExpansion,
@@ -117,6 +120,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onOpenLayersModal,
   onOpenColorPicker,
   onOpenToolPicker,
+  onOpenTextureModal,
   onOpenExportModal,
   onOpenCanvasResizeModal,
   onGoToGallery,
@@ -611,7 +615,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       activeTool,
       brushColor,
       brushSize,
-      brushOpacity
+      brushOpacity,
+      brushTexture
     );
     renderComposite();
   };
@@ -657,7 +662,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         activeTool,
         brushColor,
         brushSize,
-        brushOpacity
+        brushOpacity,
+        brushTexture
       );
       renderComposite();
       lastPointRef.current = smoothPoint;
@@ -671,7 +677,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       activeTool,
       brushColor,
       brushSize,
-      brushOpacity
+      brushOpacity,
+      brushTexture
     );
 
     renderComposite();
@@ -869,11 +876,13 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         brushSize={brushSize}
         brushOpacity={brushOpacity}
         brushColor={brushColor}
+        brushTexture={brushTexture}
         layers={layers}
         tracingRef={tracingRef}
         showStrokeGuide={showStrokeGuide}
         onToggleBrushEraser={onToggleBrushEraser}
         onOpenToolPicker={onOpenToolPicker}
+        onOpenTextureModal={onOpenTextureModal}
         onToggleHandMode={onToggleHandMode}
         onSelectTool={onSelectTool}
         onOpenColorPicker={onOpenColorPicker}

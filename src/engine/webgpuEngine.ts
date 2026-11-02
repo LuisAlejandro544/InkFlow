@@ -12,10 +12,11 @@
  * 5. Cuentagotas (Eyedropper) para muestreo de color en tiempo real.
  */
 
-import { Layer, Point, ToolType, BlendMode, TracingReference } from './types';
+import { Layer, Point, ToolType, BlendMode, TracingReference, BrushTextureConfig } from './types';
 import { wasmEngine } from './wasmEngine';
 import { kotlinVectorEngine } from './kotlinWasmBridge';
 import { gpuBitmapCache } from './bitmapCache';
+import { modulateAlphaByTexture } from './brushTextureEngine';
 import { 
   scanlineFloodFill, 
   dilateBinaryMask, 
@@ -123,7 +124,8 @@ export class DrawingEngine {
     tool: ToolType,
     colorHex: string,
     baseSize: number,
-    baseOpacity: number
+    baseOpacity: number,
+    textureConfig?: BrushTextureConfig
   ) {
     const ctx = layer.ctx;
     const points = wasmEngine.interpolateStroke(p0, p1, Math.max(1, baseSize * 0.25));
@@ -139,7 +141,10 @@ export class DrawingEngine {
     // Procesar cada punto interpolado
     for (const pt of points) {
       const radius = Math.max(0.5, (baseSize * pt.pressure) / 2);
-      const alpha = Math.min(1.0, baseOpacity * (tool === 'pencil' ? 0.75 : 1.0));
+      const rawAlpha = Math.min(1.0, baseOpacity * (tool === 'pencil' ? 0.75 : 1.0));
+      const alpha = (textureConfig && textureConfig.id !== 'none' && tool !== 'eraser')
+        ? modulateAlphaByTexture(rawAlpha, textureConfig, pt.x, pt.y)
+        : rawAlpha;
 
       ctx.fillStyle = tool === 'eraser' ? 'rgba(0,0,0,1)' : colorHex;
 

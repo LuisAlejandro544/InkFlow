@@ -19,12 +19,13 @@ Este documento proporciona instrucciones de compilación, patrones de arquitectu
 | **Gestos Multitáctiles & Mapeo Canónico** | Pinch-to-Zoom, Paneo, Rotación a 2 dedos y `screenToCanvasCoords` | `src/components/StudioScreen.tsx`, `src/engine/transformMath.ts` |
 | **Bote de Pintura & Cierre de Huecos** | Scanline Flood Fill + Dilatación morfológica (1-3px) + Gap Closing C++23/TS (0-10px) | `src/engine/floodFillEngine.ts`, `src/engine/webgpuEngine.ts` |
 | **Accesorios y Stickers de Galería** | Estampado de moños y adornos en capa activa o nueva capa (`TracingAdjuster`) | `src/components/TracingAdjuster.tsx`, `src/hooks/useTracingManager.ts` |
+| **Texturas de Pincel (Estilo IbisPaint)** | 4 texturas clásicas (Acuarela, Lienzo, Halftone, Carbón) + Live Preview modal | `src/engine/brushTextureEngine.ts`, `src/components/BrushTextureModal.tsx` |
 | **Expansión y Redimensionado de Hoja** | Matriz visual 3x3, cálculo de offsets y presets de espacio (+25%, +50%, 2x, 1:1, 9:16) | `src/components/CanvasResizeModal.tsx`, `src/engine/canvasResizeMath.ts` |
 | **Guardado de Obra a Galería** | Hoja Completa vs Auto-Crop + Cálculo de peso KB/MB en tiempo real | `src/components/ExportModal.tsx`, `src/engine/transformMath.ts` |
 | **Persistencia Masiva SQLite Wasm** | Base de datos ACID sobre OPFS en Web Worker dedicado + Centinela Crash | `src/storage/sqliteStorage.worker.ts`, `src/storage/sqliteStorageService.ts` |
 | **Caché Integral & Aceleración VRAM** | Workbox 10MB + Wasm Streaming JIT + Inmutabilidad Cloudflare + GPU ImageBitmap | `vite.config.ts`, `public/_headers`, `src/engine/wasmStreamingCompiler.ts`, `src/engine/bitmapCache.ts` |
 | **Arquitectura de App & CI/CD** | Progressive Web App (PWA) + GitHub Actions Wasm Resiliente + Cloudflare Pages | `.github/workflows/deploy.yml`, `public/manifest.json`, `public/sw.js` |
-| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (43 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
+| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (46 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
 
 ---
 
@@ -34,7 +35,7 @@ Este documento proporciona instrucciones de compilación, patrones de arquitectu
 # 1. Compilación TypeScript y linter estricto:
 npm run lint
 
-# 2. Pruebas unitarias de matemática de curvas, C++23/TS, Kotlin/Wasm, calco, flood fill, expansión y SQLite Wasm OPFS:
+# 2. Pruebas unitarias de matemática de curvas, C++23/TS, Kotlin/Wasm, calco, flood fill, expansión, texturas y SQLite Wasm OPFS:
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 
 # 3. Compilación de producción con Vite:

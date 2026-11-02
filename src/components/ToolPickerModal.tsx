@@ -27,6 +27,7 @@ export interface ToolPickerModalProps {
   onChangeBucketTolerance?: (tolerance: number) => void;
   bucketGapClosing?: number;
   onChangeBucketGapClosing?: (gap: number) => void;
+  onOpenTextureModal?: () => void;
   onClose: () => void;
 }
 
@@ -51,6 +52,7 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
   onChangeBucketTolerance,
   bucketGapClosing = 3,
   onChangeBucketGapClosing,
+  onOpenTextureModal,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<MainTab>('tools');
@@ -188,6 +190,31 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
                 </button>
               ))}
             </div>
+
+            {/* Acceso a Texturas de Pincel estilo IbisPaint */}
+            {onOpenTextureModal && (
+              <div 
+                onClick={() => {
+                  triggerHaptic(8);
+                  onClose();
+                  onOpenTextureModal();
+                }}
+                className="p-2.5 my-1.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-[#181a25] to-[#14151e] border border-amber-500/35 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all shadow-sm"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 shrink-0">
+                    <Sparkles size={16} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-amber-200">Texturas de Pincel (IbisPaint)</div>
+                    <div className="text-[10px] text-gray-400">Papel Acuarela, Lienzo, Trama Manga y Carbón</div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold bg-amber-500 text-black px-2.5 py-1 rounded-xl shadow-xs shrink-0">
+                  Ver Texturas →
+                </span>
+              </div>
+            )}
 
             {/* Lista Espaciosa de Herramientas con Selección Instantánea */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 pt-1">

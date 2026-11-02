@@ -23,6 +23,33 @@ export type BlendMode =
   | 'overlay'     // Superponer (contraste)
   | 'lighter';    // Añadir / Resplandor (glow)
 
+/**
+ * Identificadores de las 4 texturas de superficie estilo IbisPaint más la opción limpia
+ */
+export type BrushTextureId = 
+  | 'none'              // Sin textura (trazo liso normal)
+  | 'watercolor_paper'  // Papel Acuarela rugoso con grano orgánico
+  | 'canvas'            // Lienzo Artístico con urdimbre textil cruzada
+  | 'screentone'        // Trama Manga / Halftone de puntos de imprenta
+  | 'charcoal_noise';   // Carboncillo poroso desgranado
+
+/**
+ * Configuración activa de la textura de pincel
+ */
+export interface BrushTextureConfig {
+  id: BrushTextureId;
+  name: string;
+  scale: number; // 0.5 a 3.0 (zoom del grano)
+  depth: number; // 0.1 a 1.0 (intensidad / profundidad de textura)
+}
+
+export const DEFAULT_BRUSH_TEXTURE: BrushTextureConfig = {
+  id: 'none',
+  name: 'Ninguna (Liso)',
+  scale: 1.0,
+  depth: 0.65,
+};
+
 export interface Point {
   x: number;
   y: number;

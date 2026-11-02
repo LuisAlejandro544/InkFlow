@@ -29,7 +29,12 @@ import {
   shouldShowWelcomeScreen
 } from './environmentDetector';
 import { generateClosedGapBarrierMask, scanlineFloodFill } from './floodFillEngine';
-import { Layer } from './types';
+import { 
+  sampleTextureLuminance, 
+  modulateAlphaByTexture, 
+  TEXTURE_DEFINITIONS 
+} from './brushTextureEngine';
+import { Layer, BrushTextureConfig } from './types';
 
 test('Wasm Lerp e Interpolación Lineal', () => {
   const result = wasmEngine.lerp(10, 20, 0.5);
@@ -923,6 +928,87 @@ test('Sistema de Accesorios de Galería (Stickers / Moños): Validación de Prop
   assert.equal(accessoryConfig.purpose, 'accessory');
   assert.equal(accessoryConfig.opacity, 1.0, 'Los accesorios de galería inician con opacidad 100%');
   assert.equal(accessoryConfig.visible, true);
+});
+
+test('Texturas de Pincel estilo IbisPaint: Catálogo de 4 texturas clásicas y rango acotado [0.0, 1.0]', () => {
+  // Debe contener exactamente 5 entradas: 'none' + las 4 clásicas solicitadas por el usuario
+  assert.equal(TEXTURE_DEFINITIONS.length, 5);
+
+  const ids = TEXTURE_DEFINITIONS.map(d => d.id);
+  assert.ok(ids.includes('none'));
+  assert.ok(ids.includes('watercolor_paper'), 'Debe incluir Papel Acuarela rugoso');
+  assert.ok(ids.includes('canvas'), 'Debe incluir Lienzo Textil cruzado');
+  assert.ok(ids.includes('screentone'), 'Debe incluir Trama Manga Halftone');
+  assert.ok(ids.includes('charcoal_noise'), 'Debe incluir Carboncillo Poroso');
+
+  // Evaluar en una cuadrícula de coordenadas que todas las texturas retornen luminancia válida en [0.0, 1.0]
+  for (const def of TEXTURE_DEFINITIONS) {
+    for (let x = 0; x < 50; x += 10) {
+      for (let y = 0; y < 50; y += 10) {
+        const lum = sampleTextureLuminance(def.id, x, y, 1.0);
+        assert.ok(!isNaN(lum), `Luminancia no debe ser NaN para ${def.id}`);
+        assert.ok(lum >= 0.0 && lum <= 1.0, `Luminancia ${lum} fuera de rango [0, 1] en ${def.id}`);
+      }
+    }
+  }
+});
+
+test('Modulación determinista de opacidad y profundidad de textura (Edge cases: none, depth 0, escalas extremas)', () => {
+  const baseAlpha = 0.8;
+
+  // 1. Textura 'none': invariante
+  const noneConfig: BrushTextureConfig = {
+    id: 'none',
+    name: 'Ninguna',
+    depth: 0.9,
+    scale: 1.0
+  };
+  assert.equal(modulateAlphaByTexture(baseAlpha, noneConfig, 25, 40), baseAlpha);
+
+  // 2. Textura activa pero con depth = 0.0: invariante
+  const zeroDepthConfig: BrushTextureConfig = {
+    id: 'watercolor_paper',
+    name: 'Papel',
+    depth: 0.0,
+    scale: 1.0
+  };
+  assert.equal(modulateAlphaByTexture(baseAlpha, zeroDepthConfig, 25, 40), baseAlpha);
+
+  // 3. Textura activa con depth > 0: debe atenuar la opacidad en las depresiones de la textura
+  const activeConfig: BrushTextureConfig = {
+    id: 'watercolor_paper',
+    name: 'Papel',
+    depth: 0.8,
+    scale: 1.0
+  };
+  const modulated = modulateAlphaByTexture(baseAlpha, activeConfig, 10, 10);
+  assert.ok(modulated <= baseAlpha, 'La textura no debe superar el alpha base');
+  assert.ok(modulated >= 0.0, 'La opacidad modulada debe ser positiva');
+
+  // 4. Escalas extremas: no deben lanzar errores ni romper los cálculos
+  const tinyScale: BrushTextureConfig = { id: 'canvas', name: 'Lienzo', depth: 0.7, scale: 0.01 };
+  const hugeScale: BrushTextureConfig = { id: 'screentone', name: 'Trama', depth: 0.7, scale: 100.0 };
+  assert.ok(!isNaN(modulateAlphaByTexture(baseAlpha, tinyScale, 15, 20)));
+  assert.ok(!isNaN(modulateAlphaByTexture(baseAlpha, hugeScale, 15, 20)));
+});
+
+test('Invarianza de textura ante coordenadas negativas y consistencia determinista del grano', () => {
+  const config: BrushTextureConfig = {
+    id: 'screentone',
+    name: 'Trama Manga',
+    depth: 0.85,
+    scale: 1.0
+  };
+
+  // Coordenadas negativas del lienzo (ej. cuando se dibuja más allá del origen tras pan/zoom)
+  const alphaNeg = modulateAlphaByTexture(1.0, config, -120, -340);
+  assert.ok(!isNaN(alphaNeg));
+  assert.ok(alphaNeg >= 0.0 && alphaNeg <= 1.0);
+
+  // Determinismo: dos evaluaciones en el mismo punto exacto deben ser idénticas
+  const sample1 = sampleTextureLuminance('charcoal_noise', 88.5, 42.3, 1.2);
+  const sample2 = sampleTextureLuminance('charcoal_noise', 88.5, 42.3, 1.2);
+  assert.equal(sample1, sample2, 'El muestreo de textura debe ser 100% determinista');
 });
 
 

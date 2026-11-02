@@ -86,6 +86,31 @@ export default defineConfig(() => {
     optimizeDeps: {
       exclude: ['@sqlite.org/sqlite-wasm'],
     },
+    esbuild: {
+      // Poda agresiva de logs y sentencias debugger estilo R8 de Android
+      drop: process.env.NODE_ENV === 'production' || process.env.CI ? ['console', 'debugger'] : [],
+      legalComments: 'none',
+      treeShaking: true,
+    },
+    build: {
+      target: 'es2022',
+      sourcemap: false, // Desactivar source maps para no duplicar el tamaño en producción
+      cssMinify: true,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/lucide-react')) {
+              return 'vendor-icons';
+            }
+            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+              return 'vendor-react';
+            }
+          },
+        },
+      },
+    },
     server: {
       host: '0.0.0.0',
       port: 3000,

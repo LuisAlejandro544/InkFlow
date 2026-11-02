@@ -43,12 +43,13 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   ├── transformMath.ts      # Matemática pura: zoom, rotación 2D, snapping, screenToCanvasCoords y auto-crop
 │   │   ├── canvasResizeMath.ts   # Matemática de expansión de lienzo: matriz de anclaje 3x3 y presets de espacio
 │   │   ├── floodFillEngine.ts    # Scanline Flood Fill con dilatación 0-3px y Cierre de Huecos 0-10px (Gap Closing)
+│   │   ├── brushTextureEngine.ts # Motor matemático de 4 texturas estilo IbisPaint y renderizado de muestra en vivo
 │   │   ├── tracingEngine.ts      # Motor de calco y stickers: Sobel Lineart, contraste, monocromo y paletas Wasm
 │   │   ├── strokeAssistant.ts    # Asistente REAL de Grosor: Visión artificial, percentiles y muestreo local
 │   │   ├── kotlinWasmBridge.ts   # Puente de ejecución Kotlin/Wasm para Lápiz Vectorial (cero píxeles al zoom)
 │   │   ├── environmentDetector.ts# Detección determinista de PWA Standalone vs Navegador y excepción de Preview
 │   │   ├── webgpuEngine.ts       # Pipeline WebGPU, shaders WGSL, composición multicapa, balde y trazado
-│   │   └── engine.test.ts        # Suite de 38 pruebas unitarias deterministas de motor, Wasm, huecos y accesorios
+│   │   └── engine.test.ts        # Suite de 41 pruebas unitarias deterministas de motor, Wasm, huecos, accesorios y texturas
 │   ├── storage/                  # Motor de Persistencia Masiva SQLite Wasm & OPFS en Web Worker
 │   │   ├── sqliteTypes.ts        # Tipos y contratos IPC de serialización relacional
 │   │   ├── sqliteStorage.worker.ts # Web Worker dedicado ejecutando @sqlite.org/sqlite-wasm sobre OPFS
@@ -72,6 +73,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   ├── WelcomeScreen.tsx     # Pantalla de bienvenida, catálogo de funciones pro y descarga PWA en navegador
 │   │   ├── StudioScreen.tsx      # Mesa de dibujo táctil con gestos directos a 60-120 FPS
 │   │   ├── ToolPickerModal.tsx   # Modal nativo segmentado en Herramientas y Estabilizador S-Form
+│   │   ├── BrushTextureModal.tsx # Modal de texturas de pincel estilo IbisPaint con live preview sin aplicar
 │   │   ├── CanvasResizeModal.tsx # Modal de expansión de hoja con matriz de anclaje 3x3 y presets rápidos
 │   │   ├── TracingAdjuster.tsx   # Ajustador táctil de calco y accesorios (moños/stickers) con estampado en capas
 │   │   ├── StrokeGuideAssistant.tsx # Barra ergonómica con recomendación calibrada por visión artificial

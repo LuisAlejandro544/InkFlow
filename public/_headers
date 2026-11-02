@@ -1,5 +1,11 @@
-# Cabeceras de Inmutabilidad y Rendimiento para Cloudflare Pages
-# Permite aprovechar al 100% la caché de disco y memoria del navegador móvil
+# Cabeceras de Rendimiento, Seguridad y Aislamiento para Cloudflare Pages
+# Desbloquea SharedArrayBuffer y acceso sincrónico a disco OPFS para SQLite Wasm en teléfonos móviles
+
+# 0. Aislamiento de Origen Cruzado (COOP / COEP) para máximo rendimiento SQLite Wasm OPFS
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
 
 # 1. Activos inmutables con hash único (Scripts, Estilos y WebAssembly)
 /assets/*

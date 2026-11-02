@@ -22,6 +22,7 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 - **Accesorios y Stickers de Galería en tu Obra (Moños, Lazos, Adornos):** Permite importar cualquier imagen de la galería como accesorio, manipularla con gestos multitáctiles independientes (mover, escalar, rotar, opacidad) y estamparla de forma permanente en la capa activa o en una nueva capa dedicada (`Accesorio (Moño)`), registrando el paso en el historial de deshacer/rehacer y persistiendo atómicamente en SQLite Wasm sobre OPFS.
 - **Expansión de Hoja (Canvas Resize & Expand):** Modal ergonómico `CanvasResizeModal` con matriz visual de anclaje 3x3, presets en 1 toque (+25%, +50%, 2x, 1:1, 9:16) y reubicación sin pérdidas de capas, trazos vectoriales de Kotlin/Wasm (`offsetAllStrokes`) y foto de calco.
 - **Rotación de Lienzo Táctil & Mapeo Inverso:** Al girar el lienzo con dos dedos, los puntos de dibujo deben transformarse inversamente con `unrotatePoint(screenX, screenY, centerX, centerY, rotationDeg)` para que el trazo se dibuje exactamente bajo el dedo sin descalibración.
+- **Texturas de Pincel Estilo IbisPaint con Live Preview:** Catálogo de 4 texturas clásicas (`watercolor_paper`, `canvas`, `screentone`, `charcoal_noise`) más `none`. Modal `BrushTextureModal.tsx` con lienzo de prueba en vivo para inspeccionar y calibrar profundidad/escala antes de aplicar, sin alterar el pincel de trabajo hasta confirmación.
 - **Guardado Inteligente a Galería:** El modal de exportación debe calcular el peso estimado del archivo en tiempo real y permitir tanto la exportación de la "Hoja Completa" como el recorte automático delimitado ("Auto-Crop") detectando los píxeles reales dibujados.
 
 ---
@@ -49,7 +50,7 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 8. **Conservación de Diseño y Lógica:**
    - No cambiar el diseño ni la lógica existente a menos que el usuario lo solicite explícitamente. Las modificaciones deben ser quirúrgicas y modulares.
 9. **Pruebas de Lógica Obligatorias:**
-   - Siempre verificar cambios de lógica con pruebas unitarias deterministas (`npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts`) antes de dar por completada la tarea (43 tests pasando: 38 en motor gráfico/transformaciones/calco/Wasm/VRAM/expansión/huecos/accesorios y 5 en persistencia SQLite Wasm).
+   - Siempre verificar cambios de lógica con pruebas unitarias deterministas (`npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts`) antes de dar por completada la tarea (46 tests pasando: 41 en motor gráfico/transformaciones/calco/Wasm/VRAM/expansión/huecos/accesorios/texturas y 5 en persistencia SQLite Wasm).
 10. **Persistencia Masiva en SQLite Wasm & OPFS:**
    - Queda terminantemente prohibido utilizar `localStorage` (límite 5MB y síncrono bloqueante) o `dexie.js` para persistencia gráfica.
    - El almacenamiento de proyectos y capas en alta resolución se realiza exclusivamente mediante `@sqlite.org/sqlite-wasm` ejecutándose en un Web Worker dedicado sobre OPFS (Origin Private File System) con transacciones ACID.

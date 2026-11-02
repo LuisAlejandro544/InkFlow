@@ -13,7 +13,7 @@ Este documento define los 7 roles especializados del ciclo de vida del software 
 
 ## 🔨 02. El Constructor (Generación de Código)
 - **Misión:** Producir código limpio, tipado, modular y con manejo de errores completo listo para producción.
-- **Responsabilidad en el proyecto:** Implementar herramientas de dibujo (Lápiz Vectorial analítico, pinceles, modos de fusión, balde de pintura inteligente con expansión de borde 1-3px para eliminar halos blancos y **Cierre Inteligente de Huecos de 0 a 10px** para prevenir fugas de color), sistema de **Accesorios de Galería (Stickers, moños, adornos) con estampado permanente en la capa activa o nueva capa dedicada**, controladores de gestos multitáctiles con los propios dedos (*pinch-to-zoom*, rotación, paneo), alternadores de modo Dibujar/Mover, expansor de dimensiones de hoja con matriz visual 3x3, modo calco ergonómico con controles minimizables y alternador instantáneo de visibilidad, selector de herramientas sin truncamiento, asistente de grosor de trazo, persistencia masiva relacional SQLite Wasm sobre OPFS y centinela de auto-guardado ante cierre o crash.
+- **Responsabilidad en el proyecto:** Implementar herramientas de dibujo (Lápiz Vectorial analítico, pinceles, **Texturas de Superficie estilo IbisPaint con live preview interactivo**, modos de fusión, balde de pintura inteligente con expansión de borde 1-3px para eliminar halos blancos y **Cierre Inteligente de Huecos de 0 a 10px** para prevenir fugas de color), sistema de **Accesorios de Galería (Stickers, moños, adornos) con estampado permanente en la capa activa o nueva capa dedicada**, controladores de gestos multitáctiles con los propios dedos (*pinch-to-zoom*, rotación, paneo), alternadores de modo Dibujar/Mover, expansor de dimensiones de hoja con matriz visual 3x3, modo calco ergonómico con controles minimizables y alternador instantáneo de visibilidad, selector de herramientas sin truncamiento, asistente de grosor de trazo, persistencia masiva relacional SQLite Wasm sobre OPFS y centinela de auto-guardado ante cierre o crash.
 - **Comportamiento:** Aplica el principio de responsabilidad única, incluye tipos TypeScript y Kotlin estrictos y añade comentarios explicativos sobre la lógica interna.
 
 ---
@@ -41,8 +41,8 @@ Este documento define los 7 roles especializados del ciclo de vida del software 
 
 ## 🛡️ 06. El Escudo (Testing y Cobertura)
 - **Misión:** Diseñar y ejecutar suites de pruebas automatizadas deterministas con Node test runner (`node:test`).
-- **Responsabilidad en el proyecto:** Cobertura de las 4 categorías obligatorias: *Happy path*, *Edge cases* (coordenadas fuera de lienzo, velocidad cero, presiones extremas, dedos en pinch, calibración de fotos de calco, roles de trazo, dilatación morfológica y cierre de huecos en flood fill, estampación de accesorios fotográficos, offsets de expansión de lienzo, transacciones ACID en SQLite Wasm y rescate de crash), *Gestión de errores* y *Mocks*.
-- **Comando de ejecución:** `npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts` (43 pruebas deterministas pasando: 38 de motor gráfico y transformaciones + 5 de SQLite Wasm OPFS).
+- **Responsabilidad en el proyecto:** Cobertura de las 4 categorías obligatorias: *Happy path*, *Edge cases* (coordenadas fuera de lienzo, velocidad cero, presiones extremas, dedos en pinch, calibración de fotos de calco, roles de trazo, dilatación morfológica y cierre de huecos en flood fill, estampación de accesorios fotográficos, offsets de expansión de lienzo, transacciones ACID en SQLite Wasm, modulación determinista de texturas de pincel y rescate de crash), *Gestión de errores* y *Mocks*.
+- **Comando de ejecución:** `npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts` (46 pruebas deterministas pasando: 41 de motor gráfico, transformaciones y texturas + 5 de SQLite Wasm OPFS).
 
 ---
 
@@ -50,3 +50,17 @@ Este documento define los 7 roles especializados del ciclo de vida del software 
 - **Misión:** Generar documentación clara, precisa y directa al grano para desarrolladores y colaboradores.
 - **Responsabilidad en el proyecto:** Mantener sincronizados `README.md`, `ROADMAP.md`, `ESTRUCTURE.md`, `AI_CONTEXT.md`, `AGENTS.md` y `README_AI.md`.
 - **Tono:** Directo y técnico. Cero relleno. Comandos listos para copiar y pegar en menos de 30 segundos.
+
+---
+
+## 🧰 08. Skills Especializadas del Repositorio (In-Repo Skills)
+
+El sistema multi-agente tiene acceso directo a dos skills maestras documentadas en el repositorio:
+
+1. **`skills/mobile-native-pwa/SKILL.md` (Diseño Nativo y Ergonomía Móvil):**
+   - **Activación:** **El Constructor (02)** y **El Crítico (04)** la consultan antes de diseñar o modificar cualquier pantalla, modal, barra de herramientas o interacción táctil.
+   - **Enfoque:** Erradicación de defectos de navegador (100dvh, selección accidental, tap delay), respeto de *Safe Areas* (`env(safe-area-inset-*)`), tamaño mínimo táctil 44-48px y micro-interacciones inmediatas (`active:scale-95`).
+
+2. **`skills/webassembly-systems/SKILL.md` (Sistemas y Rendimiento Wasm):**
+   - **Activación:** **El Arquitecto (01)** y **El Optimizador (05)** la consultan antes de alterar motores computacionales, puentes JS-Wasm o la base de datos local.
+   - **Enfoque:** Memoria lineal sin copias (Zero-Copy TypedArrays), vectorización SIMD128, Web Workers con aislamiento de origen cruzado (`COOP/COEP`), SQLite Wasm sobre OPFS y flags de poda binaria profunda con `wasm-opt` (Binaryen).

@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ToolType, ProjectData, Layer } from './engine/types';
+import { ToolType, ProjectData, Layer, BrushTextureConfig, DEFAULT_BRUSH_TEXTURE } from './engine/types';
 import { kotlinVectorEngine } from './engine/kotlinWasmBridge';
 import { DEFAULT_PROJECT } from './store/drawingStore';
 import { StudioScreen } from './components/StudioScreen';
@@ -19,6 +19,7 @@ import { EngineInfoScreen } from './components/EngineInfoScreen';
 import { LayersModal } from './components/LayersModal';
 import { ColorPickerModal } from './components/ColorPickerModal';
 import { ToolPickerModal } from './components/ToolPickerModal';
+import { BrushTextureModal } from './components/BrushTextureModal';
 import { ExportModal } from './components/ExportModal';
 import { CanvasResizeModal } from './components/CanvasResizeModal';
 import { CanvasAnchor, calculateResizeOffsets } from './engine/canvasResizeMath';
@@ -74,6 +75,7 @@ export default function App() {
   const [brushOpacity, setBrushOpacity] = useState<number>(1.0);
   const [brushColor, setBrushColor] = useState<string>('#18181b');
   const [stabilizerLevel, setStabilizerLevel] = useState<number>(3);
+  const [brushTexture, setBrushTexture] = useState<BrushTextureConfig>(DEFAULT_BRUSH_TEXTURE);
   
   // Configuración del Bote de Pintura (Bucket Fill con Expansión de Borde y Cierre de Huecos)
   const [bucketExpansion, setBucketExpansion] = useState<number>(2); // 0 a 3 px (default 2px)
@@ -124,6 +126,7 @@ export default function App() {
   const [isLayersModalOpen, setIsLayersModalOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isToolPickerOpen, setIsToolPickerOpen] = useState(false);
+  const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isCanvasResizeModalOpen, setIsCanvasResizeModalOpen] = useState(false);
 
@@ -685,6 +688,7 @@ export default function App() {
           brushSize={brushSize}
           brushOpacity={brushOpacity}
           brushColor={brushColor}
+          brushTexture={brushTexture}
           stabilizerLevel={stabilizerLevel}
           bucketExpansion={bucketExpansion}
           onChangeBucketExpansion={setBucketExpansion}
@@ -714,6 +718,7 @@ export default function App() {
           onOpenLayersModal={() => setIsLayersModalOpen(true)}
           onOpenColorPicker={() => setIsColorPickerOpen(true)}
           onOpenToolPicker={() => setIsToolPickerOpen(true)}
+          onOpenTextureModal={() => setIsTextureModalOpen(true)}
           onOpenExportModal={() => setIsExportModalOpen(true)}
           onOpenCanvasResizeModal={() => setIsCanvasResizeModalOpen(true)}
           onGoToGallery={() => setCurrentScreen('gallery')}
@@ -804,7 +809,17 @@ export default function App() {
           onChangeBucketTolerance={setBucketTolerance}
           bucketGapClosing={bucketGapClosing}
           onChangeBucketGapClosing={setBucketGapClosing}
+          onOpenTextureModal={() => setIsTextureModalOpen(true)}
           onClose={() => setIsToolPickerOpen(false)}
+        />
+      )}
+
+      {isTextureModalOpen && (
+        <BrushTextureModal
+          currentTexture={brushTexture}
+          brushColor={brushColor}
+          onApplyTexture={setBrushTexture}
+          onClose={() => setIsTextureModalOpen(false)}
         />
       )}
 

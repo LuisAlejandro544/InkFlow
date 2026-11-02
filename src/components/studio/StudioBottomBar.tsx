@@ -16,9 +16,9 @@
 import React from 'react';
 import { 
   Paintbrush, Eraser, PenTool, Sliders, Hand, Move, 
-  Layers as LayersIcon 
+  Layers as LayersIcon, Sparkles 
 } from 'lucide-react';
-import { Layer, ToolType, TracingReference } from '../../engine/types';
+import { Layer, ToolType, TracingReference, BrushTextureConfig } from '../../engine/types';
 import { StrokeGuideAssistant } from '../StrokeGuideAssistant';
 
 export interface StudioBottomBarProps {
@@ -27,11 +27,13 @@ export interface StudioBottomBarProps {
   brushSize: number;
   brushOpacity: number;
   brushColor: string;
+  brushTexture?: BrushTextureConfig;
   layers: Layer[];
   tracingRef: TracingReference | null;
   showStrokeGuide: boolean;
   onToggleBrushEraser: () => void;
   onOpenToolPicker: () => void;
+  onOpenTextureModal?: () => void;
   onToggleHandMode?: () => void;
   onSelectTool: (tool: ToolType) => void;
   onOpenColorPicker: () => void;
@@ -50,11 +52,13 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
   brushSize,
   brushOpacity,
   brushColor,
+  brushTexture,
   layers,
   tracingRef,
   showStrokeGuide,
   onToggleBrushEraser,
   onOpenToolPicker,
+  onOpenTextureModal,
   onToggleHandMode,
   onSelectTool,
   onOpenColorPicker,
@@ -129,6 +133,35 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             {Math.round(brushOpacity * 100)}%
           </span>
         </div>
+
+        {/* Fila 3: Textura de Superficie Activa */}
+        {onOpenTextureModal && (
+          <div className="flex items-center justify-between pt-1 border-t border-[#1a1c26] w-full">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Textura:</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border truncate ${
+                brushTexture && brushTexture.id !== 'none'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-[#161722] text-gray-400 border-[#262836]'
+              }`}>
+                {brushTexture?.name || 'Ninguna (Liso)'}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic(8);
+                onOpenTextureModal();
+              }}
+              className="px-2.5 py-1 rounded-lg bg-[#181924] hover:bg-[#222434] border border-[#27293a] text-gray-200 text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
+              title="Abrir catálogo de texturas de pincel"
+            >
+              <Sparkles size={11} className="text-amber-400" />
+              <span>Texturas</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Nivel Inferior: Dock de Herramientas Estilo Nativo IbisPaint */}

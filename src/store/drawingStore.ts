@@ -5,7 +5,7 @@
  * lista de proyectos guardados y navegación entre pantallas.
  */
 
-import { Layer, ToolType, BlendMode, ProjectData } from '../engine/types';
+import { Layer, ToolType, BlendMode, ProjectData, BrushTextureConfig, DEFAULT_BRUSH_TEXTURE } from '../engine/types';
 
 export interface AppState {
   currentScreen: 'studio' | 'gallery' | 'engine';
@@ -19,7 +19,8 @@ export interface AppState {
   brushOpacity: number;      // 0.01 a 1.0
   brushColor: string;        // Hexadecimal #rrggbb
   stabilizerLevel: number;   // 0 a 10 (IbisPaint S-Form)
-  
+  brushTexture: BrushTextureConfig; // Textura de superficie activa
+
   // Capas
   layers: Layer[];
   activeLayerId: string;
@@ -33,6 +34,7 @@ export interface AppState {
   isLayersModalOpen: boolean;
   isColorPickerOpen: boolean;
   isToolPickerOpen: boolean;
+  isTextureModalOpen: boolean;
   isExportModalOpen: boolean;
   isNewCanvasModalOpen: boolean;
 
