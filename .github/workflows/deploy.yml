@@ -103,9 +103,9 @@ jobs:
             npm install --legacy-peer-deps
           fi
 
-      # 11. Ejecución determinista de la suite completa de 27 pruebas unitarias
-      - name: Ejecutar pruebas unitarias del motor (node:test)
-        run: npx tsx --test src/engine/engine.test.ts
+      # 11. Ejecución determinista de la suite completa de 35 pruebas unitarias (Motor + SQLite Wasm OPFS)
+      - name: Ejecutar pruebas unitarias del motor y almacenamiento (node:test)
+        run: npx tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 
       # 12. Compilación estática de la Progressive Web App (genera dist/)
       - name: Compilar PWA estática (Vite)

@@ -12,6 +12,7 @@
  */
 
 import { Point } from './types';
+import { instantiateWasmStreaming } from './wasmStreamingCompiler';
 
 // Código binario WebAssembly compilado a mano para operaciones vectoriales críticas.
 // Exporta funciones: 
@@ -100,9 +101,8 @@ class WasmStrokeEngine {
   public async init(): Promise<boolean> {
     try {
       const binary = createWasmBinary();
-      const module = await WebAssembly.compile(binary.buffer as ArrayBuffer);
-      const instance = await WebAssembly.instantiate(module, {});
-      this.exports = instance.exports as unknown as WasmExports;
+      const result = await instantiateWasmStreaming<WasmExports>(binary);
+      this.exports = result.exports;
       this.isReady = true;
       return true;
     } catch {

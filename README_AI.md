@@ -18,8 +18,10 @@ Este documento proporciona instrucciones de compilación, patrones de arquitectu
 | **Núcleo de Vértices** | Rust (Targets wasm32-unknown-unknown / SIMD128) | `src/rust-core/src/lib.rs`, `src/rust-core/Cargo.toml` |
 | **Gestos Multitáctiles & Mapeo Canónico** | Pinch-to-Zoom, Paneo, Rotación a 2 dedos y `screenToCanvasCoords` | `src/components/StudioScreen.tsx`, `src/engine/transformMath.ts` |
 | **Guardado de Obra a Galería** | Hoja Completa vs Auto-Crop + Cálculo de peso KB/MB en tiempo real | `src/components/ExportModal.tsx`, `src/engine/transformMath.ts` |
+| **Persistencia Masiva SQLite Wasm** | Base de datos ACID sobre OPFS en Web Worker dedicado + Centinela Crash | `src/storage/sqliteStorage.worker.ts`, `src/storage/sqliteStorageService.ts` |
+| **Caché Integral & Aceleración VRAM** | Workbox 10MB + Wasm Streaming JIT + Inmutabilidad Cloudflare + GPU ImageBitmap | `vite.config.ts`, `public/_headers`, `src/engine/wasmStreamingCompiler.ts`, `src/engine/bitmapCache.ts` |
 | **Arquitectura de App & CI/CD** | Progressive Web App (PWA) + GitHub Actions Wasm + Cloudflare Pages | `.github/workflows/deploy.yml`, `public/manifest.json`, `public/sw.js` |
-| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (27 tests deterministas) | `src/engine/engine.test.ts` |
+| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (37 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
 
 ---
 
@@ -29,8 +31,8 @@ Este documento proporciona instrucciones de compilación, patrones de arquitectu
 # 1. Compilación TypeScript y linter estricto:
 npm run lint
 
-# 2. Pruebas unitarias de matemática de curvas, C++23/TS análisis de grosor, Kotlin/Wasm y calco:
-npx --yes tsx --test src/engine/engine.test.ts
+# 2. Pruebas unitarias de matemática de curvas, C++23/TS, Kotlin/Wasm, calco y SQLite Wasm OPFS:
+npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 
 # 3. Compilación de producción con Vite:
 npm run build
@@ -54,3 +56,14 @@ Nunca embeber cálculos trigonométricos o de amortiguación de trazos dentro de
 
 ### 3. Lápiz Vectorial Analítico (Kotlin/Wasm)
 A diferencia de los pinceles raster que pintan píxeles en un mapa de bits estático, el Lápiz Vectorial almacena los puntos y segmentos cúbicos de Bézier $B(t)$. Cuando el usuario hace zoom, `drawingEngine.compositeLayers` re-evalúa los trazos vectoriales a la resolución nativa del dispositivo, logrando **cero pixelación**.
+
+### 4. Persistencia Masiva SQLite Wasm sobre OPFS & Centinela de Crash
+- Todo el I/O pesado de píxeles y vectores corre en el Web Worker `sqliteStorage.worker.ts` sin tocar el hilo de UI.
+- Si el usuario minimiza la PWA o el sistema operativo móvil descarga el proceso de memoria (`visibilitychange` o `pagehide`), se ejecuta un snapshot atómico en la tabla `crash_recovery`.
+- Los errores de JavaScript se interceptan en `window.onerror`, `unhandledrejection` y `ErrorBoundary.tsx`, permitiendo recuperar la ilustración intacta en 1 toque al reiniciar.
+
+### 5. Caché Integral al 100% y Aceleración VRAM
+- Las fuentes compiladas Wasm se prealmacenan en el Service Worker con Workbox configurado a 10MB en `vite.config.ts`.
+- `wasmStreamingCompiler.ts` utiliza `WebAssembly.instantiateStreaming` para compilar bytecode directo a la caché de código máquina de la CPU móvil.
+- Las cabeceras `public/_headers` aplican inmutabilidad (`max-age=31536000, immutable`) en Cloudflare Pages.
+- `GPUBitmapCache` (`bitmapCache.ts`) procesa imágenes con `createImageBitmap` fuera del hilo principal y almacena texturas directamente en la VRAM de la GPU con liberación explícita vía `.close()`.

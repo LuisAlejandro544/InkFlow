@@ -16,6 +16,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   ├── icon.svg                  # Gráfico vectorial base del icono de la app
 │   ├── manifest.json             # Manifiesto Web App (display: standalone, theme-color)
 │   ├── sw.js                     # Service Worker con precaché para soporte offline completo
+│   ├── _headers                  # Cabeceras Cloudflare Pages: inmutabilidad (1 año) para /assets/* y *.wasm
 │   ├── pwa-192x192.png           # Icono de pantalla de inicio Android PWA (192px)
 │   ├── pwa-512x512.png           # Icono de alta resolución para splash screen PWA (512px)
 │   ├── pwa-maskable-512x512.png  # Icono con zona segura para launchers móviles adaptativos
@@ -37,13 +38,20 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   ├── engine/                   # Motor gráfico central desacoplado de la interfaz
 │   │   ├── types.ts              # Definición de tipos: Layer, ToolType, Point, VectorStroke, TracingReference
 │   │   ├── wasmEngine.ts         # Binario Wasm, estabilizador S-Form y cálculo de presión
+│   │   ├── wasmStreamingCompiler.ts # Compilador JIT streaming a código máquina CPU con caché nativa
+│   │   ├── bitmapCache.ts        # Caché VRAM en GPU con ImageBitmap off-thread y gestión LRU
 │   │   ├── transformMath.ts      # Matemática pura: zoom, rotación 2D, snapping, screenToCanvasCoords y auto-crop
 │   │   ├── tracingEngine.ts      # Motor de calco: Extracción Sobel de Lineart, contraste y paletas Wasm
 │   │   ├── strokeAssistant.ts    # Asistente REAL de Grosor: Visión artificial, percentiles y muestreo local
 │   │   ├── kotlinWasmBridge.ts   # Puente de ejecución Kotlin/Wasm para Lápiz Vectorial (cero píxeles al zoom)
 │   │   ├── environmentDetector.ts# Detección determinista de PWA Standalone vs Navegador y excepción de Preview
 │   │   ├── webgpuEngine.ts       # Pipeline WebGPU con shaders WGSL, fallback y composición vectorial
-│   │   └── engine.test.ts        # Suite de 30 pruebas unitarias deterministas (node:test)
+│   │   └── engine.test.ts        # Suite de 32 pruebas unitarias deterministas (node:test)
+│   ├── storage/                  # Motor de Persistencia Masiva SQLite Wasm & OPFS en Web Worker
+│   │   ├── sqliteTypes.ts        # Tipos y contratos IPC de serialización relacional
+│   │   ├── sqliteStorage.worker.ts # Web Worker dedicado ejecutando @sqlite.org/sqlite-wasm sobre OPFS
+│   │   ├── sqliteStorageService.ts # Servicio cliente con auto-guardado debounced y centinela de ciclo de vida
+│   │   └── storage.test.ts       # 5 pruebas unitarias deterministas de SQLite Wasm y Crash Recovery
 │   ├── store/                    # Gestión de estado global
 │   │   └── drawingStore.ts       # Estado del proyecto, capas, paleta y herramientas
 │   ├── components/               # Componentes modulares de interfaz de usuario

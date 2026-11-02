@@ -26,6 +26,9 @@ import { ToolPickerModal } from './components/ToolPickerModal';
 import { ExportModal } from './components/ExportModal';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { detectIsStandalone, detectIsDevOrPreview, shouldShowWelcomeScreen } from './engine/environmentDetector';
+import { sqliteStorageService } from './storage/sqliteStorageService';
+import { CrashRecoveryRecord, StoredProjectPayload } from './storage/sqliteTypes';
+import { gpuBitmapCache } from './engine/bitmapCache';
 
 interface UndoSnapshot {
   layerId: string;
@@ -105,9 +108,11 @@ export default function App() {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
+  // Centinela de Crash y Recuperación de Emergencia
+  const [crashRecovery, setCrashRecovery] = useState<CrashRecoveryRecord | null>(null);
+
   /**
-   * Inicializa las capas para un proyecto dado.
-   * Crea exactamente 1 capa inicial limpia (Capa 1).
+   * Inicializa exactamente 1 capa limpia por defecto
    */
   const initProjectLayers = useCallback((proj: ProjectData) => {
     const layerCanvas = document.createElement('canvas');
@@ -132,12 +137,265 @@ export default function App() {
     redoStackRef.current = [];
     setCanUndo(false);
     setCanRedo(false);
+    return [initialLayer];
   }, []);
 
-  // Inicializar al cargar el componente
+  /**
+   * Carga un proyecto con todas sus capas reconstruidas fielmente desde SQLite Wasm (OPFS)
+   */
+  const loadProjectWithLayers = useCallback(async (proj: ProjectData) => {
+    try {
+      const stored = await sqliteStorageService.loadProject(proj.id);
+      if (stored && stored.layers && stored.layers.length > 0) {
+        const reconstructedLayers: Layer[] = await Promise.all(
+          stored.layers.map((sl) => {
+            return new Promise<Layer>((resolve) => {
+              const canvas = document.createElement('canvas');
+              canvas.width = proj.width;
+              canvas.height = proj.height;
+              const ctx = canvas.getContext('2d')!;
+
+              if (sl.imageDataUrl) {
+                if (typeof createImageBitmap === 'function') {
+                  gpuBitmapCache
+                    .getOrCreate(`layer_${sl.id}_${sl.orderIndex}`, sl.imageDataUrl)
+                    .then((bmp) => {
+                      ctx.drawImage(bmp, 0, 0);
+                      resolve({
+                        id: sl.id,
+                        name: sl.name,
+                        visible: sl.visible,
+                        opacity: sl.opacity,
+                        blendMode: sl.blendMode,
+                        locked: sl.locked,
+                        canvas,
+                        ctx,
+                      });
+                    })
+                    .catch(() => {
+                      const img = new Image();
+                      img.onload = () => {
+                        ctx.drawImage(img, 0, 0);
+                        resolve({
+                          id: sl.id,
+                          name: sl.name,
+                          visible: sl.visible,
+                          opacity: sl.opacity,
+                          blendMode: sl.blendMode,
+                          locked: sl.locked,
+                          canvas,
+                          ctx,
+                        });
+                      };
+                      img.onerror = () => {
+                        resolve({
+                          id: sl.id,
+                          name: sl.name,
+                          visible: sl.visible,
+                          opacity: sl.opacity,
+                          blendMode: sl.blendMode,
+                          locked: sl.locked,
+                          canvas,
+                          ctx,
+                        });
+                      };
+                      img.src = sl.imageDataUrl;
+                    });
+                } else {
+                  const img = new Image();
+                  img.onload = () => {
+                    ctx.drawImage(img, 0, 0);
+                    resolve({
+                      id: sl.id,
+                      name: sl.name,
+                      visible: sl.visible,
+                      opacity: sl.opacity,
+                      blendMode: sl.blendMode,
+                      locked: sl.locked,
+                      canvas,
+                      ctx,
+                    });
+                  };
+                  img.onerror = () => {
+                    resolve({
+                      id: sl.id,
+                      name: sl.name,
+                      visible: sl.visible,
+                      opacity: sl.opacity,
+                      blendMode: sl.blendMode,
+                      locked: sl.locked,
+                      canvas,
+                      ctx,
+                    });
+                  };
+                  img.src = sl.imageDataUrl;
+                }
+              } else {
+                resolve({
+                  id: sl.id,
+                  name: sl.name,
+                  visible: sl.visible,
+                  opacity: sl.opacity,
+                  blendMode: sl.blendMode,
+                  locked: sl.locked,
+                  canvas,
+                  ctx,
+                });
+              }
+            });
+          })
+        );
+
+        setLayers(reconstructedLayers);
+        setActiveLayerId(reconstructedLayers[0]?.id || '');
+        undoStackRef.current = [];
+        redoStackRef.current = [];
+        setCanUndo(false);
+        setCanRedo(false);
+        return;
+      }
+    } catch (err) {
+      console.warn('[SQLite Wasm] No se encontraron capas previas, iniciando limpias:', err);
+    }
+
+    const created = initProjectLayers(proj);
+    sqliteStorageService.scheduleAutoSave(proj, created, 800);
+  }, [initProjectLayers]);
+
+  // Arranque del motor SQLite Wasm & Comprobación de Crash previo
   useEffect(() => {
-    initProjectLayers(currentProject);
-  }, [initProjectLayers, currentProject]);
+    let isCancelled = false;
+
+    async function bootstrap() {
+      try {
+        // Solicitar persistencia permanente al navegador para evitar purgas del SO móvil
+        if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
+          navigator.storage.persist().catch(() => {});
+        }
+
+        await sqliteStorageService.init();
+
+        // 1. Centinela: Verificar si ocurrió un crash o salida abrupta previa
+        const recovery = await sqliteStorageService.checkCrashRecovery();
+        if (recovery && !isCancelled) {
+          setCrashRecovery(recovery);
+        }
+
+        // 2. Cargar proyectos almacenados en SQLite
+        const dbProjects = await sqliteStorageService.getAllProjects();
+        if (!isCancelled && dbProjects && dbProjects.length > 0) {
+          setProjects(dbProjects);
+          const latestProj = dbProjects[0];
+          setCurrentProject(latestProj);
+          await loadProjectWithLayers(latestProj);
+          return;
+        }
+
+        // 3. Si es la primera vez, inicializar proyecto por defecto
+        if (!isCancelled) {
+          const created = initProjectLayers(DEFAULT_PROJECT);
+          sqliteStorageService.saveProject(DEFAULT_PROJECT, created);
+        }
+      } catch (err) {
+        console.warn('Fallo en inicialización de almacenamiento SQLite:', err);
+        if (!isCancelled) {
+          initProjectLayers(DEFAULT_PROJECT);
+        }
+      }
+    }
+
+    bootstrap();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [initProjectLayers, loadProjectWithLayers]);
+
+  /**
+   * Restaura la obra de arte desde el punto de guardado de emergencia ante crash
+   */
+  const handleRestoreCrash = useCallback(async () => {
+    if (!crashRecovery) return;
+
+    try {
+      const payload: StoredProjectPayload = JSON.parse(crashRecovery.payloadJson);
+      setCurrentProject(payload.project);
+
+      const restoredLayers: Layer[] = await Promise.all(
+        payload.layers.map((sl) => {
+          return new Promise<Layer>((resolve) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = payload.project.width;
+            canvas.height = payload.project.height;
+            const ctx = canvas.getContext('2d')!;
+
+            if (sl.imageDataUrl) {
+              const img = new Image();
+              img.onload = () => {
+                ctx.drawImage(img, 0, 0);
+                resolve({
+                  id: sl.id,
+                  name: sl.name,
+                  visible: sl.visible,
+                  opacity: sl.opacity,
+                  blendMode: sl.blendMode,
+                  locked: sl.locked,
+                  canvas,
+                  ctx,
+                });
+              };
+              img.onerror = () => {
+                resolve({
+                  id: sl.id,
+                  name: sl.name,
+                  visible: sl.visible,
+                  opacity: sl.opacity,
+                  blendMode: sl.blendMode,
+                  locked: sl.locked,
+                  canvas,
+                  ctx,
+                });
+              };
+              img.src = sl.imageDataUrl;
+            } else {
+              resolve({
+                id: sl.id,
+                name: sl.name,
+                visible: sl.visible,
+                opacity: sl.opacity,
+                blendMode: sl.blendMode,
+                locked: sl.locked,
+                canvas,
+                ctx,
+              });
+            }
+          });
+        })
+      );
+
+      setLayers(restoredLayers);
+      setActiveLayerId(restoredLayers[0]?.id || '');
+      setCrashRecovery(null);
+      await sqliteStorageService.clearCrashRecovery();
+      setCurrentScreen('studio');
+    } catch (err) {
+      console.error('Error al restaurar sesión recuperada:', err);
+    }
+  }, [crashRecovery]);
+
+  const handleDismissCrash = useCallback(async () => {
+    setCrashRecovery(null);
+    await sqliteStorageService.clearCrashRecovery();
+  }, []);
+
+  /**
+   * Auto-guardado en segundo plano tras cada trazo finalizado
+   */
+  const handleStrokeEnd = useCallback(() => {
+    if (currentProject && layers.length > 0) {
+      sqliteStorageService.scheduleAutoSave(currentProject, layers, 1000);
+    }
+  }, [currentProject, layers]);
 
   /**
    * Guarda un estado en la pila de Deshacer antes de modificar la capa activa
@@ -503,16 +761,16 @@ export default function App() {
   };
 
   /**
-   * Gestión de Galería y Creación de Proyectos
+   * Gestión de Galería y Creación de Proyectos en SQLite Wasm
    */
-  const handleOpenProject = (proj: ProjectData) => {
+  const handleOpenProject = async (proj: ProjectData) => {
     setCurrentProject(proj);
-    initProjectLayers(proj);
+    await loadProjectWithLayers(proj);
     setTracingRef(null);
     setCurrentScreen('studio');
   };
 
-  const handleCreateNewProject = (name: string, width: number, height: number) => {
+  const handleCreateNewProject = async (name: string, width: number, height: number) => {
     const newProj: ProjectData = {
       id: `proj_${Date.now()}`,
       name,
@@ -523,37 +781,53 @@ export default function App() {
       thumbnailUrl: '',
       layerCount: 1,
     };
-    setProjects([newProj, ...projects]);
+    const updated = [newProj, ...projects];
+    setProjects(updated);
     setCurrentProject(newProj);
-    initProjectLayers(newProj);
+    const createdLayers = initProjectLayers(newProj);
     setTracingRef(null);
     setCurrentScreen('studio');
+
+    // Persistir nuevo proyecto en SQLite Wasm (OPFS)
+    try {
+      await sqliteStorageService.saveProject(newProj, createdLayers);
+    } catch (e) {
+      console.warn('Error al guardar nuevo proyecto en SQLite:', e);
+    }
   };
 
-  const handleDuplicateProject = (proj: ProjectData) => {
-    const dupProj: ProjectData = {
-      ...proj,
-      id: `proj_${Date.now()}`,
-      name: `${proj.name} (Copia)`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    setProjects([dupProj, ...projects]);
+  const handleDuplicateProject = async (proj: ProjectData) => {
+    try {
+      const newId = `proj_${Date.now()}`;
+      const newName = `${proj.name} (Copia)`;
+      const dupProj = await sqliteStorageService.duplicateProject(proj.id, newId, newName);
+      setProjects([dupProj, ...projects]);
+    } catch (err) {
+      console.warn('Error al duplicar en SQLite:', err);
+    }
   };
 
-  const handleDeleteProject = (id: string) => {
+  const handleDeleteProject = async (id: string) => {
     if (projects.length <= 1) return;
+    try {
+      await sqliteStorageService.deleteProject(id);
+    } catch (e) {
+      console.warn('Error al eliminar proyecto de SQLite:', e);
+    }
     const updated = projects.filter(p => p.id !== id);
     setProjects(updated);
     if (currentProject.id === id) {
       setCurrentProject(updated[0]);
-      initProjectLayers(updated[0]);
+      await loadProjectWithLayers(updated[0]);
       setTracingRef(null);
     }
   };
 
   const handleUpdateProjectThumbnail = (thumbnailUrl: string) => {
     setProjects(prev => prev.map(p => p.id === currentProject.id ? { ...p, thumbnailUrl, layerCount: layers.length } : p));
+    if (currentProject && layers.length) {
+      sqliteStorageService.scheduleAutoSave({ ...currentProject, thumbnailUrl }, layers, 400);
+    }
   };
 
   return (
@@ -605,6 +879,7 @@ export default function App() {
           canUndo={canUndo}
           canRedo={canRedo}
           tracingRef={tracingRef}
+          crashRecovery={crashRecovery}
           onSelectTool={handleSelectTool}
           onToggleHandMode={handleToggleHandMode}
           onToggleBrushEraser={handleToggleBrushEraser}
@@ -615,6 +890,9 @@ export default function App() {
           onUndo={handleUndo}
           onRedo={handleRedo}
           onSaveUndoSnapshot={handleSaveUndoSnapshot}
+          onStrokeEnd={handleStrokeEnd}
+          onRestoreCrash={handleRestoreCrash}
+          onDismissCrash={handleDismissCrash}
           onOpenLayersModal={() => setIsLayersModalOpen(true)}
           onOpenColorPicker={() => setIsColorPickerOpen(true)}
           onOpenToolPicker={() => setIsToolPickerOpen(true)}

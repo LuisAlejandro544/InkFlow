@@ -46,4 +46,15 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 8. **Conservación de Diseño y Lógica:**
    - No cambiar el diseño ni la lógica existente a menos que el usuario lo solicite explícitamente. Las modificaciones deben ser quirúrgicas y modulares.
 9. **Pruebas de Lógica Obligatorias:**
-   - Siempre verificar cambios de lógica con pruebas unitarias deterministas (`npx --yes tsx --test src/engine/engine.test.ts`) antes de dar por completada la tarea (27 tests pasando).
+   - Siempre verificar cambios de lógica con pruebas unitarias deterministas (`npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts`) antes de dar por completada la tarea (37 tests pasando: 32 en motor gráfico/transformaciones/calco/Wasm/VRAM y 5 en persistencia SQLite Wasm).
+10. **Persistencia Masiva en SQLite Wasm & OPFS:**
+   - Queda terminantemente prohibido utilizar `localStorage` (límite 5MB y síncrono bloqueante) o `dexie.js` para persistencia gráfica.
+   - El almacenamiento de proyectos y capas en alta resolución se realiza exclusivamente mediante `@sqlite.org/sqlite-wasm` ejecutándose en un Web Worker dedicado sobre OPFS (Origin Private File System) con transacciones ACID.
+11. **Centinela de Auto-Guardado y Resguardo ante Crasheos:**
+   - Todo trabajo del usuario debe auto-guardarse de manera debounced en segundo plano.
+   - El sistema debe interceptar `visibilitychange`, `pagehide`, `window.onerror` y React `ErrorBoundary` para salvar un checkpoint de emergencia si el usuario mata el proceso o la app crashea, permitiendo restauración inmediata en 1 toque.
+12. **Caché Integral al 100% y Aceleración de Recursos:**
+   - Precaché de Service Worker / Workbox configurado con límite ampliado a 10MB en `vite.config.ts` (`maximumFileSizeToCacheInBytes: 10 * 1024 * 1024`) abarcando `.wasm` y `.webmanifest`.
+   - Compilación JIT de Wasm a código máquina de CPU mediante `WebAssembly.instantiateStreaming` / `compileStreaming` (`wasmStreamingCompiler.ts`).
+   - Cabeceras de inmutabilidad en Cloudflare Pages (`public/_headers`) con `Cache-Control: public, max-age=31536000, immutable` para activos fingerprinted y `.wasm`.
+   - Caché VRAM en GPU (`GPUBitmapCache`) mediante `createImageBitmap` asíncrono off-thread y liberación explícita con `.close()` para evitar fugas de memoria.

@@ -15,6 +15,7 @@
 import { Layer, Point, ToolType, BlendMode, TracingReference } from './types';
 import { wasmEngine } from './wasmEngine';
 import { kotlinVectorEngine } from './kotlinWasmBridge';
+import { gpuBitmapCache } from './bitmapCache';
 
 // WGSL Shader para sellos de pincel con cálculo de atenuación radial en GPU
 export const BRUSH_WGSL_SHADER = /* wgsl */ `
@@ -211,13 +212,23 @@ export class DrawingEngine {
       }
       const drawW = tracingRef.width * tracingRef.scale;
       const drawH = tracingRef.height * tracingRef.scale;
-      targetCtx.drawImage(
-        tracingRef.image,
-        -drawW / 2,
-        -drawH / 2,
-        drawW,
-        drawH
-      );
+      const cachedBitmap = gpuBitmapCache.get(`tracing_${tracingRef.id}_${tracingRef.filterMode}`);
+      if (cachedBitmap) {
+        targetCtx.drawImage(cachedBitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+      } else {
+        targetCtx.drawImage(
+          tracingRef.image,
+          -drawW / 2,
+          -drawH / 2,
+          drawW,
+          drawH
+        );
+        if (typeof createImageBitmap === 'function') {
+          createImageBitmap(tracingRef.image).then((bmp) => {
+            gpuBitmapCache.set(`tracing_${tracingRef.id}_${tracingRef.filterMode}`, bmp);
+          }).catch(() => {});
+        }
+      }
       targetCtx.restore();
     }
 

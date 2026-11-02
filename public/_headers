@@ -1,0 +1,33 @@
+# Cabeceras de Inmutabilidad y Rendimiento para Cloudflare Pages
+# Permite aprovechar al 100% la caché de disco y memoria del navegador móvil
+
+# 1. Activos inmutables con hash único (Scripts, Estilos y WebAssembly)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# 2. Binarios WebAssembly compilados (.wasm)
+/*.wasm
+  Cache-Control: public, max-age=31536000, immutable
+  Content-Type: application/wasm
+  X-Content-Type-Options: nosniff
+
+# 3. Iconos y fuentes estáticas de la PWA
+/favicon.ico
+  Cache-Control: public, max-age=31536000, immutable
+/icon.svg
+  Cache-Control: public, max-age=31536000, immutable
+/pwa-*.png
+  Cache-Control: public, max-age=31536000, immutable
+/apple-touch-icon.png
+  Cache-Control: public, max-age=31536000, immutable
+
+# 4. Manifiesto Web App
+/manifest.webmanifest
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+# 5. Entrada HTML y Service Worker: Siempre revalidar para recibir actualizaciones instantáneas
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate

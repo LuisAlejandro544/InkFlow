@@ -8,6 +8,8 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RotateCcw, Palette } from 'lucide-react';
 
+import { sqliteStorageService } from '../storage/sqliteStorageService';
+
 interface Props {
   children: ReactNode;
 }
@@ -15,6 +17,7 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  savedSafely: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -23,10 +26,11 @@ export class ErrorBoundary extends Component<Props, State> {
     this.state = {
       hasError: false,
       error: null,
+      savedSafely: false,
     };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return {
       hasError: true,
       error,
@@ -35,6 +39,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    try {
+      sqliteStorageService.emergencySave();
+      this.setState({ savedSafely: true });
+    } catch (e) {
+      console.warn('No se pudo guardar checkpoint de emergencia en ErrorBoundary:', e);
+    }
   }
 
   handleReload = () => {
@@ -80,6 +90,13 @@ export class ErrorBoundary extends Component<Props, State> {
                 <p className="text-[11px] text-gray-300 font-mono break-words">
                   {this.state.error.message || 'Error desconocido'}
                 </p>
+              </div>
+            )}
+
+            {this.state.savedSafely && (
+              <div className="w-full bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-2.5 text-xs text-emerald-300 flex items-center gap-2 text-left">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                <span>Tu obra fue resguardada de forma segura en SQLite Wasm (OPFS) antes de la interrupción.</span>
               </div>
             )}
 

@@ -38,6 +38,7 @@ import {
 import { usePWAInstall } from './usePWAInstall';
 import { TracingAdjuster } from './TracingAdjuster';
 import { StrokeGuideAssistant } from './StrokeGuideAssistant';
+import { CrashRecoveryRecord } from '../storage/sqliteTypes';
 
 interface StudioScreenProps {
   project: ProjectData;
@@ -52,6 +53,7 @@ interface StudioScreenProps {
   canUndo: boolean;
   canRedo: boolean;
   tracingRef: TracingReference | null;
+  crashRecovery?: CrashRecoveryRecord | null;
   onSelectTool: (tool: ToolType) => void;
   onToggleHandMode?: () => void;
   onToggleBrushEraser: () => void;
@@ -62,6 +64,9 @@ interface StudioScreenProps {
   onUndo: () => void;
   onRedo: () => void;
   onSaveUndoSnapshot: () => void;
+  onStrokeEnd?: () => void;
+  onRestoreCrash?: () => void;
+  onDismissCrash?: () => void;
   onOpenLayersModal: () => void;
   onOpenColorPicker: () => void;
   onOpenToolPicker: () => void;
@@ -92,6 +97,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   canUndo,
   canRedo,
   tracingRef,
+  crashRecovery,
   onSelectTool,
   onToggleHandMode,
   onToggleBrushEraser,
@@ -102,6 +108,9 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onUndo,
   onRedo,
   onSaveUndoSnapshot,
+  onStrokeEnd,
+  onRestoreCrash,
+  onDismissCrash,
   onOpenLayersModal,
   onOpenColorPicker,
   onOpenToolPicker,
@@ -700,6 +709,9 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       lastPointRef.current = null;
       renderComposite();
       updateThumbnail();
+      if (onStrokeEnd) {
+        onStrokeEnd();
+      }
     }
   };
 
@@ -920,6 +932,49 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         </div>
       </header>
 
+      {/* BANNER DE RECUPERACIÓN TRAS SALIDA ABRUPTA O CRASH */}
+      {crashRecovery && (
+        <aside
+          aria-label="Aviso de dibujo recuperado de sesión anterior"
+          className="fixed top-14 left-3 right-3 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-md z-40 bg-[#191a24] border border-amber-500/60 rounded-2xl p-2.5 shadow-2xl flex items-center justify-between gap-2.5 animate-in fade-in slide-in-from-top-2 backdrop-blur-md"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+              <Sparkles size={16} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-amber-300 truncate">
+                ¡Dibujo recuperado de sesión anterior!
+              </p>
+              <p className="text-[10px] text-gray-400 truncate">
+                Resguardado en SQLite Wasm (OPFS) • {crashRecovery.layerCount} capa(s)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => {
+                triggerHaptic(12);
+                onRestoreCrash?.();
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer"
+            >
+              Restaurar
+            </button>
+            <button
+              onClick={() => {
+                triggerHaptic(8);
+                onDismissCrash?.();
+              }}
+              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all cursor-pointer"
+              title="Descartar"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </aside>
+      )}
+
       {/* POPUP FLOTANTE NATIVO: ESTABILIZADOR S-FORM (EN CONTENEDOR CON KEY PARA RECONCILIACIÓN SEGURA) */}
       {showStabilizerMenu && (
         <div key="stabilizer-menu-modal" className="fixed inset-0 z-50 pointer-events-auto">
@@ -1056,6 +1111,17 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 </span>
               </div>
             </button>
+
+            {/* Estado de Persistencia SQLite Wasm / OPFS */}
+            <div className="mt-1 pt-2 border-t border-[#252737] px-2 flex items-center justify-between text-[10px]">
+              <div className="flex items-center gap-1.5 text-gray-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="font-semibold">SQLite Wasm (OPFS)</span>
+              </div>
+              <span className="text-emerald-400 font-mono text-[9px] bg-emerald-950/60 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
+                Auto-Guardado
+              </span>
+            </div>
           </div>
         </div>
       )}

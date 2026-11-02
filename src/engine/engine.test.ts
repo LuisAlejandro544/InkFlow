@@ -663,6 +663,58 @@ test('Decisión de Mostrar Pantalla de Bienvenida PWA vs Acceso Directo al Estud
   );
 });
 
+import { instantiateWasmStreaming, isWasmStreamingSupported } from './wasmStreamingCompiler';
+import { GPUBitmapCache } from './bitmapCache';
+
+test('Compilación Streaming de WebAssembly (WebAssembly.instantiateStreaming)', async () => {
+  // Binario Wasm mínimo: '\0asm\x01\0\0\0'
+  const minimalWasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+  
+  const result = await instantiateWasmStreaming(minimalWasm);
+  assert.ok(result.instance, 'Debe instanciar el módulo');
+  assert.ok(result.module, 'Debe compilar el módulo');
+  assert.ok(typeof result.compilationTimeMs === 'number', 'Debe registrar el tiempo de compilación');
+});
+
+test('Caché VRAM en GPU (GPUBitmapCache) con gestión de memoria y LRU', () => {
+  const cache = new GPUBitmapCache();
+  
+  // Mock simple de ImageBitmap
+  let closedA = false;
+  let closedB = false;
+
+  const mockBitmapA = {
+    width: 100,
+    height: 100,
+    close: () => { closedA = true; }
+  } as unknown as ImageBitmap;
+
+  const mockBitmapB = {
+    width: 200,
+    height: 200,
+    close: () => { closedB = true; }
+  } as unknown as ImageBitmap;
+
+  cache.set('key_a', mockBitmapA);
+  assert.equal(cache.get('key_a'), mockBitmapA);
+
+  cache.set('key_b', mockBitmapB);
+  assert.equal(cache.get('key_b'), mockBitmapB);
+
+  const stats = cache.getStats();
+  assert.equal(stats.cachedBitmapsCount, 2);
+
+  // Invalidar clave individual y verificar liberación de VRAM
+  cache.invalidate('key_a');
+  assert.equal(cache.get('key_a'), null);
+  assert.equal(closedA, true, 'Debe invocar close() en el bitmap para liberar memoria VRAM');
+
+  // Limpiar toda la caché
+  cache.clear();
+  assert.equal(closedB, true, 'Debe invocar close() en todos los bitmaps al limpiar la caché');
+  assert.equal(cache.getStats().cachedBitmapsCount, 0);
+});
+
 
 
 
