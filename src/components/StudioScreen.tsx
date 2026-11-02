@@ -209,8 +209,10 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const activeLayer = layers.find(l => l.id === activeLayerId) || layers[0];
 
   /**
-   * Redibuja la composición de todas las capas en el canvas de visualización,
-   * incluyendo la foto de calco activa si existe.
+   * Redibuja la composición de todas las capas en el canvas de visualización con
+   * súper-resolución dinámica adaptada a la escala de zoom y al DPR del dispositivo.
+   * Garantiza que el Lápiz Vectorial analítico de Kotlin/Wasm se evalúe con
+   * antialiasing nítido de precisión submétrica sin pixelarse jamás.
    */
   const renderComposite = useCallback(() => {
     const displayCanvas = displayCanvasRef.current;
@@ -218,15 +220,36 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     const ctx = displayCanvas.getContext('2d');
     if (!ctx) return;
 
+    // Aceleración de nitidez: Super-resolución adaptada al zoom y a la densidad de píxeles del móvil
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+    const currentZoom = Math.max(1, scaleRef.current);
+    const superScale = Math.min(Math.max(dpr, 1) * Math.min(currentZoom, 3), 3.5);
+
+    const targetW = Math.round(project.width * superScale);
+    const targetH = Math.round(project.height * superScale);
+
+    if (displayCanvas.width !== targetW || displayCanvas.height !== targetH) {
+      displayCanvas.width = targetW;
+      displayCanvas.height = targetH;
+    }
+
+    ctx.save();
+    ctx.setTransform(superScale, 0, 0, superScale, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     drawingEngine.compositeLayers(
       ctx,
       layers,
       project.width,
       project.height,
       '#ffffff',
-      scaleRef.current,
-      tracingRef
+      scaleRef.current * superScale,
+      tracingRef,
+      currentVectorStrokeRef.current
     );
+
+    ctx.restore();
   }, [layers, project.width, project.height, tracingRef]);
 
   useEffect(() => {
@@ -606,18 +629,18 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         segments: [],
         createdAt: Date.now(),
       };
+    } else {
+      drawingEngine.drawStrokeSegment(
+        activeLayer,
+        startPoint,
+        startPoint,
+        activeTool,
+        brushColor,
+        brushSize,
+        brushOpacity,
+        brushTexture
+      );
     }
-
-    drawingEngine.drawStrokeSegment(
-      activeLayer,
-      startPoint,
-      startPoint,
-      activeTool,
-      brushColor,
-      brushSize,
-      brushOpacity,
-      brushTexture
-    );
     renderComposite();
   };
 
@@ -655,16 +678,6 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       );
       currentVectorStrokeRef.current.segments = segments;
 
-      drawingEngine.drawStrokeSegment(
-        activeLayer,
-        lastPointRef.current,
-        smoothPoint,
-        activeTool,
-        brushColor,
-        brushSize,
-        brushOpacity,
-        brushTexture
-      );
       renderComposite();
       lastPointRef.current = smoothPoint;
       return;

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Layer } from '../engine/types';
 import { calculateArtworkBoundingBox, BoundingBoxResult } from '../engine/transformMath';
+import { kotlinVectorEngine } from '../engine/kotlinWasmBridge';
 
 interface ExportModalProps {
   layers: Layer[];
@@ -125,6 +126,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         sourceX, sourceY, sourceW, sourceH,
         0, 0, w, h
       );
+
+      // Renderizar trazos vectoriales de Kotlin/Wasm para esta capa sin pérdida de resolución
+      const vectorStrokes = kotlinVectorEngine.getStrokesForLayer(layer.id);
+      if (vectorStrokes && vectorStrokes.length > 0) {
+        ctx.save();
+        ctx.scale(scale, scale);
+        ctx.translate(-sourceX, -sourceY);
+        kotlinVectorEngine.renderVectorStrokes(ctx, vectorStrokes, scale);
+        ctx.restore();
+      }
+
       ctx.restore();
     }
 

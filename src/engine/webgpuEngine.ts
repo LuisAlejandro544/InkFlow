@@ -208,7 +208,8 @@ export class DrawingEngine {
     height: number,
     backgroundColor: string = '#ffffff',
     currentScale: number = 1.0,
-    tracingRef?: TracingReference | null
+    tracingRef?: TracingReference | null,
+    liveVectorStroke?: import('./types').VectorStroke | null
   ) {
     targetCtx.save();
     
@@ -259,6 +260,11 @@ export class DrawingEngine {
       const vectorStrokes = kotlinVectorEngine.getStrokesForLayer(layer.id);
       if (vectorStrokes && vectorStrokes.length > 0) {
         kotlinVectorEngine.renderVectorStrokes(targetCtx, vectorStrokes, currentScale);
+      }
+
+      // Si hay un trazo vectorial en vivo dibujándose en esta capa, renderizarlo en tiempo real
+      if (liveVectorStroke && liveVectorStroke.layerId === layer.id && liveVectorStroke.segments.length > 0) {
+        kotlinVectorEngine.renderVectorStrokes(targetCtx, [liveVectorStroke], currentScale);
       }
 
       targetCtx.restore();

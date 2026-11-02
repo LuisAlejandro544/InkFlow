@@ -6,6 +6,8 @@ node_modules/
 # Compilación y producción
 dist/
 build/
+build-cpp/
+CMakeFiles/
 coverage/
 dev-dist/
 

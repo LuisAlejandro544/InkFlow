@@ -24,5 +24,15 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["dist"]
+  "include": [
+    "src",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "dist",
+    "build",
+    "build-cpp",
+    "node_modules",
+    "**/*.dir/**"
+  ]
 }

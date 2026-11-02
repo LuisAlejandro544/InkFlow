@@ -13,7 +13,11 @@
  */
 
 import React, { useState } from 'react';
-import { X, Maximize2, Check, ArrowUpLeft, ArrowUp, ArrowUpRight, ArrowLeft, ArrowRight, ArrowDownLeft, ArrowDown, ArrowDownRight, Dot, Sparkles } from 'lucide-react';
+import { 
+  X, Maximize2, Check, ArrowUpLeft, ArrowUp, ArrowUpRight, 
+  ArrowLeft, ArrowRight, ArrowDownLeft, ArrowDown, ArrowDownRight, 
+  Dot, Sparkles, Compass, CheckCircle2, ChevronDown, ChevronUp 
+} from 'lucide-react';
 import { CanvasAnchor, CANVAS_EXPANSION_PRESETS, clampCanvasDimension, calculateResizeOffsets } from '../engine/canvasResizeMath';
 
 interface CanvasResizeModalProps {
@@ -32,6 +36,7 @@ export const CanvasResizeModal: React.FC<CanvasResizeModalProps> = ({
   const [newWidth, setNewWidth] = useState<number>(currentWidth);
   const [newHeight, setNewHeight] = useState<number>(currentHeight);
   const [anchor, setAnchor] = useState<CanvasAnchor>('center');
+  const [showCorners, setShowCorners] = useState<boolean>(false);
 
   const triggerHaptic = (ms = 10) => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -64,16 +69,44 @@ export const CanvasResizeModal: React.FC<CanvasResizeModalProps> = ({
   const isExpanded = newWidth !== currentWidth || newHeight !== currentHeight;
   const { offsetX, offsetY } = calculateResizeOffsets(currentWidth, currentHeight, newWidth, newHeight, anchor);
 
-  const anchorIcons: { id: CanvasAnchor; label: string; icon: React.ReactNode }[] = [
-    { id: 'top-left', label: 'Arriba Izq.', icon: <ArrowUpLeft size={16} /> },
-    { id: 'top', label: 'Arriba', icon: <ArrowUp size={16} /> },
-    { id: 'top-right', label: 'Arriba Der.', icon: <ArrowUpRight size={16} /> },
-    { id: 'left', label: 'Izquierda', icon: <ArrowLeft size={16} /> },
-    { id: 'center', label: 'Centro (Uniforme)', icon: <Dot size={22} className="stroke-[4]" /> },
-    { id: 'right', label: 'Derecha', icon: <ArrowRight size={16} /> },
-    { id: 'bottom-left', label: 'Abajo Izq.', icon: <ArrowDownLeft size={16} /> },
-    { id: 'bottom', label: 'Abajo', icon: <ArrowDown size={16} /> },
-    { id: 'bottom-right', label: 'Abajo Der.', icon: <ArrowDownRight size={16} /> },
+  const MAIN_DIRECTIONS: { id: CanvasAnchor; label: string; desc: string; icon: React.ReactNode }[] = [
+    { 
+      id: 'center', 
+      label: 'Centro (Uniforme)', 
+      desc: 'Márgenes parejos en los 4 bordes del dibujo', 
+      icon: <Dot size={24} className="stroke-[5] text-amber-400" /> 
+    },
+    { 
+      id: 'bottom', 
+      label: 'Hacia Abajo (Manga / Cómics)', 
+      desc: 'Mantiene el dibujo arriba y agrega espacio abajo', 
+      icon: <ArrowDown size={18} className="text-amber-400" /> 
+    },
+    { 
+      id: 'right', 
+      label: 'Hacia la Derecha', 
+      desc: 'Mantiene el dibujo a la izquierda y amplía lateral derecho', 
+      icon: <ArrowRight size={18} className="text-amber-400" /> 
+    },
+    { 
+      id: 'top', 
+      label: 'Hacia Arriba', 
+      desc: 'Mantiene el dibujo abajo y agrega espacio arriba', 
+      icon: <ArrowUp size={18} className="text-amber-400" /> 
+    },
+    { 
+      id: 'left', 
+      label: 'Hacia la Izquierda', 
+      desc: 'Mantiene el dibujo a la derecha y amplía lateral izquierdo', 
+      icon: <ArrowLeft size={18} className="text-amber-400" /> 
+    },
+  ];
+
+  const CORNER_DIRECTIONS: { id: CanvasAnchor; label: string; icon: React.ReactNode }[] = [
+    { id: 'top-left', label: 'Esquina Arriba-Izq.', icon: <ArrowUpLeft size={16} /> },
+    { id: 'top-right', label: 'Esquina Arriba-Der.', icon: <ArrowUpRight size={16} /> },
+    { id: 'bottom-left', label: 'Esquina Abajo-Izq.', icon: <ArrowDownLeft size={16} /> },
+    { id: 'bottom-right', label: 'Esquina Abajo-Der.', icon: <ArrowDownRight size={16} /> },
   ];
 
   return (
@@ -208,37 +241,132 @@ export const CanvasResizeModal: React.FC<CanvasResizeModalProps> = ({
             </div>
           </div>
 
-          {/* 3. Matriz de Anclaje 3x3 (Hacia dónde expandir el nuevo espacio) */}
-          <div className="space-y-2 bg-[#111218] border border-[#232533] p-3 rounded-2xl">
+          {/* 3. Previsualización y Dirección de Expansión Nativa */}
+          <div className="space-y-3 bg-[#111218] border border-[#232533] p-3.5 rounded-2xl">
             <div className="flex items-center justify-between">
-              <label className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">
-                Punto de Anclaje del Dibujo Actual
+              <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Compass size={14} className="text-amber-400" />
+                Hacia Dónde Expandir el Lienzo
               </label>
-              <span className="text-[9px] font-bold text-amber-400">
-                {anchorIcons.find((a) => a.id === anchor)?.label}
+              <span className="text-[10px] font-bold text-amber-400">
+                {MAIN_DIRECTIONS.find((a) => a.id === anchor)?.label || CORNER_DIRECTIONS.find((a) => a.id === anchor)?.label}
               </span>
             </div>
-            <p className="text-[10px] text-gray-400">
-              Determina hacia qué lado de la hoja se agregará el nuevo espacio vacío.
-            </p>
-            <div className="grid grid-cols-3 gap-1.5 max-w-[200px] mx-auto py-1">
-              {anchorIcons.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    triggerHaptic(8);
-                    setAnchor(item.id);
-                  }}
-                  className={`h-11 rounded-xl flex items-center justify-center transition-all ${
-                    anchor === item.id
-                      ? 'bg-amber-500 text-black font-bold shadow-md scale-105'
-                      : 'bg-[#1c1d27] text-gray-400 hover:text-gray-200 border border-[#2b2d3d] active:scale-95'
+
+            {/* Mini-Lienzo Interactivo con Previsualización Geométrica */}
+            <div className="relative w-full h-24 bg-[#0a0b0e] border border-[#222430] rounded-xl flex items-center justify-center p-2 overflow-hidden shadow-inner">
+              <div 
+                className="relative border-2 border-dashed border-amber-500/60 bg-amber-500/10 rounded-lg flex items-center justify-center transition-all duration-300 shadow-sm"
+                style={{
+                  width: '90%',
+                  maxWidth: '220px',
+                  height: '80%',
+                  maxHeight: '76px',
+                }}
+              >
+                {/* Cuadro que representa el dibujo actual reubicado */}
+                <div 
+                  className={`absolute bg-[#1e202b] border border-amber-400 rounded-md shadow-md flex items-center justify-center text-[9px] font-bold text-white transition-all duration-300 ${
+                    anchor === 'center' ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' :
+                    anchor === 'bottom' ? 'top-1 left-1/2 -translate-x-1/2' :
+                    anchor === 'top' ? 'bottom-1 left-1/2 -translate-x-1/2' :
+                    anchor === 'right' ? 'top-1/2 left-1 -translate-y-1/2' :
+                    anchor === 'left' ? 'top-1/2 right-1 -translate-y-1/2' :
+                    anchor === 'top-left' ? 'bottom-1 right-1' :
+                    anchor === 'top-right' ? 'bottom-1 left-1' :
+                    anchor === 'bottom-left' ? 'top-1 right-1' : 'top-1 left-1'
                   }`}
-                  title={item.label}
+                  style={{
+                    width: `${Math.max(35, Math.min(80, (currentWidth / newWidth) * 75))}%`,
+                    height: `${Math.max(35, Math.min(80, (currentHeight / newHeight) * 75))}%`,
+                  }}
                 >
-                  {item.icon}
+                  <span className="text-amber-300 text-[8px] font-semibold">Tu Dibujo</span>
+                </div>
+                <span className="absolute bottom-1 right-1.5 text-[8px] font-mono font-bold text-amber-400/80">
+                  +{Math.max(0, newWidth - currentWidth)}×+{Math.max(0, newHeight - currentHeight)}
+                </span>
+              </div>
+            </div>
+
+            {/* Opciones Móviles Táctiles Nativas (Sin botones desktop estilo Photoshop) */}
+            <div className="space-y-1.5 pt-1">
+              {MAIN_DIRECTIONS.map((item) => {
+                const isSelected = anchor === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      triggerHaptic(10);
+                      setAnchor(item.id);
+                    }}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border flex items-center justify-between gap-2.5 transition-all active:scale-[0.98] text-left cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-500/15 border-amber-500/80 shadow-md ring-1 ring-amber-500/40'
+                        : 'bg-[#181a24] hover:bg-[#202230] border-[#2b2d3d] text-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        isSelected ? 'bg-amber-500 text-black' : 'bg-[#222432] text-gray-400'
+                      }`}>
+                        {item.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className={`text-xs font-bold ${isSelected ? 'text-amber-300' : 'text-gray-200'}`}>
+                          {item.label}
+                        </div>
+                        <div className="text-[10px] text-gray-400 truncate">
+                          {item.desc}
+                        </div>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <CheckCircle2 size={16} className="text-amber-400 shrink-0 stroke-[2.5]" />
+                    )}
+                  </button>
+                );
+              })}
+
+              {/* Botón Desplegable para Esquinas Opcionales */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic(6);
+                    setShowCorners(!showCorners);
+                  }}
+                  className="w-full py-1.5 text-[11px] font-semibold text-gray-400 hover:text-amber-300 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                >
+                  <span>{showCorners ? 'Ocultar esquinas' : 'Más opciones (Esquinas diagonales)'}</span>
+                  {showCorners ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
-              ))}
+
+                {showCorners && (
+                  <div className="grid grid-cols-2 gap-1.5 pt-1.5 animate-in fade-in duration-200">
+                    {CORNER_DIRECTIONS.map((c) => {
+                      const isSelected = anchor === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => {
+                            triggerHaptic(8);
+                            setAnchor(c.id);
+                          }}
+                          className={`py-2 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition-all active:scale-95 ${
+                            isSelected
+                              ? 'bg-amber-500 text-black font-bold border-amber-400 shadow'
+                              : 'bg-[#181a24] text-gray-300 border-[#2b2d3d] hover:bg-[#202230]'
+                          }`}
+                        >
+                          {c.icon}
+                          <span className="text-[10px]">{c.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
