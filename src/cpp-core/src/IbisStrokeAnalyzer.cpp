@@ -270,63 +270,6 @@ namespace ibis::vision::stroke {
     return bridge_pixels;
 }
 
-} // namespace ibis::vision::stroke
-
-// ============================================================================
-// Enlaces C-ABI para JavaScript y WebAssembly
-// ============================================================================
-extern "C" {
-
-float ibis_analyze_stroke_role(
-    const uint8_t* rgba_data,
-    int32_t width,
-    int32_t height,
-    int32_t role_index,
-    float display_scale
-) {
-    if (!rgba_data || width <= 0 || height <= 0) return 12.0f;
-    std::span<const uint8_t> view(rgba_data, static_cast<size_t>(width * height * 4));
-    ibis::vision::stroke::StrokeAnalyzer analyzer;
-    const auto profile = analyzer.analyze_image_stroke_thickness(view, width, height, display_scale);
-
-    switch (role_index) {
-        case 0: return profile.silhouette_px;
-        case 1: return profile.structure_px;
-        case 2: return profile.details_px;
-        case 3: return profile.hatching_px;
-        default: return profile.structure_px;
-    }
-}
-
-float ibis_sample_point_thickness(
-    const uint8_t* rgba_data,
-    int32_t width,
-    int32_t height,
-    int32_t x,
-    int32_t y
-) {
-    if (!rgba_data || width <= 0 || height <= 0) return -1.0f;
-    std::span<const uint8_t> view(rgba_data, static_cast<size_t>(width * height * 4));
-    ibis::vision::stroke::StrokeAnalyzer analyzer;
-    auto val = analyzer.sample_local_thickness(view, width, height, x, y);
-    return val.value_or(-1.0f);
-}
-
-int32_t ibis_close_boundary_gaps(
-    const uint8_t* rgba_data,
-    int32_t width,
-    int32_t height,
-    int32_t max_gap_px,
-    uint8_t* output_mask
-) {
-    if (!rgba_data || !output_mask || width <= 0 || height <= 0) return 0;
-    const size_t total = static_cast<size_t>(width * height);
-    std::span<const uint8_t> rgba_view(rgba_data, total * 4);
-    std::span<uint8_t> mask_view(output_mask, total);
-    ibis::vision::stroke::StrokeAnalyzer analyzer;
-    return static_cast<int32_t>(analyzer.close_boundary_gaps(rgba_view, width, height, max_gap_px, mask_view));
-}
-
 auto StrokeAnalyzer::apply_sobel_lineart(
     std::span<const uint8_t> rgba_pixels,
     int32_t width,
@@ -392,6 +335,63 @@ auto StrokeAnalyzer::apply_sobel_lineart(
     return true;
 }
 
+} // namespace ibis::vision::stroke
+
+// ============================================================================
+// Enlaces C-ABI para JavaScript y WebAssembly
+// ============================================================================
+extern "C" {
+
+float ibis_analyze_stroke_role(
+    const uint8_t* rgba_data,
+    int32_t width,
+    int32_t height,
+    int32_t role_index,
+    float display_scale
+) {
+    if (!rgba_data || width <= 0 || height <= 0) return 12.0f;
+    std::span<const uint8_t> view(rgba_data, static_cast<size_t>(width * height * 4));
+    ibis::vision::stroke::StrokeAnalyzer analyzer;
+    const auto profile = analyzer.analyze_image_stroke_thickness(view, width, height, display_scale);
+
+    switch (role_index) {
+        case 0: return profile.silhouette_px;
+        case 1: return profile.structure_px;
+        case 2: return profile.details_px;
+        case 3: return profile.hatching_px;
+        default: return profile.structure_px;
+    }
+}
+
+float ibis_sample_point_thickness(
+    const uint8_t* rgba_data,
+    int32_t width,
+    int32_t height,
+    int32_t x,
+    int32_t y
+) {
+    if (!rgba_data || width <= 0 || height <= 0) return -1.0f;
+    std::span<const uint8_t> view(rgba_data, static_cast<size_t>(width * height * 4));
+    ibis::vision::stroke::StrokeAnalyzer analyzer;
+    auto val = analyzer.sample_local_thickness(view, width, height, x, y);
+    return val.value_or(-1.0f);
+}
+
+int32_t ibis_close_boundary_gaps(
+    const uint8_t* rgba_data,
+    int32_t width,
+    int32_t height,
+    int32_t max_gap_px,
+    uint8_t* output_mask
+) {
+    if (!rgba_data || !output_mask || width <= 0 || height <= 0) return 0;
+    const size_t total = static_cast<size_t>(width * height);
+    std::span<const uint8_t> rgba_view(rgba_data, total * 4);
+    std::span<uint8_t> mask_view(output_mask, total);
+    ibis::vision::stroke::StrokeAnalyzer analyzer;
+    return static_cast<int32_t>(analyzer.close_boundary_gaps(rgba_view, width, height, max_gap_px, mask_view));
+}
+
 int32_t ibis_apply_sobel_lineart(
     const uint8_t* rgba_data,
     int32_t width,
@@ -408,5 +408,5 @@ int32_t ibis_apply_sobel_lineart(
     return analyzer.apply_sobel_lineart(in_view, width, height, invert != 0, threshold, out_view) ? 1 : 0;
 }
 
-}
+} // extern "C"
 
