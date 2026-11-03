@@ -48,9 +48,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       {/* 1. BARRA SUPERIOR ELEGANTE */}
       <header className="h-14 px-4 sm:px-6 bg-[#12131a]/90 backdrop-blur-md border-b border-[#20222f] flex items-center justify-between sticky top-0 z-30 shadow-md">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-black font-black text-sm shadow-md shadow-amber-500/20">
-            IF
-          </div>
+          <img
+            src="/icon.svg"
+            alt="InkFlow Studio"
+            className="w-8 h-8 rounded-xl shadow-md shadow-amber-500/20 object-contain"
+          />
           <div>
             <h1 className="text-sm font-bold text-white tracking-wide flex items-center gap-1.5">
               <span>InkFlow Studio</span>

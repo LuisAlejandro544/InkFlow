@@ -42,6 +42,12 @@ export default defineConfig(() => {
               type: 'image/png',
               purpose: 'maskable',
             },
+            {
+              src: '/icon.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+              purpose: 'any maskable',
+            },
           ],
         },
         workbox: {
