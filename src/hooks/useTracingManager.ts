@@ -21,6 +21,7 @@ import {
   extractDominantColorsFromImage 
 } from '../engine/tracingEngine';
 import { analyzeImageStrokeThickness } from '../engine/strokeAssistant';
+import { gpuBitmapCache } from '../engine/bitmapCache';
 
 export function useTracingManager() {
   const [tracingRef, setTracingRef] = useState<TracingReference | null>(null);
@@ -68,6 +69,12 @@ export function useTracingManager() {
             }
           } catch {
             // Ignorar restricciones
+          }
+
+          if (typeof createImageBitmap === 'function') {
+            createImageBitmap(finalImg).then((bmp) => {
+              gpuBitmapCache.set(`tracing_${newTracing.id}_original`, bmp);
+            }).catch(() => {});
           }
 
           setTracingRef(newTracing);
@@ -220,6 +227,11 @@ export function useTracingManager() {
         ctx.putImageData(imgData, 0, 0);
         const filtered = new Image();
         filtered.onload = () => {
+          if (typeof createImageBitmap === 'function') {
+            createImageBitmap(filtered).then((bmp) => {
+              gpuBitmapCache.set(`tracing_${prev.id}_${mode}`, bmp);
+            }).catch(() => {});
+          }
           setTracingRef((cur) => (cur ? { ...cur, image: filtered, filterMode: mode } : null));
         };
         filtered.src = off.toDataURL();

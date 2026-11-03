@@ -156,32 +156,33 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
 
 ---
 
-## 🌾 Fase 4.9: Texturas de Pincel Estilo IbisPaint & Live Preview (Completada ✅)
+## 🌾 Fase 4.9: Catálogo de 9 Texturas de Trazo & Rediseño Nativo (Completada ✅)
 
-- [x] **Catálogo de 4 Texturas Clásicas de Ilustración Profesional:**
-  - `Papel Acuarela`: Rugosidad orgánica de fibras de papel Canson / Torchon para acumulación de pigmento.
-  - `Lienzo Textil`: Trama ortogonal cruzada de lino para técnicas de óleo y pintura digital.
-  - `Trama Manga (Halftone / Screentone)`: Puntos de imprenta simétricos a 45° para sombreado manga y cómics.
-  - `Carboncillo Poroso`: Grano seco, áspero y desgranado con micro-porosidad estocástica.
-  - Opción limpia `Ninguna (Liso)` para volver al trazo plano instantáneamente.
-- [x] **Previsualización Interactiva sin Necesidad de Elegir (Estilo IbisPaint):**
-  - Muestra interactiva de trazo en vivo en la cabecera del modal (`BrushTextureModal.tsx`) renderizada dinámicamente con el color actual y tamaño de pincel del artista.
-  - El usuario puede inspeccionar y probar cualquier textura tocándola libremente sin modificar su pincel de trabajo hasta pulsar `[✨ Aplicar]`.
-  - Deslizadores en tiempo real de **Profundidad / Intensidad** (10% a 100%) y **Escala de Grano** (0.5x a 2.5x).
+- [x] **Catálogo Completo de 9 Texturas de Superficie de Ilustración:**
+  - `Lisa`: Trazo continuo uniforme y sólido sin grano de superficie.
+  - `Grano`: Micro-grano homogéneo estocástico que simula pigmento fino sobre papel suave.
+  - `Rugosa`: Textura con bloques irregulares de grano grueso y relieve áspero.
+  - `Trama`: Trama manga diagonal nítida a 45 grados para sombreado clásico.
+  - `Salpicada`: Micro-salpicaduras dispersas estilo aerosol con puntos variables.
+  - `Papel`: Fibras orgánicas de papel de ilustración Canson con valles de absorción.
+  - `Tela`: Entramado cruzado ortogonal de lino para técnicas de pintura y óleo.
+  - `Acuarela`: Efecto de acumulación de agua y pigmento con gradientes tonales suaves.
+  - `Carbón`: Carboncillo seco y desgranado con micro-huecos en los valles del trazo.
+- [x] **Rediseño Ergonómico Nativo Móvil (Inspirado en la Referencia):**
+  - Diálogo modal con esquinas redondeadas generosas (`rounded-[32px]`) y superficie lavanda limpia.
+  - Encabezado con título "Textura del trazo" y descripción contextual clara.
+  - Tarjetas individuales alargadas con recuadro blanco que renderiza la onda en S del trazo con la textura aplicada.
+  - Nombres legibles en tipografía limpia, sin truncamientos ni cajas recargadas.
+  - Selección táctil inmediata con vibración háptica, borde destacado `#6750a4` y checkmark `✓` a la derecha.
+  - Botón de texto "Cerrar" en la esquina inferior derecha.
 - [x] **Motor Matemático Determinista de Alto Rendimiento (`brushTextureEngine.ts`):**
-  - Muestreo $O(1)$ por punto de trazo con modulación armónica, onda ortogonal textil y semitonos a 45°.
+  - Muestreo $O(1)$ por punto de trazo con modulación armónica, onda ortogonal textil, semitonos a 45° y grano estocástico.
   - Modulación integrada en `drawStrokeSegment` (`webgpuEngine.ts`) con 60–120 FPS fluidos en teléfonos móviles.
 - [x] **Acceso Táctil Ergonómico:**
-  - Fila dedicada e indicador de textura en `StudioBottomBar.tsx` junto a los deslizadores de grosor y opacidad.
+  - Fila dedicada e indicador de textura en `StudioBottomBar.tsx` mostrando el nombre de la textura activa.
   - Banner de acceso directo en `ToolPickerModal.tsx`.
-- [x] **Optimización Industrial de CI/CD para Cloudflare Pages:**
-  - Integración de `wasm-opt` (Binaryen) con `-O3 --enable-simd --enable-bulk-memory` para reducir 25-40% el peso de los `.wasm`.
-  - Despliegue dual configurable en `workflow_dispatch` (Producción en `main` vs Vista Previa Aislada en `preview-<id>`).
-  - Panel de Resumen Ejecutivo en GitHub (`$GITHUB_STEP_SUMMARY`) con enlace directo a la app, peso de `dist` y métricas.
-  - Inyección y verificación estricta de cabeceras COOP/COEP para `SharedArrayBuffer` y SQLite Wasm OPFS.
-  - Validación de tipos `npm run lint` pre-despliegue.
-- [x] **46 Pruebas Unitarias Deterministas:**
-  - 41 tests de motor gráfico, matemática, Wasm, expansión, cierre de huecos, accesorios y texturas + 5 tests de SQLite Wasm OPFS.
+- [x] **48 Pruebas Unitarias Deterministas:**
+  - 43 tests de motor gráfico, matemática, Wasm, expansión, cierre de huecos, accesorios, texturas, preservación de herramientas y desacoplamiento de calco + 5 tests de SQLite Wasm OPFS.
 
 ---
 
@@ -192,3 +193,16 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
 - [ ] Herramienta de Lazo de Selección (*Lasso Tool*) con transformación libre (rotación, escala y distorsión).
 - [ ] Grabación de lapso de tiempo (*Time-lapse Video Recorder*) del proceso de dibujo usando `MediaRecorder` o `WebCodecs`.
 - [ ] Filtros avanzados de post-procesamiento fotográfico (LUTs cromáticos manga y aberración cromática).
+
+---
+
+## 📦 Fase 6: Empaquetado y Publicación del Motor Puro Headless en npm (@inkflow/core)
+
+- [ ] **Desacoplamiento del Motor Gráfico Headless (`@inkflow/core`):**
+  - Empaquetado de `src/engine/` como SDK independiente agnóstico de interfaz (usable en React, Vue, Svelte, Angular, Vanilla JS o entornos Node/Wasm).
+  - Integración de binarios Wasm precompilados (Kotlin/Wasm para curvas Bézier y Catmull-Rom continuas, C++23 para análisis de grosor y cierre de huecos de 0-10px, y Rust para buffers de vértices).
+  - Shaders WGSL tipados para WebGPU con fallback automático a Canvas 2D/WebGL2 acelerado.
+  - Módulo de persistencia masiva desacoplado con SQLite Wasm sobre OPFS y centinela de rescate ante crash en Web Worker dedicado.
+  - API pública limpia orientada a eventos (`pointerDown`, `pointerMove`, `pointerUp`, `floodFill`, `setStabilizer`, `setGapClosing`, `resizeCanvas`, `exportImage`).
+  - Definiciones de TypeScript estrictas (`.d.ts`) con tipado exhaustivo y autocompletado en cualquier editor.
+  - Publicación oficial en **npm** bajo licencia permisiva **Apache 2.0** con guía de inicio rápido para desarrolladores de apps de dibujo, notas con stylus, plataformas de IA inpainting y pizarras interactivas.

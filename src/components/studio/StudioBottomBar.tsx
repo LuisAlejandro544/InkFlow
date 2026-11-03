@@ -16,7 +16,8 @@
 import React from 'react';
 import { 
   Paintbrush, Eraser, PenTool, Sliders, Hand, Move, 
-  Layers as LayersIcon, Sparkles 
+  Layers as LayersIcon, Sparkles, PaintBucket, Pipette,
+  SprayCan, Feather, Highlighter
 } from 'lucide-react';
 import { Layer, ToolType, TracingReference, BrushTextureConfig } from '../../engine/types';
 import { StrokeGuideAssistant } from '../StrokeGuideAssistant';
@@ -46,6 +47,71 @@ export interface StudioBottomBarProps {
   triggerHaptic: (duration?: number) => void;
 }
 
+/**
+ * Retorna el icono, etiqueta legible y estilos temáticos para cada herramienta de dibujo.
+ */
+function getToolVisualInfo(tool: ToolType) {
+  switch (tool) {
+    case 'vector_pencil':
+      return {
+        name: 'Vector',
+        icon: <PenTool size={18} className="text-amber-300" />,
+        colorClass: 'bg-amber-500/15 border-amber-400/70 text-amber-300',
+        activeColor: 'text-amber-300',
+      };
+    case 'eraser':
+      return {
+        name: 'Goma',
+        icon: <Eraser size={18} className="text-red-300" />,
+        colorClass: 'bg-red-950/40 border-red-500/60 text-red-300',
+        activeColor: 'text-red-300',
+      };
+    case 'bucket':
+      return {
+        name: 'Bote',
+        icon: <PaintBucket size={18} className="text-indigo-300" />,
+        colorClass: 'bg-indigo-500/20 border-indigo-400/70 text-indigo-300',
+        activeColor: 'text-indigo-300',
+      };
+    case 'eyedropper':
+      return {
+        name: 'Gotero',
+        icon: <Pipette size={18} className="text-cyan-300" />,
+        colorClass: 'bg-cyan-500/20 border-cyan-400/70 text-cyan-300',
+        activeColor: 'text-cyan-300',
+      };
+    case 'airbrush':
+      return {
+        name: 'Spray',
+        icon: <SprayCan size={18} className="text-purple-300" />,
+        colorClass: 'bg-purple-500/20 border-purple-400/70 text-purple-300',
+        activeColor: 'text-purple-300',
+      };
+    case 'pencil':
+      return {
+        name: 'Lápiz',
+        icon: <Feather size={18} className="text-slate-300" />,
+        colorClass: 'bg-slate-500/20 border-slate-400/70 text-slate-300',
+        activeColor: 'text-slate-300',
+      };
+    case 'marker':
+      return {
+        name: 'Marcador',
+        icon: <Highlighter size={18} className="text-emerald-300" />,
+        colorClass: 'bg-emerald-500/20 border-emerald-400/70 text-emerald-300',
+        activeColor: 'text-emerald-300',
+      };
+    case 'brush':
+    default:
+      return {
+        name: 'Pincel',
+        icon: <Paintbrush size={18} className="text-amber-400" />,
+        colorClass: 'bg-amber-500/10 border-amber-500/40 text-amber-400',
+        activeColor: 'text-amber-400',
+      };
+  }
+}
+
 export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
   activeTool,
   lastDrawingTool,
@@ -70,6 +136,14 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
   setShowOpacityPreview,
   triggerHaptic,
 }) => {
+  // Herramienta visual a representar en el Botón 1:
+  // Si estamos en modo 'hand' (Moviendo), mostramos la herramienta previa para saber exactamente qué reanudará
+  const displayTool: ToolType = activeTool === 'hand'
+    ? (lastDrawingTool && lastDrawingTool !== 'hand' ? lastDrawingTool : 'brush')
+    : activeTool;
+
+  const toolVisual = getToolVisualInfo(displayTool);
+
   return (
     <footer className="bg-[#13141a] border-t border-[#22242e] flex flex-col z-30 shrink-0 shadow-2xl pb-[max(0.35rem,env(safe-area-inset-bottom))]">
       {/* Asistente Inteligente de Grosor de Trazo (Opcional y Calibrado por Imagen) */}
@@ -144,7 +218,7 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                   : 'bg-[#161722] text-gray-400 border-[#262836]'
               }`}>
-                {brushTexture?.name || 'Ninguna (Liso)'}
+                {brushTexture?.name || 'Lisa'}
               </span>
             </div>
 
@@ -166,32 +240,30 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
 
       {/* Nivel Inferior: Dock de Herramientas Estilo Nativo IbisPaint */}
       <div className="h-14 px-2 grid grid-cols-5 gap-1.5 max-w-lg mx-auto w-full items-center">
-        {/* 1. Herramienta Principal de Trazo / Borrador */}
+        {/* 1. Herramienta Principal de Trazo / Borrador (Muestra siempre el icono y nombre real de la herramienta activa) */}
         <button
           type="button"
           onClick={() => {
             triggerHaptic(10);
-            onToggleBrushEraser();
+            if (activeTool === 'hand') {
+              // Si estaba en modo mover, volver directamente a la herramienta activa previa
+              const target = lastDrawingTool && lastDrawingTool !== 'hand' ? lastDrawingTool : 'brush';
+              onSelectTool(target);
+            } else {
+              onToggleBrushEraser();
+            }
           }}
-          aria-label="Alternar entre pincel y borrador"
+          aria-label={`Herramienta activa: ${toolVisual.name}`}
           className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
-            activeTool === 'eraser' 
-              ? 'bg-red-950/40 border-red-500/60 text-red-300' 
-              : activeTool === 'vector_pencil'
-              ? 'bg-amber-500/15 border-amber-400/70 text-amber-300'
-              : 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+            activeTool === 'hand'
+              ? 'bg-[#171821] border-[#2c2e3e] text-gray-400 opacity-90'
+              : toolVisual.colorClass
           }`}
-          title="Alternar Trazo / Goma"
+          title={activeTool === 'hand' ? `Reanudar ${toolVisual.name}` : `Alternar ${toolVisual.name} / Goma`}
         >
-          {activeTool === 'eraser' ? (
-            <Eraser size={18} />
-          ) : activeTool === 'vector_pencil' ? (
-            <PenTool size={18} className="text-amber-300" />
-          ) : (
-            <Paintbrush size={18} />
-          )}
+          {toolVisual.icon}
           <span className="text-[9px] font-bold uppercase tracking-wider">
-            {activeTool === 'eraser' ? 'Goma' : activeTool === 'vector_pencil' ? 'Vector' : 'Pincel'}
+            {toolVisual.name}
           </span>
         </button>
 

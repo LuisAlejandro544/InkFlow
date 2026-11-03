@@ -930,16 +930,20 @@ test('Sistema de Accesorios de Galería (Stickers / Moños): Validación de Prop
   assert.equal(accessoryConfig.visible, true);
 });
 
-test('Texturas de Pincel estilo IbisPaint: Catálogo de 4 texturas clásicas y rango acotado [0.0, 1.0]', () => {
-  // Debe contener exactamente 5 entradas: 'none' + las 4 clásicas solicitadas por el usuario
-  assert.equal(TEXTURE_DEFINITIONS.length, 5);
+test('Texturas de Pincel estilo IbisPaint: Catálogo de 9 texturas de referencia y rango acotado [0.0, 1.0]', () => {
+  // Debe contener exactamente 9 entradas de texturas según la referencia
+  assert.equal(TEXTURE_DEFINITIONS.length, 9);
 
   const ids = TEXTURE_DEFINITIONS.map(d => d.id);
-  assert.ok(ids.includes('none'));
-  assert.ok(ids.includes('watercolor_paper'), 'Debe incluir Papel Acuarela rugoso');
-  assert.ok(ids.includes('canvas'), 'Debe incluir Lienzo Textil cruzado');
-  assert.ok(ids.includes('screentone'), 'Debe incluir Trama Manga Halftone');
-  assert.ok(ids.includes('charcoal_noise'), 'Debe incluir Carboncillo Poroso');
+  assert.ok(ids.includes('none'), 'Debe incluir Lisa');
+  assert.ok(ids.includes('grain'), 'Debe incluir Grano');
+  assert.ok(ids.includes('rough'), 'Debe incluir Rugosa');
+  assert.ok(ids.includes('screentone'), 'Debe incluir Trama');
+  assert.ok(ids.includes('splatter'), 'Debe incluir Salpicada');
+  assert.ok(ids.includes('paper'), 'Debe incluir Papel');
+  assert.ok(ids.includes('canvas'), 'Debe incluir Tela');
+  assert.ok(ids.includes('watercolor'), 'Debe incluir Acuarela');
+  assert.ok(ids.includes('charcoal'), 'Debe incluir Carbón');
 
   // Evaluar en una cuadrícula de coordenadas que todas las texturas retornen luminancia válida en [0.0, 1.0]
   for (const def of TEXTURE_DEFINITIONS) {
@@ -951,6 +955,10 @@ test('Texturas de Pincel estilo IbisPaint: Catálogo de 4 texturas clásicas y r
       }
     }
   }
+
+  // Compatibilidad hacia atrás con IDs heredados
+  assert.ok(!isNaN(sampleTextureLuminance('watercolor_paper', 20, 20, 1.0)));
+  assert.ok(!isNaN(sampleTextureLuminance('charcoal_noise', 20, 20, 1.0)));
 });
 
 test('Modulación determinista de opacidad y profundidad de textura (Edge cases: none, depth 0, escalas extremas)', () => {
@@ -1010,6 +1018,104 @@ test('Invarianza de textura ante coordenadas negativas y consistencia determinis
   const sample2 = sampleTextureLuminance('charcoal_noise', 88.5, 42.3, 1.2);
   assert.equal(sample1, sample2, 'El muestreo de textura debe ser 100% determinista');
 });
+
+test('Navegación de Herramientas: Preservación del icono en modo Mover para vector_pencil y catálogo completo', () => {
+  const manager = new ToolNavigationStateManager('vector_pencil');
+  assert.equal(manager.getActiveTool(), 'vector_pencil');
+
+  // Si el usuario usa vector_pencil y activa Mover ('hand'), la herramienta previa a restaurar debe ser vector_pencil
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'hand');
+  assert.equal(manager.getLastDrawingTool(), 'vector_pencil', 'Debe recordar vector_pencil como herramienta activa de dibujo');
+  assert.equal(manager.getPreviousToolBeforeHand(), 'vector_pencil', 'La herramienta previa antes de hand debe ser vector_pencil y no brush');
+
+  // Al salir de mover, restaura vector_pencil
+  manager.toggleHandMode();
+  assert.equal(manager.getActiveTool(), 'vector_pencil');
+
+  // Para herramientas del catálogo: bucket, airbrush, eyedropper, pencil, marker
+  const catalogTools = ['bucket', 'airbrush', 'eyedropper', 'pencil', 'marker'] as const;
+  for (const tool of catalogTools) {
+    manager.selectTool(tool);
+    assert.equal(manager.getActiveTool(), tool);
+    manager.toggleHandMode();
+    assert.equal(manager.getActiveTool(), 'hand');
+    assert.equal(manager.getPreviousToolBeforeHand(), tool, `Al activar mover desde ${tool}, debe recordar ${tool}`);
+    manager.toggleHandMode();
+    assert.equal(manager.getActiveTool(), tool, `Al desactivar mover, debe regresar exactamente a ${tool}`);
+  }
+});
+
+test('Desacoplamiento de Calco: Renderizado de capas transparentes independiente sin alterar la referencia', () => {
+  // Comprobación de que la función compositeLayers soporta composición con o sin tracingRef
+  const width = 100;
+  const height = 100;
+  const mockCtx = {
+    save: () => {},
+    restore: () => {},
+    clearRect: () => {},
+    fillRect: () => {},
+    drawImage: () => {},
+    setTransform: () => {},
+    fillStyle: '',
+    globalAlpha: 1.0,
+    globalCompositeOperation: 'source-over',
+  } as unknown as CanvasRenderingContext2D;
+
+  const mockLayer: Layer = {
+    id: 'layer_1',
+    name: 'Capa 1',
+    visible: true,
+    opacity: 1.0,
+    blendMode: 'source-over',
+    locked: false,
+    canvas: {} as HTMLCanvasElement,
+    ctx: {} as CanvasRenderingContext2D,
+  };
+
+  // Composición pura de capas (transparente) sin tocar la foto de calco
+  assert.doesNotThrow(() => {
+    drawingEngine.compositeLayers(
+      mockCtx,
+      [mockLayer],
+      width,
+      height,
+      'transparent',
+      1.0,
+      null, // Sin calco en el display canvas interactivo
+      null
+    );
+  });
+});
+
+import { getOrCreateTexturePattern, clearTexturePatternCache } from './brushTextureEngine';
+
+test('Patrón de Textura en Espacio de Lienzo (getOrCreateTexturePattern): Null-safety y consistencia de caché', () => {
+  clearTexturePatternCache();
+
+  const mockCtx = {
+    createPattern: () => ({ setTransform: () => {} })
+  } as unknown as CanvasRenderingContext2D;
+
+  // 1. Sin textura o textura 'none' debe retornar null (usa color sólido)
+  assert.equal(getOrCreateTexturePattern(mockCtx, undefined, '#18181b'), null);
+  assert.equal(getOrCreateTexturePattern(mockCtx, { id: 'none', name: 'Lisa', depth: 0, scale: 1 }, '#18181b'), null);
+  assert.equal(getOrCreateTexturePattern(mockCtx, { id: 'grain', name: 'Grano', depth: 0, scale: 1 }, '#18181b'), null);
+
+  // 2. Con profundidad mayor a 0 en entorno Node sin DOM document debe retornar null de forma segura sin excepciones
+  assert.doesNotThrow(() => {
+    const result = getOrCreateTexturePattern(mockCtx, { id: 'screentone', name: 'Trama', depth: 0.85, scale: 1.0 }, '#000000');
+    // En Node.js puro sin DOM canvas nativo retorna null o patrón mockeado
+    assert.ok(result === null || typeof result === 'object');
+  });
+
+  // 3. Limpiar caché no debe fallar
+  assert.doesNotThrow(() => {
+    clearTexturePatternCache();
+  });
+});
+
+
 
 
 

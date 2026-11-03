@@ -16,7 +16,7 @@ import { Layer, Point, ToolType, BlendMode, TracingReference, BrushTextureConfig
 import { wasmEngine } from './wasmEngine';
 import { kotlinVectorEngine } from './kotlinWasmBridge';
 import { gpuBitmapCache } from './bitmapCache';
-import { modulateAlphaByTexture } from './brushTextureEngine';
+import { modulateAlphaByTexture, shouldDepositTexturePigment, getOrCreateTexturePattern } from './brushTextureEngine';
 import { 
   scanlineFloodFill, 
   dilateBinaryMask, 
@@ -138,59 +138,78 @@ export class DrawingEngine {
       ctx.globalCompositeOperation = 'source-over';
     }
 
-    // Procesar cada punto interpolado
-    for (const pt of points) {
-      const radius = Math.max(0.5, (baseSize * pt.pressure) / 2);
-      const rawAlpha = Math.min(1.0, baseOpacity * (tool === 'pencil' ? 0.75 : 1.0));
-      const alpha = (textureConfig && textureConfig.id !== 'none' && tool !== 'eraser')
-        ? modulateAlphaByTexture(rawAlpha, textureConfig, pt.x, pt.y)
-        : rawAlpha;
+    const pattern = (textureConfig && textureConfig.id !== 'none' && tool !== 'eraser')
+      ? getOrCreateTexturePattern(ctx, textureConfig, colorHex)
+      : null;
 
-      ctx.fillStyle = tool === 'eraser' ? 'rgba(0,0,0,1)' : colorHex;
+    const fillSource = tool === 'eraser' ? 'rgba(0,0,0,1)' : (pattern || colorHex);
+    ctx.fillStyle = fillSource;
+    ctx.strokeStyle = fillSource;
 
-      if (tool === 'airbrush') {
-        // Efecto aerógrafo suave con gradiente radial
+    const isTap = (p0.x === p1.x && p0.y === p1.y);
+
+    if (tool === 'airbrush') {
+      // Efecto aerógrafo suave con gradiente radial
+      const points = wasmEngine.interpolateStroke(p0, p1, Math.max(2, baseSize * 0.4));
+      for (const pt of points) {
+        const radius = Math.max(0.5, (baseSize * pt.pressure) / 2);
         const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, radius * 1.5);
         const rgb = this.hexToRgb(colorHex);
-        grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha * 0.4})`);
-        grad.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha * 0.15})`);
+        grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${baseOpacity * 0.4})`);
+        grad.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${baseOpacity * 0.15})`);
         grad.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(pt.x, pt.y, radius * 1.5, 0, Math.PI * 2);
         ctx.fill();
-      } else if (tool === 'pencil') {
-        // Textura granulada de lápiz
-        ctx.globalAlpha = alpha * 0.4;
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Puntos aleatorios para simular textura de grafito
-        ctx.fillStyle = colorHex;
-        for (let j = 0; j < 3; j++) {
-          const offsetX = (Math.random() - 0.5) * radius * 1.2;
-          const offsetY = (Math.random() - 0.5) * radius * 1.2;
-          ctx.beginPath();
-          ctx.arc(pt.x + offsetX, pt.y + offsetY, Math.max(0.5, radius * 0.2), 0, Math.PI * 2);
-          ctx.fill();
-        }
-      } else if (tool === 'marker') {
-        // Resaltador semitransparente con punta biselada
-        ctx.globalAlpha = alpha * 0.35;
+      }
+    } else if (tool === 'marker') {
+      // Resaltador semitransparente con punta biselada
+      const points = wasmEngine.interpolateStroke(p0, p1, Math.max(2, baseSize * 0.4));
+      ctx.globalAlpha = baseOpacity * 0.35;
+      for (const pt of points) {
+        const radius = Math.max(0.5, (baseSize * pt.pressure) / 2);
         ctx.fillRect(pt.x - radius, pt.y - radius * 1.6, radius * 2, radius * 3.2);
-      } else if (tool === 'vector_pencil') {
-        // Lápiz vectorial (Kotlin/Wasm): trazo de precisión con curva continua
-        ctx.globalAlpha = alpha;
+      }
+    } else if (isTap) {
+      // Tap puntual con el dedo sin desplazamiento (sello individual nítido)
+      const radius = Math.max(0.5, (baseSize * p0.pressure) / 2);
+      ctx.globalAlpha = baseOpacity * (tool === 'pencil' ? 0.75 : 1.0);
+      ctx.beginPath();
+      ctx.arc(p0.x, p0.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Segmento de trazo continuo ultra-rápido (60-120 FPS sin lag en móviles)
+      // Unifica el trazo en una sola orden stroke() por GPU con extremos redondos perfectos
+      const alpha = baseOpacity * (tool === 'pencil' ? 0.75 : 1.0);
+      ctx.globalAlpha = alpha;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+      const pressureDiff = Math.abs(p1.pressure - p0.pressure);
+
+      if (dist < 20 || pressureDiff < 0.1) {
+        // Flujo principal continuo: 1 única llamada por evento táctil
+        const avgPressure = (p0.pressure + p1.pressure) * 0.5;
+        ctx.lineWidth = Math.max(0.5, baseSize * avgPressure);
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
       } else {
-        // Pincel estándar suave (Round Pen)
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
-        ctx.fill();
+        // En movimientos muy rápidos con gran variación de presión, subdividir en pocos tramos suaves
+        const points = wasmEngine.interpolateStroke(p0, p1, Math.max(8, baseSize * 0.6));
+        for (let i = 0; i < points.length - 1; i++) {
+          const ptA = points[i];
+          const ptB = points[i + 1];
+          const segPressure = (ptA.pressure + ptB.pressure) * 0.5;
+          ctx.lineWidth = Math.max(0.5, baseSize * segPressure);
+          ctx.beginPath();
+          ctx.moveTo(ptA.x, ptA.y);
+          ctx.lineTo(ptB.x, ptB.y);
+          ctx.stroke();
+        }
       }
     }
 

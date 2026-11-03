@@ -138,6 +138,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onTriggerImportAccessory,
   onStampAccessory,
 }) => {
+  const tracingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const displayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -148,6 +149,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const lastPointRef = useRef<Point | null>(null);
   const currentVectorStrokeRef = useRef<VectorStroke | null>(null);
   const suppressDrawingRef = useRef<boolean>(false);
+  const strokeRafIdRef = useRef<number | null>(null);
 
   // Transformación geométrica: Escala, Paneo y Rotación de la Hoja
   const [scale, setScale] = useState(1);
@@ -210,9 +212,66 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const activeLayer = layers.find(l => l.id === activeLayerId) || layers[0];
 
   /**
-   * Redibuja la composición de capas y trazos en el canvas de visualización con
-   * súper-resolución dinámica. Al estar desacoplado de la foto de calco (que corre en su
-   * propia capa GPU), el trazo del lápiz corre a 120 FPS ultra fluidos sin saturar la VRAM.
+   * Renderiza la capa de fondo y foto de calco en su propio canvas acelerado por GPU.
+   * Se ejecuta ÚNICAMENTE cuando cambian las propiedades de la foto de calco o dimensiones del lienzo.
+   * Al estar completamente desacoplado del trazado en vivo, dibujar sobre fotos gigantescas
+   * corre a 120 FPS con CERO LAG y cero re-escalado bicúbico en cada evento de puntero.
+   */
+  const renderTracingLayer = useCallback(() => {
+    const canvas = tracingCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (canvas.width !== project.width || canvas.height !== project.height) {
+      canvas.width = project.width;
+      canvas.height = project.height;
+    }
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+
+    // Fondo blanco del lienzo
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, project.width, project.height);
+
+    // Si hay foto de calco activa, visible y no está en modo de ajuste manual por tiradores DOM
+    if (tracingRef && !tracingRef.isAdjusting && tracingRef.visible && tracingRef.image) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0.01, Math.min(1.0, tracingRef.opacity));
+      ctx.translate(tracingRef.x, tracingRef.y);
+      if (tracingRef.rotation) {
+        ctx.rotate(tracingRef.rotation);
+      }
+      const drawW = tracingRef.width * tracingRef.scale;
+      const drawH = tracingRef.height * tracingRef.scale;
+
+      const cachedBitmap = gpuBitmapCache.get(`tracing_${tracingRef.id}_${tracingRef.filterMode}`);
+      if (cachedBitmap) {
+        ctx.drawImage(cachedBitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+      } else {
+        ctx.drawImage(tracingRef.image, -drawW / 2, -drawH / 2, drawW, drawH);
+        if (typeof createImageBitmap === 'function') {
+          createImageBitmap(tracingRef.image).then((bmp) => {
+            gpuBitmapCache.set(`tracing_${tracingRef.id}_${tracingRef.filterMode}`, bmp);
+          }).catch(() => {});
+        }
+      }
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }, [project.width, project.height, tracingRef]);
+
+  useEffect(() => {
+    renderTracingLayer();
+  }, [renderTracingLayer]);
+
+  /**
+   * Redibuja la composición de capas transparentes y trazos vectoriales en el displayCanvas.
+   * Utiliza la resolución nativa fija del proyecto (project.width x project.height).
+   * El zoom visual se realiza enteramente por GPU mediante CSS transform (translate3d/scale) a 120 FPS,
+   * eliminando la sobrecarga de reasignar y renderizar buffers de 25+ Megapíxeles en memoria móvil.
    */
   const renderComposite = useCallback(() => {
     const displayCanvas = displayCanvasRef.current;
@@ -220,41 +279,50 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     const ctx = displayCanvas.getContext('2d');
     if (!ctx) return;
 
-    // Aceleración de nitidez: Super-resolución adaptada al zoom y a la densidad de píxeles del móvil
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
-    const currentZoom = Math.max(1, scaleRef.current);
-    const superScale = Math.min(Math.max(dpr, 1) * Math.min(currentZoom, 3), 3.5);
-
-    const targetW = Math.round(project.width * superScale);
-    const targetH = Math.round(project.height * superScale);
-
-    if (displayCanvas.width !== targetW || displayCanvas.height !== targetH) {
-      displayCanvas.width = targetW;
-      displayCanvas.height = targetH;
+    if (displayCanvas.width !== project.width || displayCanvas.height !== project.height) {
+      displayCanvas.width = project.width;
+      displayCanvas.height = project.height;
     }
 
     ctx.save();
-    ctx.setTransform(superScale, 0, 0, superScale, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
 
-    // Durante el modo interactivo de ajuste, TracingAdjuster maneja la imagen directamente en el DOM
-    // mediante CSS transform acelerado por hardware a 120 FPS sin saturar la VRAM ni el hilo de dibujo.
-    const activeTracingForCanvas = (tracingRef && !tracingRef.isAdjusting) ? tracingRef : null;
+    // Canvas transparente para que el calco subyacente se aprecie con total claridad
+    ctx.clearRect(0, 0, project.width, project.height);
 
-    drawingEngine.compositeLayers(
-      ctx,
-      layers,
-      project.width,
-      project.height,
-      '#ffffff',
-      scaleRef.current * superScale,
-      activeTracingForCanvas,
-      currentVectorStrokeRef.current
-    );
+    // Dibujar cada capa visible respetando opacidad y modo de fusión
+    for (const layer of layers) {
+      if (!layer.visible || layer.opacity <= 0) continue;
+
+      ctx.save();
+      ctx.globalAlpha = layer.opacity;
+      ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation;
+      ctx.drawImage(layer.canvas, 0, 0, project.width, project.height);
+
+      // Renderizar trazos vectoriales procesados por Kotlin/Wasm para esta capa
+      const vectorStrokes = kotlinVectorEngine.getStrokesForLayer(layer.id);
+      if (vectorStrokes && vectorStrokes.length > 0) {
+        kotlinVectorEngine.renderVectorStrokes(ctx, vectorStrokes, 1.0);
+      }
+
+      // Si hay un trazo vectorial en vivo dibujándose en esta capa, renderizarlo en tiempo real
+      if (
+        currentVectorStrokeRef.current && 
+        currentVectorStrokeRef.current.layerId === layer.id && 
+        currentVectorStrokeRef.current.segments.length > 0
+      ) {
+        kotlinVectorEngine.renderVectorStrokes(
+          ctx, 
+          [currentVectorStrokeRef.current], 
+          1.0
+        );
+      }
+
+      ctx.restore();
+    }
 
     ctx.restore();
-  }, [layers, project.width, project.height, tracingRef]);
+  }, [layers, project.width, project.height]);
 
   useEffect(() => {
     renderComposite();
@@ -703,7 +771,12 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       );
       currentVectorStrokeRef.current.segments = segments;
 
-      renderComposite();
+      if (strokeRafIdRef.current === null) {
+        strokeRafIdRef.current = requestAnimationFrame(() => {
+          renderComposite();
+          strokeRafIdRef.current = null;
+        });
+      }
       lastPointRef.current = smoothPoint;
       return;
     }
@@ -719,7 +792,12 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       brushTexture
     );
 
-    renderComposite();
+    if (strokeRafIdRef.current === null) {
+      strokeRafIdRef.current = requestAnimationFrame(() => {
+        renderComposite();
+        strokeRafIdRef.current = null;
+      });
+    }
     lastPointRef.current = smoothPoint;
   };
 
@@ -743,6 +821,11 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     }
 
     if (isDrawingRef.current) {
+      if (strokeRafIdRef.current !== null) {
+        cancelAnimationFrame(strokeRafIdRef.current);
+        strokeRafIdRef.current = null;
+      }
+
       if (activeTool === 'vector_pencil' && currentVectorStrokeRef.current) {
         if (currentVectorStrokeRef.current.points.length > 1) {
           currentVectorStrokeRef.current.segments = kotlinVectorEngine.generateBezierSegments(
@@ -859,6 +942,16 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
             boxShadow: '0 25px 60px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.08)',
           }}
         >
+          {/* Capa 1: Canvas dedicado para Fondo y Foto de Calco (Acelerado en GPU, CERO re-cálculos durante el trazo) */}
+          <canvas
+            ref={tracingCanvasRef}
+            width={project.width}
+            height={project.height}
+            className="absolute inset-0 w-full h-full block pointer-events-none"
+            style={{ zIndex: 1 }}
+          />
+
+          {/* Capa 2: Canvas interactivo de capas de dibujo y trazos transparentes */}
           <canvas
             ref={displayCanvasRef}
             width={project.width}

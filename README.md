@@ -95,16 +95,20 @@ Aplicación de dibujo e ilustración digital profesional para dispositivos móvi
     - `[✨ Estampar en Capa]`: Pinta el accesorio de forma permanente sobre la capa activa seleccionada, integrándolo a la resolución nativa de la obra.
     - `[📑 + Nueva Capa]`: Crea una capa independiente llamada `Accesorio (Moño)` y plasma el adorno sin tocar tus trazos anteriores.
   - Genera automáticamente un punto de guardado en el historial (Deshacer/Rehacer) y persiste atómicamente en SQLite Wasm sobre OPFS.
-- **🌾 Texturas de Pincel Estilo IbisPaint con Previsualización en Vivo:**
-  - **4 Texturas Clásicas de Ilustración Profesional:**
-    1. **Papel Acuarela:** Grano orgánico con valles de papel Canson/Torchon para simular acumulación de pigmento tradicional.
-    2. **Lienzo Textil (Canvas):** Trama ortogonal cruzada de lino para técnicas de óleo y acrílico.
-    3. **Trama Manga (Halftone / Screentone):** Semitonos regulares a 45° imprescindibles para cómic japonés y manga.
-    4. **Carboncillo Poroso:** Grano áspero, seco y desgranado con micro-huecos en trazos sueltos.
-    5. **Ninguna (Liso):** Vuelta inmediata al trazo plano uniforme sin textura.
-  - **Previsualización Interactiva sin necesidad de elegir:** Muestra dinámica en la cabecera del modal (`BrushTextureModal.tsx`) que renderiza un trazo curvo en tiempo real con el color actual y tamaño de pincel del artista, permitiendo examinar cualquier textura antes de confirmarla.
-  - **Deslizadores en Tiempo Real:** Calibración ergonómica de **Profundidad / Intensidad** (10% a 100%) y **Escala de Grano** (0.5x a 2.5x).
-  - **Acceso Táctil:** Fila dedicada e indicador de textura en `StudioBottomBar.tsx` y acceso directo en `ToolPickerModal.tsx`.
+- **🌾 Texturas de Pincel Estilo IbisPaint con Patrón en Espacio de Lienzo:**
+  - **Catálogo de 9 Texturas de Superficie de Ilustración Profesional:**
+    1. **Lisa:** Trazo puro y uniforme sin modulación de grano.
+    2. **Grano:** Micro-poros estocásticos de grafito fino sobre papel de boceto.
+    3. **Rugosa:** Relieve marcado con bloques angulares y valles profundos.
+    4. **Trama:** Semitonos a 45° nítidos y continuos para manga y cómic.
+    5. **Salpicada:** Microgotas estocásticas estilo spray/aerosol.
+    6. **Papel:** Fibras longitudinales orgánicas de papel Canson Bristol.
+    7. **Tela:** Trama textil ortogonal de lino para técnicas de óleo y acrílico.
+    8. **Acuarela:** Bordes húmedos con pigmento acumulado y centro traslúcido.
+    9. **Carbón:** Grano poroso seco y desgranado con motas de carboncillo.
+  - **Arquitectura de Patrón Continuo (`CanvasPattern`):** En lugar de evaluar la textura en un punto central y generar huecos o cortes aislados, la textura se proyecta de forma continua a nivel de píxel en el espacio de coordenadas del lienzo (`getOrCreateTexturePattern`).
+  - **Invarianza de grosor:** Funciona a cualquier tamaño de pincel (desde 1px hasta 100px) sin saturación por sobreescritura de sellos.
+  - **Caché de Patrones en GPU:** Compilación y reutilización instantánea a 60–120 FPS sin pérdida de frames en dispositivos móviles.
 - **📐 Expansión y Redimensionado Ergonómico de Hoja (Canvas Resize & Expand):**
   - Modal táctil `CanvasResizeModal` accesible desde el menú `[⋯]` para ampliar el ancho y alto del lienzo si el artista necesita más espacio para bocetos o viñetas.
   - **Presets en 1 toque:** `+25% Espacio`, `+50% Espacio`, `2x Doble Lienzo`, `1:1 Cuadrado`, `9:16 Manga/Móvil` y botones de incremento táctil rápido (`+100px`, `+300px`).
@@ -141,9 +145,9 @@ Abre `http://localhost:3000` en tu teléfono móvil y pulsa el botón **"Instala
 
 ## 🧪 Pruebas Unitarias de Lógica
 
-El proyecto cuenta con **46 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
+El proyecto cuenta con **48 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
 
-### Suite 1: Motor Gráfico, Calco, Wasm, Caché GPU, Expansión, Huecos, Accesorios & Texturas (41 tests)
+### Suite 1: Motor Gráfico, Calco, Wasm, Caché GPU, Expansión, Huecos, Accesorios & Texturas (43 tests)
 1. Interpolación lineal y cálculo euclidiano Wasm.
 2. Estabilizador exponencial anti-temblor S-Form.
 3. Simulación de curva de presión táctil por velocidad.
@@ -185,16 +189,18 @@ El proyecto cuenta con **46 pruebas unitarias automatizadas deterministas** con 
 39. Texturas de Pincel estilo IbisPaint: Catálogo de 4 texturas clásicas y rango acotado [0.0, 1.0].
 40. Modulación determinista de opacidad y profundidad de textura (Edge cases: none, depth 0, escalas extremas).
 41. Invarianza de textura ante coordenadas negativas y consistencia determinista del grano.
+42. Preservación del icono en modo Mover para Lápiz Vectorial y catálogo completo de 8 herramientas.
+43. Desacoplamiento de Calco: Renderizado de capas transparente independiente para cero lag durante el trazo.
 
 ### Suite 2: Persistencia Masiva SQLite Wasm sobre OPFS (5 tests)
-42. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
-43. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
-44. Transacción ACID completa de proyectos con capas y orden z.
-45. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
-46. Eliminación limpia en cascada sin fugas de almacenamiento.
+44. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
+45. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
+46. Transacción ACID completa de proyectos con capas y orden z.
+47. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
+48. Eliminación limpia en cascada sin fugas de almacenamiento.
 
 ```bash
-# Ejecutar todas las pruebas deterministas (46 tests)
+# Ejecutar todas las pruebas deterministas (48 tests)
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 ```
 

@@ -29,53 +29,93 @@ export interface TextureDefinition {
 export const TEXTURE_DEFINITIONS: TextureDefinition[] = [
   {
     id: 'none',
-    name: 'Ninguna (Liso)',
-    badge: 'Trazo Plano',
+    name: 'Lisa',
+    badge: 'Trazo Sólido',
     badgeColor: 'bg-zinc-700/50 text-zinc-300 border-zinc-600/40',
     description: 'Trazo sólido tradicional uniforme sin rugosidad de superficie.',
     defaultScale: 1.0,
     defaultDepth: 0.0,
-    tags: ['Básico', 'Limpio', 'Suave'],
+    tags: ['Lisa', 'Plano', 'Básico'],
   },
   {
-    id: 'watercolor_paper',
-    name: 'Papel Acuarela',
-    badge: 'Grano Orgánico',
+    id: 'grain',
+    name: 'Grano',
+    badge: 'Grano Fino',
     badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    description: 'Rugosidad clásica de papel Canson / Torchon con depresiones donde se acumula el pigmento.',
-    defaultScale: 1.2,
+    description: 'Micro-grano homogéneo estocástico que simula pigmento fino sobre papel suave.',
+    defaultScale: 1.0,
     defaultDepth: 0.65,
-    tags: ['Papel', 'Acuarela', 'Tradicional'],
+    tags: ['Grano', 'Lápiz', 'Textura'],
   },
   {
-    id: 'canvas',
-    name: 'Lienzo Textil',
-    badge: 'Trama Lino',
-    badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-    description: 'Entramado cruzado de tela de lino. Ideal para técnica de óleo, acrílico e ilustración editorial.',
-    defaultScale: 1.0,
-    defaultDepth: 0.70,
-    tags: ['Óleo', 'Pintura', 'Textil'],
+    id: 'rough',
+    name: 'Rugosa',
+    badge: 'Relieve',
+    badgeColor: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+    description: 'Textura con depresiones y bloques de grano irregular para trazos ásperos.',
+    defaultScale: 1.2,
+    defaultDepth: 0.75,
+    tags: ['Rugosa', 'Áspero', 'Relieve'],
   },
   {
     id: 'screentone',
-    name: 'Trama Manga (Halftone)',
-    badge: 'Manga / Cómic',
+    name: 'Trama',
+    badge: 'Manga 45°',
     badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-    description: 'Puntos regulares de imprenta a 45 grados. Imprescindible para sombreados manga y retro pop art.',
+    description: 'Trama diagonal manga continua inclinada a 45 grados para sombreado clásico.',
     defaultScale: 1.0,
     defaultDepth: 0.85,
-    tags: ['Manga', 'Screentone', 'Puntos'],
+    tags: ['Trama', 'Manga', 'Cómic'],
   },
   {
-    id: 'charcoal_noise',
-    name: 'Carboncillo Poroso',
-    badge: 'Grano Seco',
-    badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-    description: 'Grano áspero y desgranado con micro-huecos en las zonas de poca presión.',
+    id: 'splatter',
+    name: 'Salpicada',
+    badge: 'Spray Puntos',
+    badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+    description: 'Micro-salpicaduras dispersas estilo aerosol con puntos variables.',
     defaultScale: 1.1,
-    defaultDepth: 0.75,
-    tags: ['Boceto', 'Carbón', 'Pastel'],
+    defaultDepth: 0.70,
+    tags: ['Salpicada', 'Spray', 'Gotas'],
+  },
+  {
+    id: 'paper',
+    name: 'Papel',
+    badge: 'Fibra Orgánica',
+    badgeColor: 'bg-amber-600/20 text-amber-200 border-amber-600/40',
+    description: 'Fibras orgánicas de papel de ilustración Canson con valles de absorción.',
+    defaultScale: 1.2,
+    defaultDepth: 0.65,
+    tags: ['Papel', 'Tradicional', 'Fibras'],
+  },
+  {
+    id: 'canvas',
+    name: 'Tela',
+    badge: 'Trama Textil',
+    badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+    description: 'Entramado cruzado ortogonal de lino para técnicas de pintura y óleo.',
+    defaultScale: 1.0,
+    defaultDepth: 0.70,
+    tags: ['Tela', 'Lino', 'Textil'],
+  },
+  {
+    id: 'watercolor',
+    name: 'Acuarela',
+    badge: 'Lavado Húmedo',
+    badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+    description: 'Efecto de acumulación de agua y pigmento con gradientes tonales suaves.',
+    defaultScale: 1.3,
+    defaultDepth: 0.60,
+    tags: ['Acuarela', 'Agua', 'Pigmento'],
+  },
+  {
+    id: 'charcoal',
+    name: 'Carbón',
+    badge: 'Poroso Seco',
+    badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+    description: 'Carboncillo seco y desgranado con micro-huecos en los valles del trazo.',
+    defaultScale: 1.1,
+    defaultDepth: 0.80,
+    tags: ['Carbón', 'Boceto', 'Pastel'],
   },
 ];
 
@@ -111,8 +151,43 @@ export function sampleTextureLuminance(
   const sy = y / safeScale;
 
   switch (textureId) {
+    case 'grain': {
+      // Grano fino estocástico uniforme
+      const n1 = pseudoNoise2D(Math.floor(sx * 1.5), Math.floor(sy * 1.5));
+      const n2 = pseudoNoise2D(Math.floor(sx * 3.0 + 1.3), Math.floor(sy * 3.0 + 4.7));
+      const combined = n1 * 0.7 + n2 * 0.3;
+      return 0.35 + combined * 0.65;
+    }
+
+    case 'rough': {
+      // Rugosa con bloques irregulares de grano grueso y relieve
+      const bx = Math.floor(sx * 0.45);
+      const by = Math.floor(sy * 0.45);
+      const bNoise = pseudoNoise2D(bx, by);
+      const micro = pseudoNoise2D(Math.floor(sx * 1.8), Math.floor(sy * 1.8)) * 0.25;
+      return bNoise > 0.45 ? 0.95 : 0.25 + micro;
+    }
+
+    case 'screentone': {
+      // Trama diagonal manga a 45 grados (rayas paralelas uniformes)
+      const rot = (sx * 0.7071 + sy * 0.7071);
+      const period = 6.0;
+      const mod = Math.abs(rot) % period;
+      return (mod < period * 0.38) ? 0.18 : 1.0;
+    }
+
+    case 'splatter': {
+      // Salpicada con micro-gotas dispersas
+      const cellX = Math.floor(sx * 0.6);
+      const cellY = Math.floor(sy * 0.6);
+      const dropProb = pseudoNoise2D(cellX, cellY);
+      const microNoise = pseudoNoise2D(Math.floor(sx * 2.2), Math.floor(sy * 2.2));
+      return (dropProb > 0.62) ? 0.25 : (microNoise > 0.85 ? 0.4 : 1.0);
+    }
+
+    case 'paper':
     case 'watercolor_paper': {
-      // Síntesis armónica multiescala (fibras orgánicas de papel)
+      // Fibras orgánicas de papel
       const freq1 = (Math.sin(sx * 0.28) + Math.cos(sy * 0.28)) * 0.25;
       const freq2 = (Math.sin(sx * 0.75 + sy * 0.45) + Math.cos(sy * 0.75 - sx * 0.45)) * 0.15;
       const noise = pseudoNoise2D(Math.floor(sx * 0.8), Math.floor(sy * 0.8)) * 0.25;
@@ -121,44 +196,33 @@ export function sampleTextureLuminance(
     }
 
     case 'canvas': {
-      // Trama textil cruzada ortogonal
-      const period = 8.0;
-      const u = (sx % period) / period;
-      const v = (sy % period) / period;
-      const warp = Math.sin(u * Math.PI * 2); // Hilo horizontal
-      const weft = Math.sin(v * Math.PI * 2); // Hilo vertical
+      // Trama textil cruzada ortogonal estilo tela de lino
+      const period = 7.0;
+      const u = (Math.abs(sx) % period) / period;
+      const v = (Math.abs(sy) % period) / period;
+      const warp = Math.sin(u * Math.PI * 2);
+      const weft = Math.sin(v * Math.PI * 2);
       const weave = (warp * 0.5 + 0.5) * (weft * 0.5 + 0.5);
-      const microNoise = pseudoNoise2D(Math.floor(sx * 0.5), Math.floor(sy * 0.5)) * 0.12;
+      const microNoise = pseudoNoise2D(Math.floor(sx * 0.6), Math.floor(sy * 0.6)) * 0.15;
       const val = 0.25 + weave * 0.65 + microNoise;
       return Math.max(0.1, Math.min(1.0, val));
     }
 
-    case 'screentone': {
-      // Malla de semitonos Halftone inclinada a 45 grados (estilo manga japonés)
-      const dotSpacing = 10.0;
-      // Rotar coordenadas 45° (cos 45 = sin 45 = 0.7071)
-      const rx = (sx * 0.7071 - sy * 0.7071);
-      const ry = (sx * 0.7071 + sy * 0.7071);
-      
-      const cx = (Math.abs(rx) % dotSpacing) - dotSpacing * 0.5;
-      const cy = (Math.abs(ry) % dotSpacing) - dotSpacing * 0.5;
-      const distFromDotCenter = Math.sqrt(cx * cx + cy * cy);
-      const dotRadius = dotSpacing * 0.35;
-      
-      if (distFromDotCenter < dotRadius) {
-        // En el centro del punto manga la tinta es densa
-        return Math.max(0.15, (distFromDotCenter / dotRadius) * 0.7);
-      }
-      return 1.0;
+    case 'watercolor': {
+      // Acuarela con lavado orgánico de pigmento
+      const wave = Math.sin(sx * 0.2 + Math.cos(sy * 0.2)) * 0.35;
+      const n = pseudoNoise2D(Math.floor(sx * 0.5), Math.floor(sy * 0.5)) * 0.35;
+      const raw = 0.45 + wave + n;
+      return Math.max(0.15, Math.min(1.0, raw));
     }
 
+    case 'charcoal':
     case 'charcoal_noise': {
       // Porosidad estocástica seca de carboncillo
       const grainA = pseudoNoise2D(Math.floor(sx * 1.2), Math.floor(sy * 1.2));
       const grainB = pseudoNoise2D(Math.floor(sx * 2.4 + 3.1), Math.floor(sy * 2.4 + 7.9));
       const combined = grainA * 0.65 + grainB * 0.35;
-      // Mayor probabilidad de huecos (grano disperso)
-      return combined > 0.4 ? combined : combined * 0.4;
+      return combined > 0.4 ? combined : combined * 0.35;
     }
 
     default:
@@ -185,9 +249,24 @@ export function modulateAlphaByTexture(
 }
 
 /**
- * Genera una muestra de demostración en un canvas HTML para previsualizar
- * la textura en vivo (estilo IbisPaint) antes de que el usuario decida seleccionarla.
+ * Determina si en las coordenadas (x, y) el pigmento debe penetrar el relieve del papel
+ * o si corresponde a un valle microscópico que permanece libre de tinta.
+ * Evita la sobre-saturación del trazo continuo que borraba la sensación táctil de textura.
  */
+export function shouldDepositTexturePigment(
+  textureConfig: BrushTextureConfig | undefined,
+  x: number,
+  y: number
+): boolean {
+  if (!textureConfig || textureConfig.id === 'none' || textureConfig.depth <= 0.05) {
+    return true;
+  }
+  const lum = sampleTextureLuminance(textureConfig.id, x, y, textureConfig.scale);
+  // Para texturas con hendiduras pronunciadas (trama, carbón, rugosa, tela), los valles profundos no reciben pigmento
+  const threshold = 0.30 * textureConfig.depth;
+  return lum >= threshold;
+}
+
 /**
  * Parsea color hex a componentes RGB para evaluar luminancia
  */
@@ -203,6 +282,138 @@ function parseHexToRgb(hex: string): { r: number; g: number; b: number } {
     g: (num >> 8) & 255,
     b: num & 255
   };
+}
+
+// Caché de patrones CanvasPattern para renderizado continuo a 60-120 FPS
+const patternCache = new Map<string, CanvasPattern>();
+
+/**
+ * Limpia la caché de patrones de textura (útil para pruebas o cambio radical de proyecto)
+ */
+export function clearTexturePatternCache(): void {
+  patternCache.clear();
+}
+
+/**
+ * Genera o recupera un patrón repetible CanvasPattern para rellenar trazos con la textura seleccionada.
+ * Ancla la textura a las coordenadas del lienzo (World-space), permitiendo que la trama,
+ * el grano, el carbón y la tela se proyecten con nitidez milimétrica en cualquier grosor de pincel
+ * sin sufrir de saturación destructiva por solapamiento de sellos.
+ */
+export function getOrCreateTexturePattern(
+  ctx: CanvasRenderingContext2D,
+  textureConfig: BrushTextureConfig | undefined,
+  colorHex: string
+): CanvasPattern | null {
+  if (!textureConfig || textureConfig.id === 'none' || textureConfig.depth <= 0.01) {
+    return null;
+  }
+
+  const depthKey = textureConfig.depth.toFixed(2);
+  const scaleKey = (textureConfig.scale || 1.0).toFixed(2);
+  const cacheKey = `${textureConfig.id}_${colorHex.toLowerCase()}_${depthKey}_${scaleKey}`;
+
+  const cached = patternCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  // Dimensión en mosaico (64x64 px potencia de dos para GPU)
+  const patternSize = 64;
+  let patternCanvas: HTMLCanvasElement | null = null;
+  
+  if (typeof document !== 'undefined') {
+    patternCanvas = document.createElement('canvas');
+    patternCanvas.width = patternSize;
+    patternCanvas.height = patternSize;
+  }
+
+  if (!patternCanvas) {
+    return null;
+  }
+
+  const pCtx = patternCanvas.getContext('2d');
+  if (!pCtx) {
+    return null;
+  }
+
+  const imgData = pCtx.createImageData(patternSize, patternSize);
+  const data = imgData.data;
+  const rgb = parseHexToRgb(colorHex);
+  const depth = textureConfig.depth;
+
+  for (let y = 0; y < patternSize; y++) {
+    for (let x = 0; x < patternSize; x++) {
+      let texVal = 1.0;
+
+      if (textureConfig.id === 'grain') {
+        const n = pseudoNoise2D(x * 2.2, y * 2.2);
+        texVal = n > 0.40 ? 0.95 : 0.12;
+      } else if (textureConfig.id === 'rough') {
+        const bx = Math.floor(x * 0.4);
+        const by = Math.floor(y * 0.4);
+        const b = pseudoNoise2D(bx, by);
+        const micro = pseudoNoise2D(Math.floor(x * 1.6), Math.floor(y * 1.6)) * 0.2;
+        texVal = b > 0.45 ? 0.95 : (0.15 + micro);
+      } else if (textureConfig.id === 'screentone') {
+        // Trama Manga: diagonales a 45° limpias (periodo 8 divide exactamente a 64)
+        const rot = (x * 0.7071 + y * 0.7071);
+        const period = 8.0;
+        const mod = (Math.abs(rot) + 1000) % period;
+        texVal = mod < 3.8 ? 0.95 : 0.05;
+      } else if (textureConfig.id === 'splatter') {
+        const drop = pseudoNoise2D(Math.floor(x * 0.7), Math.floor(y * 0.7));
+        const micro = pseudoNoise2D(Math.floor(x * 2.5), Math.floor(y * 2.5));
+        texVal = (drop > 0.58 && micro > 0.35) ? 0.95 : 0.10;
+      } else if (textureConfig.id === 'paper' || textureConfig.id === 'watercolor_paper') {
+        const fiber = (Math.sin((x / patternSize) * Math.PI * 4) + Math.cos((y / patternSize) * Math.PI * 4)) * 0.3;
+        const noise = pseudoNoise2D(Math.floor(x * 1.2), Math.floor(y * 1.2)) * 0.4;
+        const val = 0.5 + fiber + noise;
+        texVal = val > 0.45 ? Math.min(1.0, val) : 0.15;
+      } else if (textureConfig.id === 'canvas') {
+        // Tela: urdimbre y trama ortogonal (periodo 8 divide a 64)
+        const period = 8.0;
+        const modX = Math.abs(x) % period;
+        const modY = Math.abs(y) % period;
+        const isThread = (modX < 2.5) || (modY < 2.5);
+        texVal = isThread ? 0.95 : 0.15;
+      } else if (textureConfig.id === 'watercolor') {
+        const wash = Math.sin((x / patternSize) * Math.PI * 4) * 0.25 + Math.cos((y / patternSize) * Math.PI * 4) * 0.25;
+        texVal = Math.max(0.2, Math.min(1.0, 0.7 + wash));
+      } else if (textureConfig.id === 'charcoal' || textureConfig.id === 'charcoal_noise') {
+        const c1 = pseudoNoise2D(Math.floor(x * 1.8), Math.floor(y * 1.8));
+        const c2 = pseudoNoise2D(Math.floor(x * 3.2), Math.floor(y * 3.2));
+        const combined = c1 * 0.6 + c2 * 0.4;
+        texVal = combined > 0.42 ? 0.95 : 0.05;
+      }
+
+      // El canal alfa del patrón modula la presencia del pigmento
+      const alpha = Math.max(0, Math.min(255, Math.round(255 * (1.0 - depth * (1.0 - texVal)))));
+
+      const idx = (y * patternSize + x) * 4;
+      data[idx] = rgb.r;
+      data[idx + 1] = rgb.g;
+      data[idx + 2] = rgb.b;
+      data[idx + 3] = alpha;
+    }
+  }
+
+  pCtx.putImageData(imgData, 0, 0);
+
+  try {
+    const pattern = ctx.createPattern(patternCanvas, 'repeat');
+    if (pattern) {
+      if (patternCache.size > 20) {
+        patternCache.clear();
+      }
+      patternCache.set(cacheKey, pattern);
+      return pattern;
+    }
+  } catch {
+    // Entorno de test o soporte limitado
+  }
+
+  return null;
 }
 
 /**
@@ -290,13 +501,11 @@ export function renderTexturePreviewStroke(
     }
   }
 
-  // Evaluación de contraste inteligente: si el artista tiene color blanco puro sobre papel blanco,
-  // adaptamos sutilmente el tono para que nunca sea invisible
+  // Evaluación de contraste inteligente
   const rgb = parseHexToRgb(colorHex);
   const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
   const effectiveColor = (isWhitePaper && lum > 0.85) ? '#1E293B' : colorHex;
 
-  // Si no hay textura, dibujar un trazo suave estándar
   const cfg: BrushTextureConfig = {
     id: textureId,
     name: 'Preview',
@@ -310,11 +519,9 @@ export function renderTexturePreviewStroke(
 
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    // Curva S centrada en el canvas con suavizado
     const x = 24 + t * (width - 48);
     const y = (height * 0.5) + Math.sin(t * Math.PI * 2) * (height * 0.26);
 
-    // Modulación de grosor por posición (punta fina - cuerpo grueso - punta fina)
     const envelope = Math.sin(t * Math.PI);
     const radius = Math.max(2.5, (baseSize * envelope) / 2);
 
@@ -330,3 +537,143 @@ export function renderTexturePreviewStroke(
     ctx.restore();
   }
 }
+
+/**
+ * Renderiza la muestra del trazo ondeado para las tarjetas individuales de textura.
+ * Utiliza generación analítica por píxel de alto contraste sobre un buffer ImageData,
+ * eliminando el problema de sobre-saturación de círculos superpuestos que hacía ver
+ * todos los trazos como líneas negras uniformes.
+ */
+export function renderMiniStrokePreview(
+  canvas: HTMLCanvasElement,
+  textureId: BrushTextureId,
+  colorHex: string = '#18181b',
+  depth: number = 0.8,
+  scale: number = 1.0
+): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+
+  // Crear ImageData para renderizado nítido píxel por píxel
+  const imgData = ctx.createImageData(width, height);
+  const data = imgData.data;
+
+  // Llenar fondo blanco puro
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255;     // R
+    data[i + 1] = 255; // G
+    data[i + 2] = 255; // B
+    data[i + 3] = 255; // A
+  }
+
+  const rgb = parseHexToRgb(colorHex);
+  const targetR = rgb.r;
+  const targetG = rgb.g;
+  const targetB = rgb.b;
+
+  const marginX = 8;
+  const activeW = width - marginX * 2;
+  const centerY = height * 0.5;
+  const waveAmp = height * 0.22;
+  const baseRadius = 5.2;
+
+  // Recorrer cada columna x
+  for (let x = 0; x < width; x++) {
+    if (x < marginX || x >= width - marginX) continue;
+
+    const u = (x - marginX) / activeW; // 0..1
+    // Curva senoidal elegante en S
+    const curveY = centerY + Math.sin(u * Math.PI * 2) * waveAmp;
+
+    // Modulación caligráfica: puntas afiladas, centro con cuerpo
+    const envelope = Math.sin(u * Math.PI);
+    const radius = Math.max(1.8, baseRadius * (0.35 + 0.65 * envelope));
+
+    const minY = Math.max(0, Math.floor(curveY - radius - 2));
+    const maxY = Math.min(height - 1, Math.ceil(curveY + radius + 2));
+
+    for (let y = minY; y <= maxY; y++) {
+      const dy = Math.abs(y - curveY);
+      if (dy > radius + 0.8) continue;
+
+      // Antialiasing en el contorno del trazo
+      const edgeFactor = Math.min(1.0, Math.max(0.0, (radius + 0.8 - dy) / 0.8));
+
+      // Evaluación nítida de textura de superficie
+      let texVal = 1.0;
+
+      if (textureId === 'none') {
+        texVal = 1.0;
+      } else if (textureId === 'grain') {
+        // Grano fino de lápiz: ruido de alta frecuencia
+        const n = pseudoNoise2D(x * 2.2, y * 2.2);
+        texVal = n > 0.40 ? 0.95 : 0.12;
+      } else if (textureId === 'rough') {
+        // Rugosa: bloques angulares y relieve marcado
+        const bx = Math.floor(x * 0.4);
+        const by = Math.floor(y * 0.4);
+        const b = pseudoNoise2D(bx, by);
+        const micro = pseudoNoise2D(Math.floor(x * 1.6), Math.floor(y * 1.6)) * 0.2;
+        texVal = b > 0.45 ? 0.95 : (0.15 + micro);
+      } else if (textureId === 'screentone') {
+        // Trama Manga: diagonales a 45° limpias con espacios en blanco contrastados
+        const rot = (x * 0.7071 + y * 0.7071);
+        const period = 5.2;
+        const mod = (Math.abs(rot) + 100) % period;
+        texVal = mod < 2.3 ? 0.95 : 0.05;
+      } else if (textureId === 'splatter') {
+        // Salpicada: microgotas estocásticas y salpicaduras
+        const drop = pseudoNoise2D(Math.floor(x * 0.7), Math.floor(y * 0.7));
+        const micro = pseudoNoise2D(Math.floor(x * 2.5), Math.floor(y * 2.5));
+        texVal = (drop > 0.58 && micro > 0.35) ? 0.95 : 0.10;
+      } else if (textureId === 'paper' || textureId === 'watercolor_paper') {
+        // Fibras de papel Canson: vetas longitudinales suaves
+        const fiber = (Math.sin(x * 0.35) + Math.cos(y * 0.2)) * 0.3;
+        const noise = pseudoNoise2D(Math.floor(x * 1.2), Math.floor(y * 1.2)) * 0.4;
+        const val = 0.5 + fiber + noise;
+        texVal = val > 0.45 ? Math.min(1.0, val) : 0.15;
+      } else if (textureId === 'canvas') {
+        // Tela: urdimbre y trama ortogonal textil estilo lino
+        const period = 5.0;
+        const modX = Math.abs(x) % period;
+        const modY = Math.abs(y) % period;
+        const isThread = (modX < 1.6) || (modY < 1.6);
+        texVal = isThread ? 0.95 : 0.15;
+      } else if (textureId === 'watercolor') {
+        // Acuarela: bordes oscuros de pigmento húmedo y centro translúcido
+        const normDist = dy / radius; // 0 centro, 1 borde
+        const edgeDarkening = normDist > 0.65 ? 0.95 : 0.55;
+        const wash = Math.sin(x * 0.25) * 0.2;
+        texVal = Math.max(0.2, Math.min(1.0, edgeDarkening + wash));
+      } else if (textureId === 'charcoal' || textureId === 'charcoal_noise') {
+        // Carbón: polvo seco y desgranado con poros vacíos
+        const c1 = pseudoNoise2D(Math.floor(x * 1.8), Math.floor(y * 1.8));
+        const c2 = pseudoNoise2D(Math.floor(x * 3.2), Math.floor(y * 3.2));
+        const combined = c1 * 0.6 + c2 * 0.4;
+        texVal = combined > 0.42 ? 0.95 : 0.05;
+      }
+
+      // Aplicar profundidad
+      const effDepth = textureId === 'none' ? 0.0 : depth;
+      const darkness = edgeFactor * (1.0 - effDepth * (1.0 - texVal));
+
+      const idx = (y * width + x) * 4;
+      // Mezclar con el fondo blanco (255)
+      data[idx] = Math.round(255 - darkness * (255 - targetR));
+      data[idx + 1] = Math.round(255 - darkness * (255 - targetG));
+      data[idx + 2] = Math.round(255 - darkness * (255 - targetB));
+      data[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+
+  // Borde sutil del recuadro
+  ctx.strokeStyle = '#e2ddea';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
+}
+

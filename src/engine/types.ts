@@ -24,14 +24,20 @@ export type BlendMode =
   | 'lighter';    // Añadir / Resplandor (glow)
 
 /**
- * Identificadores de las 4 texturas de superficie estilo IbisPaint más la opción limpia
+ * Identificadores del catálogo de texturas de superficie del trazo
  */
 export type BrushTextureId = 
-  | 'none'              // Sin textura (trazo liso normal)
-  | 'watercolor_paper'  // Papel Acuarela rugoso con grano orgánico
-  | 'canvas'            // Lienzo Artístico con urdimbre textil cruzada
-  | 'screentone'        // Trama Manga / Halftone de puntos de imprenta
-  | 'charcoal_noise';   // Carboncillo poroso desgranado
+  | 'none'              // Lisa (trazo sólido normal)
+  | 'grain'             // Grano fino homogéneo estocástico
+  | 'rough'             // Rugosa con relieve y bloques irregulares
+  | 'screentone'        // Trama diagonal manga a 45 grados
+  | 'splatter'          // Salpicada con micro-gotas de spray
+  | 'paper'             // Papel tradicional con fibras
+  | 'canvas'            // Tela con textura textil cruzada
+  | 'watercolor'        // Acuarela con lavado orgánico
+  | 'charcoal'          // Carbón poroso desgranado
+  | 'watercolor_paper'  // Alias de compatibilidad
+  | 'charcoal_noise';   // Alias de compatibilidad
 
 /**
  * Configuración activa de la textura de pincel
@@ -45,7 +51,7 @@ export interface BrushTextureConfig {
 
 export const DEFAULT_BRUSH_TEXTURE: BrushTextureConfig = {
   id: 'none',
-  name: 'Ninguna (Liso)',
+  name: 'Lisa',
   scale: 1.0,
   depth: 0.65,
 };
