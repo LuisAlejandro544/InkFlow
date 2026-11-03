@@ -18,7 +18,7 @@ import {
   ArrowLeft, Undo2, Redo2, Sliders, 
   Download, Smartphone, X, PenTool, Check,
   Camera, Eye, EyeOff, Sparkles, MoreHorizontal, RotateCcw,
-  Maximize2
+  Maximize2, Cpu
 } from 'lucide-react';
 import { ProjectData, TracingReference } from '../../engine/types';
 import { CrashRecoveryRecord } from '../../storage/sqliteTypes';
@@ -450,24 +450,26 @@ export const StudioTopBar: React.FC<StudioTopBarProps> = ({
               </button>
             )}
 
-            {/* Opción 4: Acerca de / Instalar PWA */}
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic(8);
-                setShowMoreMenu(false);
-                if (onGoToWelcome) onGoToWelcome();
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-200 hover:bg-[#20222f] active:scale-98 transition-all text-left"
-            >
-              <Smartphone size={16} className="text-amber-400" />
-              <div className="flex-1 min-w-0">
-                <span className="block leading-tight">Presentación & PWA</span>
-                <span className="text-[9px] text-gray-400 block">
-                  Instalar en pantalla de inicio
-                </span>
-              </div>
-            </button>
+            {/* Opción 4: Diagnóstico Técnico del Motor */}
+            {onGoToEngine && (
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(8);
+                  setShowMoreMenu(false);
+                  onGoToEngine();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-200 hover:bg-[#20222f] active:scale-98 transition-all text-left"
+              >
+                <Cpu size={16} className="text-amber-400" />
+                <div className="flex-1 min-w-0">
+                  <span className="block leading-tight">Diagnóstico del Motor</span>
+                  <span className="text-[9px] text-gray-400 block">
+                    WebGPU, Wasm, Kotlin y C++23
+                  </span>
+                </div>
+              </button>
+            )}
 
             {/* Estado de Persistencia SQLite Wasm / OPFS */}
             <div className="mt-1 pt-2 border-t border-[#252737] px-2 flex items-center justify-between text-[10px]">

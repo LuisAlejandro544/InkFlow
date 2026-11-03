@@ -14,16 +14,16 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { ToolType, BrushTextureConfig, DEFAULT_BRUSH_TEXTURE } from './engine/types';
-import { StudioScreen } from './components/StudioScreen';
-import { GalleryScreen } from './components/GalleryScreen';
-import { EngineInfoScreen } from './components/EngineInfoScreen';
-import { LayersModal } from './components/LayersModal';
-import { ColorPickerModal } from './components/ColorPickerModal';
-import { ToolPickerModal } from './components/ToolPickerModal';
-import { BrushTextureModal } from './components/BrushTextureModal';
-import { ExportModal } from './components/ExportModal';
-import { CanvasResizeModal } from './components/CanvasResizeModal';
-import { WelcomeScreen } from './components/WelcomeScreen';
+import { StudioScreen } from './components/screens/StudioScreen';
+import { GalleryScreen } from './components/screens/GalleryScreen';
+import { EngineInfoScreen } from './components/screens/EngineInfoScreen';
+import { LayersModal } from './components/modals/LayersModal';
+import { ColorPickerModal } from './components/modals/ColorPickerModal';
+import { ToolPickerModal } from './components/modals/ToolPickerModal';
+import { BrushTextureModal } from './components/modals/BrushTextureModal';
+import { ExportModal } from './components/modals/ExportModal';
+import { CanvasResizeModal } from './components/modals/CanvasResizeModal';
+import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { detectIsStandalone, detectIsDevOrPreview, shouldShowWelcomeScreen } from './engine/environmentDetector';
 import { useLayerManager } from './hooks/useLayerManager';
 import { useDrawingHistory } from './hooks/useDrawingHistory';
@@ -38,31 +38,26 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<'welcome' | 'studio' | 'gallery' | 'engine'>(() => {
     if (typeof window === 'undefined') return 'studio';
 
+    // 1. Detectar si corre en modo standalone (PWA instalada en pantalla de inicio del teléfono)
     const isStandalone = detectIsStandalone(
       window.matchMedia('(display-mode: standalone)').matches,
       (window.navigator as unknown as { standalone?: boolean })?.standalone,
       document.referrer || ''
     );
 
-    const isDevOrPreview = detectIsDevOrPreview(window.location.hostname, window.location.search);
-
-    if (window.location.search.includes('screen=welcome')) {
-      return 'welcome';
-    }
-
-    const hasDismissed = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('inkflow_welcome_dismissed') === 'true';
-
-    if (isDevOrPreview && !window.location.search.includes('force_welcome=true')) {
+    // En la PWA instalada, NUNCA mostrar la bienvenida -> directo al estudio de dibujo
+    if (isStandalone) {
       return 'studio';
     }
 
-    const showWelcome = shouldShowWelcomeScreen({
-      isStandalone,
-      isDevOrPreview,
-      hasDismissedWelcome: hasDismissed,
-    });
+    // En la web, si el usuario ya pulsó "Usar Estudio en la Web" durante esta sesión -> ir directo al estudio
+    const hasDismissed = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('inkflow_welcome_dismissed') === 'true';
+    if (hasDismissed) {
+      return 'studio';
+    }
 
-    return showWelcome ? 'welcome' : 'studio';
+    // En la web (navegador normal), mostrar la página de bienvenida con la recomendación de descargar la PWA
+    return 'welcome';
   });
 
   // Parámetros de dibujo
@@ -315,7 +310,6 @@ export default function App() {
           onOpenCanvasResizeModal={() => setIsCanvasResizeModalOpen(true)}
           onGoToGallery={() => setCurrentScreen('gallery')}
           onGoToEngine={() => setCurrentScreen('engine')}
-          onGoToWelcome={() => setCurrentScreen('welcome')}
           onUpdateProjectThumbnail={(thumb) => handleUpdateProjectThumbnail(thumb, layers)}
           onUpdateTracing={updateTracing}
           onApplyTracingFilter={applyTracingFilter}
@@ -339,7 +333,6 @@ export default function App() {
           onDuplicateProject={handleDuplicateProject}
           onDeleteProject={handleDeleteProject}
           onReturnToStudio={() => setCurrentScreen('studio')}
-          onGoToWelcome={() => setCurrentScreen('welcome')}
         />
       )}
 

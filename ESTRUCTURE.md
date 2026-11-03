@@ -64,6 +64,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   ├── store/                    # Gestión de estado global
 │   │   └── drawingStore.ts       # Estado del proyecto por defecto, paleta y herramientas
 │   ├── hooks/                    # [MODULAR] Hooks de dominio especializados desacoplados
+│   │   ├── index.ts              # Barrel export unificado de todos los custom hooks
 │   │   ├── useLayerManager.ts    # Gestión integral de capas: creación, clonación, merge, eliminación y blend modes
 │   │   ├── useDrawingHistory.ts  # Historial reactivo de Deshacer/Rehacer con instantáneas ImageData y Wasm RLE
 │   │   ├── useTracingManager.ts  # Ciclo de vida de fotos de calco y accesorios (moños/stickers)
@@ -73,33 +74,38 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   ├── useProjectPersistence.ts # [MODULAR] Ciclo de vida SQLite Wasm, auto-guardado debounced y centinela de crash
 │   │   ├── useCanvasResizeHandler.ts # [MODULAR] Expansión y redimensionado de lienzo con matriz 3x3 y curvas Kotlin
 │   │   ├── useAccessoryStamper.ts # [MODULAR] Estampado permanente de adornos/moños en capa activa o capa dedicada
-│   │   └── useStudioModals.ts    # [MODULAR] Gestión limpia de apertura/cierre de los 6 modales del estudio
-│   ├── components/               # Componentes modulares de interfaz de usuario
-│   │   ├── studio/               # [MODULAR] Subcomponentes especializados de StudioScreen
+│   │   ├── useStudioModals.ts    # [MODULAR] Gestión limpia de apertura/cierre de los 6 modales del estudio
+│   │   └── usePWAInstall.ts      # [NATIVO] Hook reactivo de instalación PWA en pantalla de inicio móvil
+│   ├── components/               # [MODULAR] Arquitectura de componentes UI organizada en subcarpetas temáticas
+│   │   ├── index.ts              # Barrel export unificado de todos los componentes de interfaz
+│   │   ├── screens/              # [PANTALLAS] Vistas y pantallas independientes de la aplicación
+│   │   │   ├── StudioScreen.tsx  # Mesa de dibujo táctil orquestada a 60-120 FPS
+│   │   │   ├── GalleryScreen.tsx # Pantalla de galería y creación de nuevos lienzos
+│   │   │   ├── WelcomeScreen.tsx # Pantalla de bienvenida, catálogo de funciones pro y descarga PWA en navegador
+│   │   │   └── EngineInfoScreen.tsx # Diagnóstico técnico de WebGPU, Kotlin/Wasm, Rust, C++23 y PWA
+│   │   ├── modals/               # [MODALES] Diálogos modales y paneles táctiles desacoplados
+│   │   │   ├── LayersModal.tsx   # Gestor de capas estilo IbisPaint con importador de calco y accesorios
+│   │   │   ├── ColorPickerModal.tsx # Rueda HSV, sliders RGB y muestras de color de la foto
+│   │   │   ├── ToolPickerModal.tsx  # Modal nativo segmentado en Herramientas y Estabilizador S-Form
+│   │   │   ├── BrushTextureModal.tsx # Modal de 9 texturas de pincel estilo IbisPaint con live preview interactivo
+│   │   │   ├── ExportModal.tsx   # Guardado de obra a galería con Hoja Completa vs Auto-crop y peso en KB/MB
+│   │   │   └── CanvasResizeModal.tsx # Modal de expansión de hoja con matriz de anclaje 3x3 y presets rápidos
+│   │   ├── assistants/           # [ASISTENTES] Herramientas de asistencia de dibujo y calco en pantalla
+│   │   │   ├── StrokeGuideAssistant.tsx # Barra ergonómica con recomendación calibrada por visión artificial
+│   │   │   └── TracingAdjuster.tsx # Ajustador táctil de calco y stickers con aceleración GPU pura
+│   │   ├── studio/               # [SUBCOMPONENTES] Elementos ergonómicos del espacio de trabajo de dibujo
 │   │   │   ├── StudioTopBar.tsx  # Barra superior móvil, deshacer/rehacer, zoom/rotación, calco y menú Pro
 │   │   │   ├── StudioBottomBar.tsx # Barra inferior móvil, deslizadores de grosor/opacidad y dock de 5 herramientas
 │   │   │   └── StudioCanvasOverlays.tsx # Píldoras de expansión/huecos, burbujas preview de pincel y modal iOS
-│   │   ├── tools/                # [MODULAR] Subcomponentes especializados de selección de herramientas
+│   │   ├── tools/                # [HERRAMIENTAS] Componentes especializados de configuración de trazo
 │   │   │   ├── toolDefinitions.ts # Metadatos, iconos, badges y descripciones de las 9 herramientas de dibujo
-│   │   │   ├── BucketSettingsCard.tsx # Configuración de expansión de borde (0 a 3px), cierre de huecos (0 a 10px) y tolerancia
+│   │   │   ├── BucketSettingsCard.tsx # Configuración de expansión de borde (0 a 3px), cierre de huecos (0 a 10px)
 │   │   │   └── StabilizerScratchpad.tsx # Calibrador S-Form con bloc táctil de pruebas y presets rápidos
-│   │   ├── tracing/              # [MODULAR] Subcomponentes especializados del calco y accesorios
+│   │   ├── tracing/              # [CALCO] Subcomponentes especializados del calco y accesorios
 │   │   │   ├── TracingControlBar.tsx # Barra de calibración inferior compacta (~105px) con cero desbordamiento
 │   │   │   └── TracingMinimizedPill.tsx # Píldora ultra compacta flotante que despeja el 100% del lienzo
-│   │   ├── WelcomeScreen.tsx     # Pantalla de bienvenida, catálogo de funciones pro y descarga PWA en navegador
-│   │   ├── StudioScreen.tsx      # [MODULAR] Mesa de dibujo táctil orquestada a 60-120 FPS
-│   │   ├── ToolPickerModal.tsx   # Modal nativo segmentado en Herramientas y Estabilizador S-Form
-│   │   ├── BrushTextureModal.tsx # Modal de 9 texturas de pincel estilo IbisPaint con live preview interactivo
-│   │   ├── CanvasResizeModal.tsx # Modal de expansión de hoja con matriz de anclaje 3x3 y presets rápidos
-│   │   ├── TracingAdjuster.tsx   # [MODULAR] Ajustador táctil de calco y stickers con aceleración GPU pura
-│   │   ├── StrokeGuideAssistant.tsx # Barra ergonómica con recomendación calibrada por visión artificial
-│   │   ├── GalleryScreen.tsx     # Pantalla de galería y creación de nuevos lienzos
-│   │   ├── EngineInfoScreen.tsx  # Diagnóstico técnico de WebGPU, Kotlin/Wasm, Rust, C++23 y PWA
-│   │   ├── LayersModal.tsx       # Gestor de capas estilo IbisPaint con importador de calco y accesorios
-│   │   ├── ColorPickerModal.tsx  # Rueda HSV, sliders RGB y muestras de color de la foto
-│   │   ├── ExportModal.tsx       # [MODULAR] Guardado de obra a galería con Hoja Completa vs Auto-crop y peso en KB/MB
-│   │   ├── ErrorBoundary.tsx     # Captura de excepciones de interfaz para evitar pantalla blanca
-│   │   └── usePWAInstall.ts      # Hook reactivo de instalación PWA en pantalla de inicio
+│   │   └── common/               # [COMUNES] Componentes base y protección de fallos
+│   │       └── ErrorBoundary.tsx # Captura de excepciones de interfaz para evitar pantalla blanca
 │   ├── App.tsx                   # [MODULAR] Componente orquestador limpio y desacoplado vía Custom Hooks
 │   ├── main.tsx                  # Punto de entrada de React 19
 │   └── index.css                 # Estilos globales y Tailwind CSS
@@ -166,12 +172,14 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 ## ⚙️ Principios de Arquitectura PWA Nativa
 
 1. **Desacoplamiento Estricto:** La lógica matemática pura se aloja en `src/engine/`, `src/cpp-core/` y `src/kotlin-core/`. Los componentes de React únicamente renderizan y gestionan eventos.
-2. **Modularización de Componentes Complejos:**
-   - `webgpuEngine.ts` delega sus shaders a `src/engine/shaders/brushShader.wgsl.ts` y su renderizado 2D a `src/engine/renderers/canvas2dRenderer.ts`.
-   - `ExportModal.tsx` delega la composición offscreen, cálculo de auto-crop y estimación de bytes a `src/engine/exportEngine.ts`.
-   - `TracingAdjuster.tsx` delega su manipulación gestual acelerada por GPU a `src/hooks/useTracingGestures.ts`, su barra inferior a `src/components/tracing/TracingControlBar.tsx` y su modo minimizado a `src/components/tracing/TracingMinimizedPill.tsx`.
-   - `StudioScreen.tsx` delega la navegación espacial y gestos multitáctiles a `src/hooks/useCanvasGestures.ts` y el despacho del trazo táctil a `src/hooks/useStrokeDrawing.ts`.
-   - `App.tsx` delega en hooks dedicados en `src/hooks/` (`useLayerManager.ts`, `useDrawingHistory.ts`, `useTracingManager.ts`, `useProjectPersistence.ts`, `useCanvasResizeHandler.ts`, `useAccessoryStamper.ts`, `useStudioModals.ts`).
+2. **Modularización y Organización de Componentes por Dominios:**
+   - **`src/components/screens/`:** Vistas independientes (`StudioScreen.tsx`, `GalleryScreen.tsx`, `WelcomeScreen.tsx`, `EngineInfoScreen.tsx`).
+   - **`src/components/modals/`:** Modales y paneles táctiles (`LayersModal.tsx`, `ColorPickerModal.tsx`, `ToolPickerModal.tsx`, `BrushTextureModal.tsx`, `ExportModal.tsx`, `CanvasResizeModal.tsx`).
+   - **`src/components/assistants/`:** Asistentes en lienzo (`StrokeGuideAssistant.tsx`, `TracingAdjuster.tsx`).
+   - **`src/components/common/`:** Componentes transversales de robustez (`ErrorBoundary.tsx`).
+   - **`src/components/studio/`, `tools/`, `tracing/`:** Subcomponentes atómicos especializados.
+   - **`src/hooks/`:** Hooks de dominio desacoplados (`usePWAInstall.ts`, `useLayerManager.ts`, etc.) con barrel export en `index.ts`.
+   - **`src/engine/index.ts` y `src/storage/index.ts`:** Barrel exports unificados para importaciones limpias.
 3. **Diseño Móvil Nativo:** Eliminación de patrones de formulario web (botones submit/confirmar). Selección instantánea en 1 toque con retroalimentación háptica y controles segmentados.
 4. **Ergonomía Móvil Extrema:** Cero truncamientos tipográficos en selectores modales, touch targets de al menos 48×48px y soporte seguro para `viewport-fit=cover`.
 5. **Manipulación Gestual Invariante:** Todo giro de la hoja mediante dedos preserva el trazo exacto bajo el puntero aplicando la transformación inversa en tiempo real sin desfasaje de píxeles.
