@@ -2,23 +2,30 @@
  * @file ExportModal.tsx
  * @description Diálogo de guardado y exportación de obras maestras para IbisPaint WebGPU Studio.
  * 
- * Capacidades mejoradas:
- * 1. Selección entre:
- *    - "Hoja Completa" (lienzo entero original, incluyendo márgenes vacíos).
- *    - "Recortar hasta donde dibujó (Auto-Crop)" (recorta automáticamente al área útil de los trazos del artista).
- * 2. Cálculo en tiempo real del peso exacto de la obra maestra en KB / MB según formato, escala y recorte.
- * 3. Guardado directo en la galería del dispositivo móvil (mediante descarga nativa y Web Share API).
- * 4. Soporte multiescala (1x Estándar, 2x FHD, 3x 4K Ultra) y formatos PNG (con canal alfa opcional), JPEG y WebP.
+ * Modularizado:
+ * - Generación de canvas compuesto, cálculo de bounding box y compresión de blobs delegados a `exportEngine.ts`.
+ * - Selección entre "Hoja Completa" vs "Recortar al Dibujo (Auto-Crop)".
+ * - Cálculo en tiempo real del peso exacto de la obra maestra en KB / MB según formato, escala y recorte.
+ * - Guardado directo en la galería del dispositivo móvil (mediante descarga nativa y Web Share API).
+ * - Soporte multiescala (1x Estándar, 2x FHD, 3x 4K Ultra) y formatos PNG (con canal alfa opcional), JPEG y WebP.
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  X, Download, Share2, Check, Sparkles, Image as ImageIcon, 
-  Crop, Maximize2, HardDrive, Layers as LayersIcon 
+  X, Download, Share2, Check, Image as ImageIcon, 
+  Crop, Maximize2, HardDrive 
 } from 'lucide-react';
 import { Layer } from '../engine/types';
 import { calculateArtworkBoundingBox, BoundingBoxResult } from '../engine/transformMath';
-import { kotlinVectorEngine } from '../engine/kotlinWasmBridge';
+import { 
+  ExportFormat, 
+  computeExportDimensions, 
+  generateCompositeExportCanvas, 
+  estimateArtworkFileSize, 
+  formatByteSize, 
+  downloadArtworkFile, 
+  shareArtworkFile 
+} from '../engine/exportEngine';
 
 interface ExportModalProps {
   layers: Layer[];
@@ -35,7 +42,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   projectName,
   onClose,
 }) => {
-  const [format, setFormat] = useState<'png' | 'jpeg' | 'webp'>('png');
+  const [format, setFormat] = useState<ExportFormat>('png');
   const [scale, setScale] = useState<number>(1);
   const [cropMode, setCropMode] = useState<'full' | 'crop'>('full');
   const [transparentBg, setTransparentBg] = useState<boolean>(false);
@@ -76,72 +83,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   // Dimensiones finales según el modo elegido y la escala
   const exportDimensions = useMemo(() => {
-    if (cropMode === 'crop' && boundingBox.hasContent) {
-      return {
-        w: Math.round(boundingBox.width * scale),
-        h: Math.round(boundingBox.height * scale),
-        sourceX: boundingBox.minX,
-        sourceY: boundingBox.minY,
-        sourceW: boundingBox.width,
-        sourceH: boundingBox.height,
-      };
-    }
-    return {
-      w: Math.round(width * scale),
-      h: Math.round(height * scale),
-      sourceX: 0,
-      sourceY: 0,
-      sourceW: width,
-      sourceH: height,
-    };
+    return computeExportDimensions(width, height, boundingBox, cropMode, scale);
   }, [cropMode, boundingBox, scale, width, height]);
 
   /**
    * Genera el canvas final listo para exportar
    */
   const generateExportCanvas = useCallback((): HTMLCanvasElement => {
-    const { w, h, sourceX, sourceY, sourceW, sourceH } = exportDimensions;
-
-    const cvs = document.createElement('canvas');
-    cvs.width = w;
-    cvs.height = h;
-    const ctx = cvs.getContext('2d')!;
-
-    // Fondo blanco o transparente
-    if (!transparentBg || format === 'jpeg') {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, w, h);
-    }
-
-    // Dibujar cada capa con su opacidad y modo de fusión
-    for (const layer of layers) {
-      if (!layer.visible || layer.opacity <= 0) continue;
-      ctx.save();
-      ctx.globalAlpha = layer.opacity;
-      ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation;
-
-      // Dibujar sub-región si es modo recorte, o toda la hoja
-      ctx.drawImage(
-        layer.canvas,
-        sourceX, sourceY, sourceW, sourceH,
-        0, 0, w, h
-      );
-
-      // Renderizar trazos vectoriales de Kotlin/Wasm para esta capa sin pérdida de resolución
-      const vectorStrokes = kotlinVectorEngine.getStrokesForLayer(layer.id);
-      if (vectorStrokes && vectorStrokes.length > 0) {
-        ctx.save();
-        ctx.scale(scale, scale);
-        ctx.translate(-sourceX, -sourceY);
-        kotlinVectorEngine.renderVectorStrokes(ctx, vectorStrokes, scale);
-        ctx.restore();
-      }
-
-      ctx.restore();
-    }
-
-    return cvs;
-  }, [exportDimensions, transparentBg, format, layers]);
+    return generateCompositeExportCanvas(layers, exportDimensions, transparentBg, format, scale);
+  }, [layers, exportDimensions, transparentBg, format, scale]);
 
   /**
    * Calcula el peso exacto del archivo en tiempo real
@@ -151,12 +101,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     const calcWeight = async () => {
       try {
         const cvs = generateExportCanvas();
-        const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
-        const blob = await new Promise<Blob | null>((resolve) => {
-          cvs.toBlob(resolve, mimeType, 0.92);
-        });
-        if (!isCancelled && blob) {
-          setFileSizeBytes(blob.size);
+        const bytes = await estimateArtworkFileSize(cvs, format);
+        if (!isCancelled) {
+          setFileSizeBytes(bytes);
         }
       } catch {
         if (!isCancelled) setFileSizeBytes(null);
@@ -170,13 +117,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   }, [generateExportCanvas, format, scale, cropMode, transparentBg]);
 
   const formattedFileSize = useMemo(() => {
-    if (fileSizeBytes === null) return 'Calculando...';
-    if (fileSizeBytes < 1024) return `${fileSizeBytes} B`;
-    if (fileSizeBytes < 1024 * 1024) return `${(fileSizeBytes / 1024).toFixed(1)} KB`;
-    return `${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+    return formatByteSize(fileSizeBytes);
   }, [fileSizeBytes]);
-
-  const exportWidthName = (s: number) => (s === 1 ? '1x' : s === 2 ? '2x_FHD' : '3x_4K');
 
   /**
    * Descarga directa en la galería/descargas del dispositivo
@@ -186,22 +128,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setIsExporting(true);
     try {
       const cvs = generateExportCanvas();
-      const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
-      const dataUrl = cvs.toDataURL(mimeType, 0.95);
-
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      const cleanName = (projectName || 'mi_obra').toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const cropSuffix = cropMode === 'crop' ? '_recortada' : '_completa';
-      a.download = `${cleanName}${cropSuffix}_${exportWidthName(scale)}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      if (a.parentNode) {
-        a.parentNode.removeChild(a);
-      } else {
-        a.remove?.();
-      }
-
+      downloadArtworkFile(cvs, projectName, cropMode, scale, format);
       setSuccessMessage('¡Obra maestra guardada en tu galería!');
       setTimeout(() => setSuccessMessage(''), 3500);
     } finally {
@@ -214,36 +141,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
    */
   const handleShare = async () => {
     triggerHaptic(12);
-    if (!navigator.share) {
-      handleDownload();
-      return;
-    }
-
+    setIsExporting(true);
     try {
-      setIsExporting(true);
       const cvs = generateExportCanvas();
-      const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
-      const blob = await new Promise<Blob | null>((resolve) => {
-        cvs.toBlob(resolve, mimeType, 0.95);
-      });
-
-      if (!blob) return;
-
-      const cleanName = (projectName || 'mi_obra').toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const file = new File([blob], `${cleanName}.${format}`, { type: blob.type });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: projectName || 'Mi Obra Maestra',
-          text: 'Ilustración creada en IbisPaint WebGPU Studio',
-        });
+      const shared = await shareArtworkFile(cvs, projectName, format);
+      if (shared) {
         setSuccessMessage('¡Obra compartida con éxito!');
       } else {
         handleDownload();
       }
     } catch {
-      // Si el usuario cancela la hoja de compartir
+      // Cancelado por el usuario
     } finally {
       setIsExporting(false);
     }

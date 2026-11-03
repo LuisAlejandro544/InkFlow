@@ -327,4 +327,86 @@ int32_t ibis_close_boundary_gaps(
     return static_cast<int32_t>(analyzer.close_boundary_gaps(rgba_view, width, height, max_gap_px, mask_view));
 }
 
+auto StrokeAnalyzer::apply_sobel_lineart(
+    std::span<const uint8_t> rgba_pixels,
+    int32_t width,
+    int32_t height,
+    bool invert,
+    float threshold,
+    std::span<uint8_t> output_rgba
+) const noexcept -> bool {
+    if (width < 3 || height < 3) return false;
+    const size_t total_pixels = static_cast<size_t>(width * height);
+    if (rgba_pixels.size() < total_pixels * 4 || output_rgba.size() < total_pixels * 4) return false;
+
+    // 1. Escala de grises mediante Luminancia BT.709
+    std::vector<float> gray(total_pixels, 0.0f);
+    for (size_t i = 0, p = 0; p < total_pixels; i += 4, ++p) {
+        gray[p] = 0.2126f * rgba_pixels[i] + 0.7152f * rgba_pixels[i + 1] + 0.0722f * rgba_pixels[i + 2];
+    }
+
+    // Inicializar buffer de salida en ceros
+    std::fill(output_rgba.begin(), output_rgba.end(), static_cast<uint8_t>(0));
+
+    // 2. Convolución matricial Sobel 3x3
+    for (int32_t y = 1; y < height - 1; ++y) {
+        const int32_t y_offset = y * width;
+        const int32_t y_prev = (y - 1) * width;
+        const int32_t y_next = (y + 1) * width;
+
+        for (int32_t x = 1; x < width - 1; ++x) {
+            const size_t idx = static_cast<size_t>((y_offset + x) * 4);
+
+            const float p00 = gray[y_prev + (x - 1)];
+            const float p01 = gray[y_prev + x];
+            const float p02 = gray[y_prev + (x + 1)];
+            const float p10 = gray[y_offset + (x - 1)];
+            const float p12 = gray[y_offset + (x + 1)];
+            const float p20 = gray[y_next + (x - 1)];
+            const float p21 = gray[y_next + x];
+            const float p22 = gray[y_next + (x + 1)];
+
+            const float gx = -p00 + p02 - 2.0f * p10 + 2.0f * p12 - p20 + p22;
+            const float gy = -p00 - 2.0f * p01 - p02 + p20 + 2.0f * p21 + p22;
+
+            const float magnitude = std::hypot(gx, gy);
+            const bool is_edge = magnitude > threshold;
+
+            if (invert) {
+                // Fondo blanco y líneas oscuras (ideal para calcar)
+                const float scaled = std::min(255.0f, magnitude * 1.8f);
+                const uint8_t line_val = is_edge ? static_cast<uint8_t>(std::max(0.0f, 255.0f - scaled)) : 255;
+                output_rgba[idx] = line_val;
+                output_rgba[idx + 1] = line_val;
+                output_rgba[idx + 2] = line_val;
+                output_rgba[idx + 3] = is_edge ? 255 : 0;
+            } else {
+                const uint8_t edge_val = static_cast<uint8_t>(std::min(255.0f, magnitude * 1.5f));
+                output_rgba[idx] = edge_val;
+                output_rgba[idx + 1] = edge_val;
+                output_rgba[idx + 2] = edge_val;
+                output_rgba[idx + 3] = 255;
+            }
+        }
+    }
+    return true;
 }
+
+int32_t ibis_apply_sobel_lineart(
+    const uint8_t* rgba_data,
+    int32_t width,
+    int32_t height,
+    int32_t invert,
+    float threshold,
+    uint8_t* output_rgba
+) {
+    if (!rgba_data || !output_rgba || width <= 0 || height <= 0) return 0;
+    const size_t total = static_cast<size_t>(width * height);
+    std::span<const uint8_t> in_view(rgba_data, total * 4);
+    std::span<uint8_t> out_view(output_rgba, total * 4);
+    ibis::vision::stroke::StrokeAnalyzer analyzer;
+    return analyzer.apply_sobel_lineart(in_view, width, height, invert != 0, threshold, out_view) ? 1 : 0;
+}
+
+}
+

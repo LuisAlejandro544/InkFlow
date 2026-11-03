@@ -119,6 +119,25 @@ public:
         int32_t max_gap_px,
         std::span<uint8_t> output_closed_mask
     ) const noexcept -> uint32_t;
+
+    /**
+     * @brief Extracción de Lineart mediante detección de bordes por Convolución Sobel 3x3.
+     * @param rgba_pixels Píxeles de entrada en formato RGBA
+     * @param width Ancho de la imagen
+     * @param height Alto de la imagen
+     * @param invert Si es true, fondo blanco con líneas oscuras; si es false, bordes brillantes
+     * @param threshold Umbral de gradiente para considerar un píxel como borde
+     * @param output_rgba Buffer de salida RGBA con el lineart extraído
+     * @return true si la convolución fue exitosa
+     */
+    [[nodiscard]] auto apply_sobel_lineart(
+        std::span<const uint8_t> rgba_pixels,
+        int32_t width,
+        int32_t height,
+        bool invert,
+        float threshold,
+        std::span<uint8_t> output_rgba
+    ) const noexcept -> bool;
 };
 
 } // namespace ibis::vision::stroke
@@ -161,4 +180,17 @@ extern "C" {
     uint8_t* output_mask
 );
 
+/**
+ * @brief C-ABI para extracción Sobel de Lineart en WebAssembly
+ */
+[[maybe_unused]] int32_t ibis_apply_sobel_lineart(
+    const uint8_t* rgba_data,
+    int32_t width,
+    int32_t height,
+    int32_t invert,
+    float threshold,
+    uint8_t* output_rgba
+);
+
 }
+

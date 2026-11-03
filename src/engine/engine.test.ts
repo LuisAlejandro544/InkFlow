@@ -1115,6 +1115,213 @@ test('Patrón de Textura en Espacio de Lienzo (getOrCreateTexturePattern): Null-
   });
 });
 
+import { WasmHistoryEngine, wasmHistoryEngine } from './wasmHistoryEngine';
+
+test('Wasm History Engine: Inicialización y asignación de memoria lineal WebAssembly', () => {
+  const engine = new WasmHistoryEngine(20);
+  assert.equal(engine.isReady, true);
+  assert.equal(engine.canUndo(), false);
+  assert.equal(engine.canRedo(), false);
+
+  const stats = engine.getStats();
+  assert.equal(stats.undoCount, 0);
+  assert.equal(stats.redoCount, 0);
+  assert.equal(stats.maxDepth, 20);
+  assert.ok(stats.wasmMemoryBytes >= 1024 * 1024, 'La memoria Wasm debe ser al menos 1MB');
+});
+
+test('Wasm History Engine: Compresión RLE de 32-bit y descompresión 100% idéntica sin pérdidas', () => {
+  const engine = new WasmHistoryEngine();
+  const totalPixels = 5000;
+  const pixelsU32 = new Uint32Array(totalPixels);
+
+  // Simular una capa típica de dibujo: 4000 píxeles transparentes, 500 negros (trazo) y 500 transparentes
+  for (let i = 0; i < 4000; i++) pixelsU32[i] = 0;
+  for (let i = 4000; i < 4500; i++) pixelsU32[i] = 0xff18181b;
+  for (let i = 4500; i < 5000; i++) pixelsU32[i] = 0;
+
+  const compressed = engine.compressPixelsRLE(pixelsU32);
+  // Con 3 rachas, debe comprimirse a exactamente 6 elementos u32 (24 bytes frente a 20,000 bytes)
+  assert.equal(compressed.length, 6);
+  assert.ok(compressed.byteLength < pixelsU32.byteLength / 500, 'Debe lograr más de 500x de compresión');
+
+  // Descompresión
+  const decompressed = engine.decompressPixelsRLE(compressed, totalPixels);
+  assert.equal(decompressed.length, totalPixels);
+
+  let exactMatch = true;
+  for (let i = 0; i < totalPixels; i++) {
+    if (pixelsU32[i] !== decompressed[i]) {
+      exactMatch = false;
+      break;
+    }
+  }
+  assert.equal(exactMatch, true, 'La descompresión en Wasm debe ser 100% bit-a-bit idéntica');
+});
+
+test('Wasm History Engine: Ciclo completo de Guardado, Deshacer y Rehacer entre capas', () => {
+  const engine = new WasmHistoryEngine(10);
+
+  // Mock de ImageData para Node
+  function createMockImageData(width: number, height: number, fillVal: number): ImageData {
+    const totalPixels = width * height;
+    const u32 = new Uint32Array(totalPixels);
+    u32.fill(fillVal);
+    const u8 = new Uint8ClampedArray(u32.buffer, u32.byteOffset, totalPixels * 4);
+    return {
+      width,
+      height,
+      data: u8,
+      colorSpace: 'srgb',
+    } as ImageData;
+  }
+
+  const snapA = createMockImageData(100, 100, 0x00000000);
+  const snapB = createMockImageData(100, 100, 0xff0000ff);
+  const snapC = createMockImageData(100, 100, 0x00ff00ff);
+
+  // 1. Guardar estado A y B
+  engine.saveSnapshot('layer_1', snapA);
+  assert.equal(engine.canUndo(), true);
+  assert.equal(engine.canRedo(), false);
+
+  engine.saveSnapshot('layer_1', snapB);
+  assert.equal(engine.getStats().undoCount, 2);
+
+  // 2. Undo debe restaurar B guardando C en Redo
+  const restoredB = engine.undo({ layerId: 'layer_1', imageData: snapC });
+  assert.ok(restoredB !== null);
+  assert.equal(restoredB!.layerId, 'layer_1');
+  assert.equal(engine.canRedo(), true);
+
+  // 3. Undo otra vez debe restaurar A guardando B en Redo
+  const restoredA = engine.undo({ layerId: 'layer_1', imageData: restoredB!.imageData });
+  assert.ok(restoredA !== null);
+  assert.equal(restoredA!.layerId, 'layer_1');
+  assert.equal(engine.canUndo(), false);
+
+  // 4. Redo debe avanzar hacia adelante restaurando B y guardando A en Undo
+  const redoneB = engine.redo({ layerId: 'layer_1', imageData: restoredA!.imageData });
+  assert.ok(redoneB !== null);
+  assert.equal(redoneB!.layerId, 'layer_1');
+  assert.equal(engine.canUndo(), true);
+
+  // 5. Estadísticas de compresión
+  const stats = engine.getStats();
+  assert.ok(stats.compressionRatio >= 1.0, 'El ratio de compresión debe ser favorable');
+});
+
+test('Wasm History Engine: Buffer circular (FIFO) acota la memoria al límite maxDepth', () => {
+  const depth = 5;
+  const engine = new WasmHistoryEngine(depth);
+
+  function makeMock(val: number): ImageData {
+    const u32 = new Uint32Array(50);
+    u32.fill(val);
+    return {
+      width: 10,
+      height: 5,
+      data: new Uint8ClampedArray(u32.buffer),
+      colorSpace: 'srgb',
+    } as ImageData;
+  }
+
+  // Guardar 10 snapshots (el doble del límite)
+  for (let i = 1; i <= 10; i++) {
+    engine.saveSnapshot('layer_test', makeMock(i));
+  }
+
+  // El stack nunca debe exceder maxDepth
+  const stats = engine.getStats();
+  assert.equal(stats.undoCount, depth);
+
+  // Limpieza total
+  engine.clear();
+  assert.equal(engine.canUndo(), false);
+  assert.equal(engine.canRedo(), false);
+  assert.equal(engine.getStats().undoCount, 0);
+});
+
+test('Bote de Pintura Scanline (Rust Wasm Core): Llenado continuo, dilatación morfológica y contención', () => {
+  const width = 16;
+  const height = 16;
+  const canvas = { width, height } as HTMLCanvasElement;
+  const rawBytes = new Uint8ClampedArray(width * height * 4);
+  const mockCtx = {
+    getImageData: () => ({
+      data: rawBytes,
+      width,
+      height
+    } as ImageData),
+    putImageData: () => {}
+  } as unknown as CanvasRenderingContext2D;
+
+  const mockLayer: Layer = {
+    id: 'layer_fill_test',
+    name: 'Capa Relleno',
+    visible: true,
+    opacity: 1.0,
+    blendMode: 'source-over',
+    canvas,
+    ctx: mockCtx,
+  };
+
+  // Crear un cuadrado con bordes negros (val=0) en el centro de 8x8 (x=4..11, y=4..11)
+  for (let y = 4; y <= 11; y++) {
+    for (let x = 4; x <= 11; x++) {
+      if (x === 4 || x === 11 || y === 4 || y === 11) {
+        const idx = (y * width + x) * 4;
+        rawBytes[idx] = 0;
+        rawBytes[idx + 1] = 0;
+        rawBytes[idx + 2] = 0;
+        rawBytes[idx + 3] = 255;
+      }
+    }
+  }
+
+  // Ejecutar relleno en el centro del cuadrado (x=7, y=7) con color rojo (#ff0000)
+  const filled = scanlineFloodFill(mockLayer, 7, 7, '#ff0000', 32, 1, 0);
+  assert.equal(filled, true, 'El relleno Scanline debe completarse con éxito');
+
+  // El píxel interior (7, 7) debe ser rojo puro (R: 255, G: 0, B: 0, A: 255)
+  const centerIdx = (7 * width + 7) * 4;
+  assert.equal(rawBytes[centerIdx], 255);
+  assert.equal(rawBytes[centerIdx + 1], 0);
+  assert.equal(rawBytes[centerIdx + 2], 0);
+  assert.equal(rawBytes[centerIdx + 3], 255);
+
+  // El exterior (x=1, y=1) debe permanecer transparente (no hubo fuga)
+  const outsideIdx = (1 * width + 1) * 4;
+  assert.equal(rawBytes[outsideIdx + 3], 0);
+});
+
+test('Extracción Sobel 3x3 y Cierre de Huecos C++23: Gradiente ortogonal y puente morfológico de brechas', () => {
+  const w = 8;
+  const h = 8;
+  const inPixels = new Uint8ClampedArray(w * h * 4);
+
+  // Crear gradiente abrupto de luminancia horizontal (borde vertical en x=4)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      const lum = x >= 4 ? 240 : 15;
+      inPixels[idx] = lum;
+      inPixels[idx + 1] = lum;
+      inPixels[idx + 2] = lum;
+      inPixels[idx + 3] = 255;
+    }
+  }
+
+  const outSobel = extractLineartFromPixels(inPixels, w, h, true, 30);
+  assert.equal(outSobel.length, inPixels.length);
+
+  // En el borde (x=3 o x=4), el lineart invertido debe haber detectado contorno (alfa = 255)
+  const edgeAlpha = outSobel[(4 * w + 3) * 4 + 3];
+  assert.equal(edgeAlpha, 255, 'Sobel C++23 debe registrar el borde vertical detectado');
+});
+
+
+
 
 
 

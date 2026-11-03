@@ -42,7 +42,7 @@ Este documento define los 7 roles especializados del ciclo de vida del software 
 ## 🛡️ 06. El Escudo (Testing y Cobertura)
 - **Misión:** Diseñar y ejecutar suites de pruebas automatizadas deterministas con Node test runner (`node:test`).
 - **Responsabilidad en el proyecto:** Cobertura de las 4 categorías obligatorias: *Happy path*, *Edge cases* (coordenadas fuera de lienzo, velocidad cero, presiones extremas, dedos en pinch, calibración de fotos de calco, roles de trazo, dilatación morfológica y cierre de huecos en flood fill, estampación de accesorios fotográficos, offsets de expansión de lienzo, transacciones ACID en SQLite Wasm, modulación determinista de texturas de pincel y rescate de crash), *Gestión de errores* y *Mocks*.
-- **Comando de ejecución:** `npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts` (46 pruebas deterministas pasando: 41 de motor gráfico, transformaciones y texturas + 5 de SQLite Wasm OPFS).
+- **Comando de ejecución:** `npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts` (55 pruebas deterministas pasando: 50 de motor gráfico, transformaciones, Wasm y texturas + 5 de SQLite Wasm OPFS).
 
 ---
 

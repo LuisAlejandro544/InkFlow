@@ -50,7 +50,7 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 8. **Conservación de Diseño y Lógica:**
    - No cambiar el diseño ni la lógica existente a menos que el usuario lo solicite explícitamente. Las modificaciones deben ser quirúrgicas y modulares.
 9. **Pruebas de Lógica Obligatorias:**
-   - Siempre verificar cambios de lógica con pruebas unitarias deterministas (`npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts`) antes de dar por completada la tarea (46 tests pasando: 41 en motor gráfico/transformaciones/calco/Wasm/VRAM/expansión/huecos/accesorios/texturas y 5 en persistencia SQLite Wasm).
+   - Siempre verificar cambios de lógica con pruebas unitarias deterministas (`npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts`) antes de dar por completada la tarea (55 tests pasando: 50 en motor gráfico/transformaciones/calco/Wasm/historial/VRAM/expansión/huecos/accesorios/texturas y 5 en persistencia SQLite Wasm).
 10. **Persistencia Masiva en SQLite Wasm & OPFS:**
    - Queda terminantemente prohibido utilizar `localStorage` (límite 5MB y síncrono bloqueante) o `dexie.js` para persistencia gráfica.
    - El almacenamiento de proyectos y capas en alta resolución se realiza exclusivamente mediante `@sqlite.org/sqlite-wasm` ejecutándose en un Web Worker dedicado sobre OPFS (Origin Private File System) con transacciones ACID.

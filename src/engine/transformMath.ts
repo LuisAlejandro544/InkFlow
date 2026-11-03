@@ -267,16 +267,22 @@ export function calculateArtworkBoundingBox(
   let maxY = -1;
 
   for (const data of layersData) {
+    // Escaneo acelerado mediante palabras de 32 bits (4 bytes por ciclo)
+    const u32 = new Uint32Array(data.buffer, data.byteOffset, canvasWidth * canvasHeight);
+    
     for (let y = 0; y < canvasHeight; y++) {
-      const rowOffset = y * canvasWidth * 4;
+      const rowOffset = y * canvasWidth;
       for (let x = 0; x < canvasWidth; x++) {
-        const alpha = data[rowOffset + x * 4 + 3];
-        // Si el píxel tiene opacidad visible (trazo de pincel, línea o relleno)
-        if (alpha > 8) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
+        const pixel = u32[rowOffset + x];
+        // En little-endian RGBA, el canal alfa ocupa el byte más significativo (bits 24-31)
+        if (pixel !== 0) {
+          const alpha = (pixel >>> 24) & 0xff;
+          if (alpha > 8) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
         }
       }
     }

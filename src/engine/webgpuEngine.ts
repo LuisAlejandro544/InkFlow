@@ -2,21 +2,16 @@
  * @file webgpuEngine.ts
  * @description Motor de renderizado acelerado con WebGPU y fallback fluido para navegadores móviles.
  * 
- * Contiene:
- * 1. Detección y arranque de pipeline WebGPU con Shaders WGSL (WebGPU Shading Language)
- *    para renderizado de sellos de pincel (brush stamps) con gradiente radial y dinámicas de presión.
- * 2. Pipeline de composición de capas con soporte para modos de fusión (Multiply, Screen, Overlay, Add).
- * 3. Fallback inteligente a Canvas 2D / WebGL2 acelerado por hardware para navegadores
- *    móviles donde WebGPU aún no está habilitado por defecto.
- * 4. Algoritmo Scanline Flood Fill para la herramienta de bote de pintura (Bucket Fill).
- * 5. Cuentagotas (Eyedropper) para muestreo de color en tiempo real.
+ * Modularizado:
+ * - Shaders WGSL extraídos a `shaders/brushShader.wgsl.ts`.
+ * - Lógica de renderizado y composición Canvas 2D extraída a `renderers/canvas2dRenderer.ts`.
+ * - Algoritmo Scanline Flood Fill y Cierre de Huecos delegado a `floodFillEngine.ts`.
+ * - Caché de texturas VRAM delegada a `bitmapCache.ts`.
  */
 
-import { Layer, Point, ToolType, BlendMode, TracingReference, BrushTextureConfig } from './types';
-import { wasmEngine } from './wasmEngine';
-import { kotlinVectorEngine } from './kotlinWasmBridge';
-import { gpuBitmapCache } from './bitmapCache';
-import { modulateAlphaByTexture, shouldDepositTexturePigment, getOrCreateTexturePattern } from './brushTextureEngine';
+import { Layer, Point, ToolType, TracingReference, BrushTextureConfig, VectorStroke } from './types';
+import { BRUSH_WGSL_SHADER } from './shaders/brushShader.wgsl';
+import { renderCanvas2DStrokeSegment, renderCanvas2DCompositeLayers } from './renderers/canvas2dRenderer';
 import { 
   scanlineFloodFill, 
   dilateBinaryMask, 
@@ -25,51 +20,7 @@ import {
   pickCanvasColor 
 } from './floodFillEngine';
 
-export { dilateBinaryMask, hexToRgb, rgbToHex, scanlineFloodFill, pickCanvasColor };
-
-// WGSL Shader para sellos de pincel con cálculo de atenuación radial en GPU
-export const BRUSH_WGSL_SHADER = /* wgsl */ `
-struct VertexOutput {
-  @builtin(position) position: vec4f,
-  @location(0) uv: vec2f,
-};
-
-@vertex
-fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-  var pos = array<vec2f, 6>(
-    vec2f(-1.0, -1.0),
-    vec2f( 1.0, -1.0),
-    vec2f(-1.0,  1.0),
-    vec2f(-1.0,  1.0),
-    vec2f( 1.0, -1.0),
-    vec2f( 1.0,  1.0)
-  );
-  var output: VertexOutput;
-  output.position = vec4f(pos[vertexIndex], 0.0, 1.0);
-  output.uv = pos[vertexIndex] * 0.5 + 0.5;
-  return output;
-}
-
-struct BrushUniforms {
-  color: vec4f,
-  softness: f32,
-  opacity: f32,
-  padding: vec2f,
-};
-
-@group(0) @binding(0) var<uniform> uniforms: BrushUniforms;
-
-@fragment
-fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  let dist = distance(uv, vec2f(0.5, 0.5)) * 2.0;
-  if (dist > 1.0) {
-    discard;
-  }
-  // Suavizado de bordes según la suavidad del pincel
-  let alpha = smoothstep(1.0, 1.0 - uniforms.softness, dist) * uniforms.color.a * uniforms.opacity;
-  return vec4f(uniforms.color.rgb, alpha);
-}
-`;
+export { BRUSH_WGSL_SHADER, dilateBinaryMask, hexToRgb, rgbToHex, scanlineFloodFill, pickCanvasColor };
 
 export class DrawingEngine {
   private device: GPUDevice | null = null;
@@ -90,7 +41,10 @@ export class DrawingEngine {
           this.device = await this.adapter.requestDevice();
           this.webgpuSupported = true;
           this.webgpuActive = true;
-          const adapterAny = this.adapter as unknown as { info?: { vendor?: string; architecture?: string }; requestAdapterInfo?: () => Promise<{ vendor?: string; architecture?: string }> };
+          const adapterAny = this.adapter as unknown as { 
+            info?: { vendor?: string; architecture?: string }; 
+            requestAdapterInfo?: () => Promise<{ vendor?: string; architecture?: string }> 
+          };
           const info = adapterAny.info || (adapterAny.requestAdapterInfo ? await adapterAny.requestAdapterInfo() : null);
           this.adapterInfo = info?.vendor || info?.architecture || 'Hardware WebGPU Device';
           return true;
@@ -115,7 +69,7 @@ export class DrawingEngine {
 
   /**
    * Dibuja un segmento de trazo entre dos puntos sobre la capa activa.
-   * Utiliza interpolación WebAssembly y dinámicas de presión y opacidad.
+   * Delega al renderizador Canvas 2D con aceleración WebAssembly y dinámicas de textura.
    */
   public drawStrokeSegment(
     layer: Layer,
@@ -126,99 +80,21 @@ export class DrawingEngine {
     baseSize: number,
     baseOpacity: number,
     textureConfig?: BrushTextureConfig
-  ) {
-    const ctx = layer.ctx;
-    const points = wasmEngine.interpolateStroke(p0, p1, Math.max(1, baseSize * 0.25));
-
-    ctx.save();
-    
-    if (tool === 'eraser') {
-      ctx.globalCompositeOperation = 'destination-out';
-    } else {
-      ctx.globalCompositeOperation = 'source-over';
-    }
-
-    const pattern = (textureConfig && textureConfig.id !== 'none' && tool !== 'eraser')
-      ? getOrCreateTexturePattern(ctx, textureConfig, colorHex)
-      : null;
-
-    const fillSource = tool === 'eraser' ? 'rgba(0,0,0,1)' : (pattern || colorHex);
-    ctx.fillStyle = fillSource;
-    ctx.strokeStyle = fillSource;
-
-    const isTap = (p0.x === p1.x && p0.y === p1.y);
-
-    if (tool === 'airbrush') {
-      // Efecto aerógrafo suave con gradiente radial
-      const points = wasmEngine.interpolateStroke(p0, p1, Math.max(2, baseSize * 0.4));
-      for (const pt of points) {
-        const radius = Math.max(0.5, (baseSize * pt.pressure) / 2);
-        const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, radius * 1.5);
-        const rgb = this.hexToRgb(colorHex);
-        grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${baseOpacity * 0.4})`);
-        grad.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${baseOpacity * 0.15})`);
-        grad.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, radius * 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else if (tool === 'marker') {
-      // Resaltador semitransparente con punta biselada
-      const points = wasmEngine.interpolateStroke(p0, p1, Math.max(2, baseSize * 0.4));
-      ctx.globalAlpha = baseOpacity * 0.35;
-      for (const pt of points) {
-        const radius = Math.max(0.5, (baseSize * pt.pressure) / 2);
-        ctx.fillRect(pt.x - radius, pt.y - radius * 1.6, radius * 2, radius * 3.2);
-      }
-    } else if (isTap) {
-      // Tap puntual con el dedo sin desplazamiento (sello individual nítido)
-      const radius = Math.max(0.5, (baseSize * p0.pressure) / 2);
-      ctx.globalAlpha = baseOpacity * (tool === 'pencil' ? 0.75 : 1.0);
-      ctx.beginPath();
-      ctx.arc(p0.x, p0.y, radius, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // Segmento de trazo continuo ultra-rápido (60-120 FPS sin lag en móviles)
-      // Unifica el trazo en una sola orden stroke() por GPU con extremos redondos perfectos
-      const alpha = baseOpacity * (tool === 'pencil' ? 0.75 : 1.0);
-      ctx.globalAlpha = alpha;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-      const pressureDiff = Math.abs(p1.pressure - p0.pressure);
-
-      if (dist < 20 || pressureDiff < 0.1) {
-        // Flujo principal continuo: 1 única llamada por evento táctil
-        const avgPressure = (p0.pressure + p1.pressure) * 0.5;
-        ctx.lineWidth = Math.max(0.5, baseSize * avgPressure);
-        ctx.beginPath();
-        ctx.moveTo(p0.x, p0.y);
-        ctx.lineTo(p1.x, p1.y);
-        ctx.stroke();
-      } else {
-        // En movimientos muy rápidos con gran variación de presión, subdividir en pocos tramos suaves
-        const points = wasmEngine.interpolateStroke(p0, p1, Math.max(8, baseSize * 0.6));
-        for (let i = 0; i < points.length - 1; i++) {
-          const ptA = points[i];
-          const ptB = points[i + 1];
-          const segPressure = (ptA.pressure + ptB.pressure) * 0.5;
-          ctx.lineWidth = Math.max(0.5, baseSize * segPressure);
-          ctx.beginPath();
-          ctx.moveTo(ptA.x, ptA.y);
-          ctx.lineTo(ptB.x, ptB.y);
-          ctx.stroke();
-        }
-      }
-    }
-
-    ctx.restore();
+  ): void {
+    renderCanvas2DStrokeSegment(
+      layer,
+      p0,
+      p1,
+      tool,
+      colorHex,
+      baseSize,
+      baseOpacity,
+      textureConfig
+    );
   }
 
   /**
    * Compone todas las capas visibles en el canvas principal con sus respectivos modos de fusión y opacidades.
-   * Renderiza capas de mapa de bits y trazos vectoriales de Kotlin/Wasm sin pérdida de resolución.
    */
   public compositeLayers(
     targetCtx: CanvasRenderingContext2D,
@@ -228,78 +104,22 @@ export class DrawingEngine {
     backgroundColor: string = '#ffffff',
     currentScale: number = 1.0,
     tracingRef?: TracingReference | null,
-    liveVectorStroke?: import('./types').VectorStroke | null
-  ) {
-    targetCtx.save();
-    
-    // Fondo de lienzo
-    if (backgroundColor === 'transparent') {
-      targetCtx.clearRect(0, 0, width, height);
-    } else {
-      targetCtx.fillStyle = backgroundColor;
-      targetCtx.fillRect(0, 0, width, height);
-    }
-
-    // Si hay una foto de calco activa y visible, dibujarla de fondo para que el usuario trace encima
-    if (tracingRef && tracingRef.visible && tracingRef.image) {
-      targetCtx.save();
-      targetCtx.globalAlpha = Math.max(0.01, Math.min(1.0, tracingRef.opacity));
-      targetCtx.translate(tracingRef.x, tracingRef.y);
-      if (tracingRef.rotation) {
-        targetCtx.rotate(tracingRef.rotation);
-      }
-      const drawW = tracingRef.width * tracingRef.scale;
-      const drawH = tracingRef.height * tracingRef.scale;
-      const cachedBitmap = gpuBitmapCache.get(`tracing_${tracingRef.id}_${tracingRef.filterMode}`);
-      if (cachedBitmap) {
-        targetCtx.drawImage(cachedBitmap, -drawW / 2, -drawH / 2, drawW, drawH);
-      } else {
-        targetCtx.drawImage(
-          tracingRef.image,
-          -drawW / 2,
-          -drawH / 2,
-          drawW,
-          drawH
-        );
-        if (typeof createImageBitmap === 'function') {
-          createImageBitmap(tracingRef.image).then((bmp) => {
-            gpuBitmapCache.set(`tracing_${tracingRef.id}_${tracingRef.filterMode}`, bmp);
-          }).catch(() => {});
-        }
-      }
-      targetCtx.restore();
-    }
-
-    // Dibujar cada capa visible respetando opacidad y blend mode
-    for (const layer of layers) {
-      if (!layer.visible || layer.opacity <= 0) continue;
-
-      targetCtx.save();
-      targetCtx.globalAlpha = layer.opacity;
-      targetCtx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation;
-      targetCtx.drawImage(layer.canvas, 0, 0, width, height);
-
-      // Renderizar trazos vectoriales procesados por Kotlin/Wasm para esta capa
-      const vectorStrokes = kotlinVectorEngine.getStrokesForLayer(layer.id);
-      if (vectorStrokes && vectorStrokes.length > 0) {
-        kotlinVectorEngine.renderVectorStrokes(targetCtx, vectorStrokes, currentScale);
-      }
-
-      // Si hay un trazo vectorial en vivo dibujándose en esta capa, renderizarlo en tiempo real
-      if (liveVectorStroke && liveVectorStroke.layerId === layer.id && liveVectorStroke.segments.length > 0) {
-        kotlinVectorEngine.renderVectorStrokes(targetCtx, [liveVectorStroke], currentScale);
-      }
-
-      targetCtx.restore();
-    }
-
-    targetCtx.restore();
+    liveVectorStroke?: VectorStroke | null
+  ): void {
+    renderCanvas2DCompositeLayers(
+      targetCtx,
+      layers,
+      width,
+      height,
+      backgroundColor,
+      currentScale,
+      tracingRef,
+      liveVectorStroke
+    );
   }
 
   /**
-   * Herramienta de Cubo de Pintura (Bucket Fill) con Expansión de Borde (1 a 3 px)
-   * y Cierre Inteligente de Huecos (Gap-Closing).
-   * Delegado al módulo especializado floodFillEngine.ts.
+   * Herramienta de Cubo de Pintura (Bucket Fill) con Expansión de Borde y Cierre de Huecos.
    */
   public floodFill(
     layer: Layer,

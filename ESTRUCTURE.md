@@ -4,7 +4,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 
 ---
 
-## 🌳 Árbol de Archivos del Proyecto (Arquitectura Modular)
+## 🌳 Árbol de Archivos del Proyecto (Arquitectura Modular de Alto Rendimiento)
 
 ```text
 /
@@ -34,22 +34,28 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   ├── rust-core/                # Código fuente en Rust para compilación a Wasm
 │   │   ├── Cargo.toml            # Configuración de paquete Rust y perfil wasm32
 │   │   └── src/
-│   │       └── lib.rs            # Matemática vectorial, estabilizador y buffers VBO
+│   │       └── lib.rs            # Matemática vectorial, estabilizador, flood fill y buffers VBO
 │   ├── engine/                   # Motor gráfico central desacoplado de la interfaz
 │   │   ├── types.ts              # Tipos: Layer, ToolType, Point, VectorStroke, TracingReference (calco o accesorio)
 │   │   ├── wasmEngine.ts         # Binario Wasm, estabilizador S-Form y cálculo de presión
 │   │   ├── wasmStreamingCompiler.ts # Compilador JIT streaming a código máquina CPU con caché nativa
+│   │   ├── wasmHistoryEngine.ts  # Motor de Deshacer/Rehacer en Wasm con memoria lineal y compresión RLE 32-bit
 │   │   ├── bitmapCache.ts        # Caché VRAM en GPU con ImageBitmap off-thread y gestión LRU
 │   │   ├── transformMath.ts      # Matemática pura: zoom, rotación 2D, snapping, screenToCanvasCoords y auto-crop
 │   │   ├── canvasResizeMath.ts   # Matemática de expansión de lienzo: matriz de anclaje 3x3 y presets de espacio
 │   │   ├── floodFillEngine.ts    # Scanline Flood Fill con dilatación 0-3px y Cierre de Huecos 0-10px (Gap Closing)
-│   │   ├── brushTextureEngine.ts # Motor matemático de 4 texturas estilo IbisPaint y renderizado de muestra en vivo
+│   │   ├── exportEngine.ts       # [MODULAR] Motor desacoplado de composición offscreen, estimación de peso y Web Share API
+│   │   ├── brushTextureEngine.ts # Motor matemático de 9 texturas estilo IbisPaint y proyección en espacio de lienzo
 │   │   ├── tracingEngine.ts      # Motor de calco y stickers: Sobel Lineart, contraste, monocromo y paletas Wasm
 │   │   ├── strokeAssistant.ts    # Asistente REAL de Grosor: Visión artificial, percentiles y muestreo local
 │   │   ├── kotlinWasmBridge.ts   # Puente de ejecución Kotlin/Wasm para Lápiz Vectorial (cero píxeles al zoom)
 │   │   ├── environmentDetector.ts# Detección determinista de PWA Standalone vs Navegador y excepción de Preview
-│   │   ├── webgpuEngine.ts       # Pipeline WebGPU, shaders WGSL, composición multicapa, balde y trazado
-│   │   └── engine.test.ts        # Suite de 41 pruebas unitarias deterministas de motor, Wasm, huecos, accesorios y texturas
+│   │   ├── webgpuEngine.ts       # [MODULAR] Coordinador central WebGPU/Canvas y despacho de herramientas
+│   │   ├── shaders/              # [MODULAR] Shaders de aceleración por GPU
+│   │   │   └── brushShader.wgsl.ts # Shaders WGSL para sellos radiales y gradientes de atenuación
+│   │   ├── renderers/            # [MODULAR] Renderizadores gráficos especializados
+│   │   │   └── canvas2dRenderer.ts # Renderizado acelerado 2D de trazos, patrones continuos y composición de capas
+│   │   └── engine.test.ts        # Suite de 50 pruebas unitarias deterministas de motor, Wasm, historial, accesorios y texturas
 │   ├── storage/                  # Motor de Persistencia Masiva SQLite Wasm & OPFS en Web Worker
 │   │   ├── sqliteTypes.ts        # Tipos y contratos IPC de serialización relacional
 │   │   ├── sqliteStorage.worker.ts # Web Worker dedicado ejecutando @sqlite.org/sqlite-wasm sobre OPFS
@@ -57,10 +63,17 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   └── storage.test.ts       # 5 pruebas unitarias deterministas de SQLite Wasm y Crash Recovery
 │   ├── store/                    # Gestión de estado global
 │   │   └── drawingStore.ts       # Estado del proyecto por defecto, paleta y herramientas
-│   ├── hooks/                    # [MODULAR] Hooks de dominio especializados desacoplados de la raíz
+│   ├── hooks/                    # [MODULAR] Hooks de dominio especializados desacoplados
 │   │   ├── useLayerManager.ts    # Gestión integral de capas: creación, clonación, merge, eliminación y blend modes
-│   │   ├── useDrawingHistory.ts  # Historial reactivo de Deshacer/Rehacer con instantáneas ImageData
-│   │   └── useTracingManager.ts  # Ciclo de vida de fotos de calco y accesorios (moños/stickers)
+│   │   ├── useDrawingHistory.ts  # Historial reactivo de Deshacer/Rehacer con instantáneas ImageData y Wasm RLE
+│   │   ├── useTracingManager.ts  # Ciclo de vida de fotos de calco y accesorios (moños/stickers)
+│   │   ├── useCanvasGestures.ts  # [MODULAR] Gestos multitáctiles directos (pinch-to-zoom, rotación libre, snapping y paneo)
+│   │   ├── useStrokeDrawing.ts   # [MODULAR] Captura de trazo, estabilización S-Form, presión y despacho gráfico
+│   │   ├── useTracingGestures.ts # [MODULAR] Manipulación táctil con GPU transform en tiempo real para fotos y stickers
+│   │   ├── useProjectPersistence.ts # [MODULAR] Ciclo de vida SQLite Wasm, auto-guardado debounced y centinela de crash
+│   │   ├── useCanvasResizeHandler.ts # [MODULAR] Expansión y redimensionado de lienzo con matriz 3x3 y curvas Kotlin
+│   │   ├── useAccessoryStamper.ts # [MODULAR] Estampado permanente de adornos/moños en capa activa o capa dedicada
+│   │   └── useStudioModals.ts    # [MODULAR] Gestión limpia de apertura/cierre de los 6 modales del estudio
 │   ├── components/               # Componentes modulares de interfaz de usuario
 │   │   ├── studio/               # [MODULAR] Subcomponentes especializados de StudioScreen
 │   │   │   ├── StudioTopBar.tsx  # Barra superior móvil, deshacer/rehacer, zoom/rotación, calco y menú Pro
@@ -70,18 +83,21 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   │   ├── toolDefinitions.ts # Metadatos, iconos, badges y descripciones de las 9 herramientas de dibujo
 │   │   │   ├── BucketSettingsCard.tsx # Configuración de expansión de borde (0 a 3px), cierre de huecos (0 a 10px) y tolerancia
 │   │   │   └── StabilizerScratchpad.tsx # Calibrador S-Form con bloc táctil de pruebas y presets rápidos
+│   │   ├── tracing/              # [MODULAR] Subcomponentes especializados del calco y accesorios
+│   │   │   ├── TracingControlBar.tsx # Barra de calibración inferior compacta (~105px) con cero desbordamiento
+│   │   │   └── TracingMinimizedPill.tsx # Píldora ultra compacta flotante que despeja el 100% del lienzo
 │   │   ├── WelcomeScreen.tsx     # Pantalla de bienvenida, catálogo de funciones pro y descarga PWA en navegador
-│   │   ├── StudioScreen.tsx      # Mesa de dibujo táctil con gestos directos a 60-120 FPS
+│   │   ├── StudioScreen.tsx      # [MODULAR] Mesa de dibujo táctil orquestada a 60-120 FPS
 │   │   ├── ToolPickerModal.tsx   # Modal nativo segmentado en Herramientas y Estabilizador S-Form
-│   │   ├── BrushTextureModal.tsx # Modal de texturas de pincel estilo IbisPaint con live preview sin aplicar
+│   │   ├── BrushTextureModal.tsx # Modal de 9 texturas de pincel estilo IbisPaint con live preview interactivo
 │   │   ├── CanvasResizeModal.tsx # Modal de expansión de hoja con matriz de anclaje 3x3 y presets rápidos
-│   │   ├── TracingAdjuster.tsx   # Ajustador táctil de calco y accesorios (moños/stickers) con estampado en capas
+│   │   ├── TracingAdjuster.tsx   # [MODULAR] Ajustador táctil de calco y stickers con aceleración GPU pura
 │   │   ├── StrokeGuideAssistant.tsx # Barra ergonómica con recomendación calibrada por visión artificial
 │   │   ├── GalleryScreen.tsx     # Pantalla de galería y creación de nuevos lienzos
 │   │   ├── EngineInfoScreen.tsx  # Diagnóstico técnico de WebGPU, Kotlin/Wasm, Rust, C++23 y PWA
 │   │   ├── LayersModal.tsx       # Gestor de capas estilo IbisPaint con importador de calco y accesorios
 │   │   ├── ColorPickerModal.tsx  # Rueda HSV, sliders RGB y muestras de color de la foto
-│   │   ├── ExportModal.tsx       # Guardado de obra a galería con Hoja Completa vs Auto-crop y peso en KB/MB
+│   │   ├── ExportModal.tsx       # [MODULAR] Guardado de obra a galería con Hoja Completa vs Auto-crop y peso en KB/MB
 │   │   ├── ErrorBoundary.tsx     # Captura de excepciones de interfaz para evitar pantalla blanca
 │   │   └── usePWAInstall.ts      # Hook reactivo de instalación PWA en pantalla de inicio
 │   ├── App.tsx                   # [MODULAR] Componente orquestador limpio y desacoplado vía Custom Hooks
@@ -112,7 +128,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
               │   ├── Muestreo transversal ortogonal de líneas
               │   └── Cálculo de percentiles (Silueta P92, Estructura P68, Detalles P38, Tramas P12)
               │
-              └── Modo Accesorio/Sticker: TracingAdjuster (Transformación Táctil Móvil)
+              └── Modo Accesorio/Sticker: useAccessoryStamper (Transformación Táctil Móvil)
                   ├── Gestos a 1 y 2 dedos (Pan, Pinch Scale, Rotación libre)
                   ├── [✨ Estampar en Capa Activa]
                   └── [📑 + Nueva Capa Dedicada ("Accesorio (Moño)")]
@@ -125,7 +141,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
               │
          ┌────┴───────────────────────────┐
          ▼                                ▼
-    [ 1 Dedo ]              [ 2 Dedos: Pinch / Rotate / Pan ]
+    [ 1 Dedo: useStrokeDrawing ]    [ 2 Dedos: useCanvasGestures ]
          │                                │
          ├── Des-rotación inversa         ├── Escala focal de zoom (Z)
          │   unrotatePoint(x, y, θ)       ├── Delta angular de rotación θ
@@ -135,10 +151,10 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
          │                        [ Transformación matricial de hoja ]
          ├── Lápiz Vectorial: [ KotlinVectorEngine (Catmull-Rom C1) ]
          ├── Balde de Pintura:[ FloodFillEngine (Scanline + Dilate 0-3px + Gap-Closing 0-10px) ]
-         └── Pincel / Goma:   [ WebGPU WGSL Shader / Canvas ]
+         └── Pincel / Goma:   [ WebGPU WGSL Shader / Canvas 2D Renderer ]
                                           │
                                           ▼
-                         [ ExportModal: Guardar a Galería ]
+                         [ ExportModal / exportEngine.ts ]
                                           │
                          ├── Hoja Completa vs Auto-Crop (Bounding Box)
                          ├── Estimación de peso en tiempo real (KB / MB)
@@ -151,10 +167,11 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 
 1. **Desacoplamiento Estricto:** La lógica matemática pura se aloja en `src/engine/`, `src/cpp-core/` y `src/kotlin-core/`. Los componentes de React únicamente renderizan y gestionan eventos.
 2. **Modularización de Componentes Complejos:**
-   - `webgpuEngine.ts` delega el algoritmo de flood fill, dilatación morfológica y cierre de huecos a `src/engine/floodFillEngine.ts`.
-   - `ToolPickerModal.tsx` delega en `src/components/tools/` (`toolDefinitions.ts`, `BucketSettingsCard.tsx`, `StabilizerScratchpad.tsx`).
-   - `StudioScreen.tsx` delega en `src/components/studio/` (`StudioTopBar.tsx`, `StudioBottomBar.tsx`, `StudioCanvasOverlays.tsx`).
-   - `App.tsx` delega en hooks dedicados en `src/hooks/` (`useLayerManager.ts`, `useDrawingHistory.ts`, `useTracingManager.ts`).
+   - `webgpuEngine.ts` delega sus shaders a `src/engine/shaders/brushShader.wgsl.ts` y su renderizado 2D a `src/engine/renderers/canvas2dRenderer.ts`.
+   - `ExportModal.tsx` delega la composición offscreen, cálculo de auto-crop y estimación de bytes a `src/engine/exportEngine.ts`.
+   - `TracingAdjuster.tsx` delega su manipulación gestual acelerada por GPU a `src/hooks/useTracingGestures.ts`, su barra inferior a `src/components/tracing/TracingControlBar.tsx` y su modo minimizado a `src/components/tracing/TracingMinimizedPill.tsx`.
+   - `StudioScreen.tsx` delega la navegación espacial y gestos multitáctiles a `src/hooks/useCanvasGestures.ts` y el despacho del trazo táctil a `src/hooks/useStrokeDrawing.ts`.
+   - `App.tsx` delega en hooks dedicados en `src/hooks/` (`useLayerManager.ts`, `useDrawingHistory.ts`, `useTracingManager.ts`, `useProjectPersistence.ts`, `useCanvasResizeHandler.ts`, `useAccessoryStamper.ts`, `useStudioModals.ts`).
 3. **Diseño Móvil Nativo:** Eliminación de patrones de formulario web (botones submit/confirmar). Selección instantánea en 1 toque con retroalimentación háptica y controles segmentados.
 4. **Ergonomía Móvil Extrema:** Cero truncamientos tipográficos en selectores modales, touch targets de al menos 48×48px y soporte seguro para `viewport-fit=cover`.
 5. **Manipulación Gestual Invariante:** Todo giro de la hoja mediante dedos preserva el trazo exacto bajo el puntero aplicando la transformación inversa en tiempo real sin desfasaje de píxeles.
