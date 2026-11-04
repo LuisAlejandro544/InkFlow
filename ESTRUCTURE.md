@@ -24,38 +24,45 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 ├── src/
 │   ├── cpp-core/                 # Código fuente en C++23 moderno (ISO/IEC 14882:2023)
 │   │   ├── include/
-│   │   │   └── IbisStrokeAnalyzer.hpp # Cabecera C++23 con conceptos, std::span, cierre de huecos y C-ABI
+│   │   │   ├── IbisStrokeAnalyzer.hpp # Cabecera C++23 con conceptos, std::span, cierre de huecos y C-ABI
+│   │   │   └── IbisVectorEngine.hpp   # Cabecera C++23 del Motor Vectorial Analítico (Bézier cúbica y Douglas-Peucker)
 │   │   ├── src/
-│   │   │   └── IbisStrokeAnalyzer.cpp # Detección de percentiles y cierre morfológico de huecos (gap closing)
+│   │   │   ├── IbisStrokeAnalyzer.cpp # Detección de percentiles y cierre morfológico de huecos (gap closing)
+│   │   │   └── IbisVectorEngine.cpp   # Implementación C++23 de Douglas-Peucker y Catmull-Rom sin GC
 │   │   ├── CMakeLists.txt        # Configuración CMake con soporte Wasm SIMD128 y NDK 32/64 bits
 │   │   └── README.md             # Documentación técnica del módulo C++23
-│   ├── kotlin-core/              # Código fuente en Kotlin para WebAssembly (Kotlin/Wasm)
-│   │   └── VectorEngine.kt       # Algoritmos Bézier, Catmull-Rom, Douglas-Peucker y curvas continuas
+│   ├── kotlin-core/              # Código fuente en Kotlin para Android Runtime y Serialización
+│   │   ├── AndroidPlatformBridge.kt # Puente nativo Android: MediaStore (Galería Real) y WakeLock (Pantalla Encendida)
+│   │   ├── CoroutineOrchestrator.kt # Orquestador de concurrencia estructurada: kotlinx.coroutines, conflate táctil y centinela
+│   │   └── VectorEngine.kt       # Modelado de datos, puente Stylus API 240Hz, serializador .inkflow y teoría del color
 │   ├── rust-core/                # Código fuente en Rust para compilación a Wasm
 │   │   ├── Cargo.toml            # Configuración de paquete Rust y perfil wasm32
 │   │   └── src/
-│   │       └── lib.rs            # Matemática vectorial, estabilizador, flood fill y buffers VBO
+│   │       └── lib.rs            # Matemática vectorial, estabilizador, flood fill y Wasm History Engine
 │   ├── engine/                   # Motor gráfico central desacoplado de la interfaz
 │   │   ├── types.ts              # Tipos: Layer, ToolType, Point, VectorStroke, TracingReference (calco o accesorio)
 │   │   ├── wasmEngine.ts         # Binario Wasm, estabilizador S-Form y cálculo de presión
 │   │   ├── wasmStreamingCompiler.ts # Compilador JIT streaming a código máquina CPU con caché nativa
 │   │   ├── wasmHistoryEngine.ts  # Motor de Deshacer/Rehacer en Wasm con memoria lineal y compresión RLE 32-bit
+│   │   ├── coroutinesBridge.ts   # [CORRUTINAS] Puente de concurrencia estructurada: Job, AutoSaveSentinel y Conflate táctil
 │   │   ├── bitmapCache.ts        # Caché VRAM en GPU con ImageBitmap off-thread y gestión LRU
 │   │   ├── transformMath.ts      # Matemática pura: zoom, rotación 2D, snapping, screenToCanvasCoords y auto-crop
 │   │   ├── canvasResizeMath.ts   # Matemática de expansión de lienzo: matriz de anclaje 3x3 y presets de espacio
 │   │   ├── floodFillEngine.ts    # Scanline Flood Fill con dilatación 0-3px y Cierre de Huecos 0-10px (Gap Closing)
-│   │   ├── exportEngine.ts       # [MODULAR] Motor desacoplado de composición offscreen, estimación de peso y Web Share API
+│   │   ├── exportEngine.ts       # [MODULAR] Motor de guardado real en Galería (MediaStore / Web Share API) y composición
+│   │   ├── wakeLockService.ts    # [WAKELOCK] Servicio para mantener la pantalla encendida de forma continua (PWA y Android)
 │   │   ├── brushTextureEngine.ts # Motor matemático de 9 texturas estilo IbisPaint y proyección en espacio de lienzo
 │   │   ├── tracingEngine.ts      # Motor de calco y stickers: Sobel Lineart, contraste, monocromo y paletas Wasm
 │   │   ├── strokeAssistant.ts    # Asistente REAL de Grosor: Visión artificial, percentiles y muestreo local
-│   │   ├── kotlinWasmBridge.ts   # Puente de ejecución Kotlin/Wasm para Lápiz Vectorial (cero píxeles al zoom)
+│   │   ├── cppWasmVectorBridge.ts # [C++23 WASM] Motor vectorial analítico: Bézier continua, Douglas-Peucker y grosor dinámico
+│   │   ├── kotlinWasmBridge.ts   # Puente de delegación transparente hacia el motor vectorial C++23
 │   │   ├── environmentDetector.ts# Detección determinista de PWA Standalone vs Navegador y excepción de Preview
 │   │   ├── webgpuEngine.ts       # [MODULAR] Coordinador central WebGPU/Canvas y despacho de herramientas
 │   │   ├── shaders/              # [MODULAR] Shaders de aceleración por GPU
 │   │   │   └── brushShader.wgsl.ts # Shaders WGSL para sellos radiales y gradientes de atenuación
 │   │   ├── renderers/            # [MODULAR] Renderizadores gráficos especializados
 │   │   │   └── canvas2dRenderer.ts # Renderizado acelerado 2D de trazos, patrones continuos y composición de capas
-│   │   └── engine.test.ts        # Suite de 50 pruebas unitarias deterministas de motor, Wasm, historial, accesorios y texturas
+│   │   └── engine.test.ts        # Suite de 51 pruebas unitarias deterministas de motor, Wasm, historial, C++23 vectores y texturas
 │   ├── storage/                  # Motor de Persistencia Masiva SQLite Wasm & OPFS en Web Worker
 │   │   ├── sqliteTypes.ts        # Tipos y contratos IPC de serialización relacional
 │   │   ├── sqliteStorage.worker.ts # Web Worker dedicado ejecutando @sqlite.org/sqlite-wasm sobre OPFS

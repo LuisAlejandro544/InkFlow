@@ -52,7 +52,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#111215] text-[#e5e7eb] flex flex-col">
+    <div 
+      className="w-full h-full h-[100dvh] max-h-[100dvh] overflow-y-auto overflow-x-hidden touch-pan-y overscroll-y-contain bg-[#111215] text-[#e5e7eb] flex flex-col"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       {/* Barra superior de navegación */}
       <header className="h-16 px-4 sm:px-6 bg-[#18191f] border-b border-[#292b34] flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-2 sm:gap-3">

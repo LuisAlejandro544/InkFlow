@@ -23,6 +23,7 @@ import {
 import { drawingEngine } from '../../engine/webgpuEngine';
 import { kotlinVectorEngine } from '../../engine/kotlinWasmBridge';
 import { gpuBitmapCache } from '../../engine/bitmapCache';
+import { wakeLockService } from '../../engine/wakeLockService';
 import { TracingAdjuster } from '../assistants/TracingAdjuster';
 import { CrashRecoveryRecord } from '../../storage/sqliteTypes';
 import { StudioTopBar } from '../studio/StudioTopBar';
@@ -363,6 +364,14 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   useEffect(() => {
     renderComposite();
   }, [renderComposite]);
+
+  // Centinela de Pantalla Encendida (WakeLock / Keep-Alive): evita que el teléfono se apague mientras dibujas
+  useEffect(() => {
+    wakeLockService.acquireWakeLock().catch(() => {});
+    return () => {
+      wakeLockService.releaseWakeLock().catch(() => {});
+    };
+  }, []);
 
   return (
     <div className="relative w-screen h-screen h-[100dvh] max-h-[100dvh] bg-[#0d0e12] text-[#e5e7eb] flex flex-col overflow-hidden select-none touch-none pb-[env(safe-area-inset-bottom)]">

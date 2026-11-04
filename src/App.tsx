@@ -229,7 +229,7 @@ export default function App() {
   };
 
   return (
-    <div className="w-full h-full bg-[#0e1017]">
+    <div className="w-full h-full h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#0e1017]">
       {/* Input de archivo nativo para seleccionar fotos o accesorios desde la galería */}
       <input
         ref={fileInputRef}

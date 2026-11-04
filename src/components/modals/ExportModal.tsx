@@ -24,7 +24,8 @@ import {
   estimateArtworkFileSize, 
   formatByteSize, 
   downloadArtworkFile, 
-  shareArtworkFile 
+  shareArtworkFile,
+  saveArtworkToUserGallery
 } from '../../engine/exportEngine';
 
 interface ExportModalProps {
@@ -121,16 +122,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   }, [fileSizeBytes]);
 
   /**
-   * Descarga directa en la galería/descargas del dispositivo
+   * Guardado REAL en la galería del usuario (Kotlin MediaStore / Web Share File API)
    */
-  const handleDownload = () => {
+  const handleDownload = async () => {
     triggerHaptic(12);
     setIsExporting(true);
     try {
       const cvs = generateExportCanvas();
-      downloadArtworkFile(cvs, projectName, cropMode, scale, format);
-      setSuccessMessage('¡Obra maestra guardada en tu galería!');
-      setTimeout(() => setSuccessMessage(''), 3500);
+      const result = await saveArtworkToUserGallery(cvs, projectName, cropMode, scale, format);
+      if (result.success) {
+        setSuccessMessage(result.message);
+        setTimeout(() => setSuccessMessage(''), 3500);
+      }
     } finally {
       setIsExporting(false);
     }
@@ -353,6 +356,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <span>{successMessage}</span>
           </div>
         )}
+
+        {/* Nota explicativa de guardado vs compartir */}
+        <p className="text-[10px] text-gray-400 bg-[#101117] p-2 rounded-xl border border-[#212330] leading-snug">
+          <strong className="text-amber-400">💡 Tip:</strong> <span className="text-gray-300 font-medium">Guardar en mi Galería</span> descarga la imagen directamente en tu teléfono y se añade a tu galería de fotos. Usa <span className="text-gray-300 font-medium">Compartir</span> para enviarla a WhatsApp, Drive o Instagram.
+        </p>
 
         {/* Botones de acción principales */}
         <div className="flex gap-2 pt-1">

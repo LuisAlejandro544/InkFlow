@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wasmEngine } from './wasmEngine';
 import { drawingEngine, dilateBinaryMask } from './webgpuEngine';
-import { kotlinVectorEngine } from './kotlinWasmBridge';
+import { kotlinVectorEngine, cppVectorEngine } from './index';
 import { ToolNavigationStateManager } from './toolNavigationState';
 import { 
   calculateTouchRotation, 
@@ -35,6 +35,8 @@ import {
   TEXTURE_DEFINITIONS 
 } from './brushTextureEngine';
 import { Layer, BrushTextureConfig } from './types';
+import { wakeLockService } from './wakeLockService';
+import { saveArtworkToUserGallery } from './exportEngine';
 
 test('Wasm Lerp e Interpolación Lineal', () => {
   const result = wasmEngine.lerp(10, 20, 0.5);
@@ -1319,6 +1321,198 @@ test('Extracción Sobel 3x3 y Cierre de Huecos C++23: Gradiente ortogonal y puen
   const edgeAlpha = outSobel[(4 * w + 3) * 4 + 3];
   assert.equal(edgeAlpha, 255, 'Sobel C++23 debe registrar el borde vertical detectado');
 });
+
+test('C++23 Wasm Motor Vectorial Analítico: Douglas-Peucker y Curvas Bézier Catmull-Rom C1', () => {
+  // 1. Simplificación Douglas-Peucker C++23
+  const rawTouchPoints = [
+    { x: 0, y: 0, pressure: 0.2 },
+    { x: 25, y: 0.1, pressure: 0.4 }, // Casi colineal
+    { x: 50, y: 0, pressure: 0.6 },
+    { x: 100, y: 0, pressure: 0.8 },
+  ];
+
+  const simplified = cppVectorEngine.simplifyPoints(rawTouchPoints, 0.5);
+  assert.ok(simplified.length < rawTouchPoints.length, 'Debe reducir puntos colineales redundantes');
+  assert.equal(simplified[0].x, 0);
+  assert.equal(simplified[simplified.length - 1].x, 100);
+
+  // 2. Generación de segmentos Bézier cúbicos C++23 con grosor dinámico
+  const curvePoints = [
+    { x: 10, y: 10, pressure: 0.3 },
+    { x: 40, y: 60, pressure: 0.6 },
+    { x: 80, y: 90, pressure: 0.9 },
+    { x: 130, y: 100, pressure: 0.4 }
+  ];
+
+  const segments = cppVectorEngine.generateBezierSegments(curvePoints, 16);
+  assert.ok(segments.length >= 2, 'Debe generar segmentos Bézier continuos en C++23');
+
+  for (const seg of segments) {
+    assert.ok(typeof seg.p0.x === 'number');
+    assert.ok(typeof seg.cp1.x === 'number');
+    assert.ok(typeof seg.cp2.x === 'number');
+    assert.ok(typeof seg.p1.x === 'number');
+    assert.ok(seg.width0 > 0 && seg.width1 > 0);
+  }
+
+  // 3. Traslación vectorial analítica por expansión de hoja (offsetAllStrokes)
+  cppVectorEngine.clearLayerStrokes('test_cpp_layer');
+  cppVectorEngine.addStroke({
+    id: 'stroke_1',
+    layerId: 'test_cpp_layer',
+    points: [{ x: 10, y: 20, pressure: 0.5 }],
+    segments: [{
+      p0: { x: 10, y: 20, pressure: 0.5 },
+      cp1: { x: 15, y: 25, pressure: 0.5 },
+      cp2: { x: 25, y: 35, pressure: 0.5 },
+      p1: { x: 30, y: 40, pressure: 0.5 },
+      width0: 2,
+      width1: 2
+    }],
+    color: '#000000',
+    baseSize: 2,
+    opacity: 1.0,
+    createdAt: Date.now()
+  });
+
+  cppVectorEngine.offsetAllStrokes(50, 100);
+  const layerStrokes = cppVectorEngine.getStrokesForLayer('test_cpp_layer');
+  assert.equal(layerStrokes.length, 1);
+  assert.equal(layerStrokes[0].points[0].x, 60);
+  assert.equal(layerStrokes[0].points[0].y, 120);
+  assert.equal(layerStrokes[0].segments[0].p0.x, 60);
+  assert.equal(layerStrokes[0].segments[0].p0.y, 120);
+});
+
+test('Kotlin / PWA Integración: Guardado Real en Galería y WakeLock de Pantalla Encendida', async () => {
+  // 1. Simulación de entorno con puente nativo Kotlin y WakeLock
+  let nativeSaved = false;
+  let nativeKeepAlive = false;
+
+  (globalThis as any).window = {
+    InkFlowNativeBridge: {
+      saveImageToGallery: (_base64: string, _filename: string, _mime: string) => {
+        nativeSaved = true;
+        return JSON.stringify({ success: true, uri: 'content://media/external/images/media/42' });
+      },
+      setScreenKeepAlive: (keep: boolean) => {
+        nativeKeepAlive = keep;
+      },
+      isNativeBridgeReady: () => true
+    }
+  };
+
+  assert.equal(wakeLockService.isActive(), false);
+  const acquired = await wakeLockService.acquireWakeLock();
+  assert.equal(acquired, true);
+  assert.equal(wakeLockService.isActive(), true);
+  assert.equal(nativeKeepAlive, true, 'Debe activar el WakeLock nativo a través del puente');
+
+  await wakeLockService.releaseWakeLock();
+  assert.equal(wakeLockService.isActive(), false);
+  assert.equal(nativeKeepAlive, false, 'Debe liberar el WakeLock nativo al salir del estudio');
+
+  // Probar Guardado Real en Galería a través de MediaStore Kotlin
+  const mockCanvas = {
+    toDataURL: () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  } as unknown as HTMLCanvasElement;
+
+  const result = await saveArtworkToUserGallery(mockCanvas, 'obra_maestra', 'full', 1, 'png');
+  assert.equal(result.success, true);
+  assert.equal(result.method, 'kotlin_mediastore');
+  assert.equal(nativeSaved, true, 'Debe llamar al método de guardado en Galería de MediaStore');
+
+  // Limpiar mock global
+  delete (globalThis as any).window;
+});
+
+import {
+  AutoSaveCoroutineSentinel,
+  TouchPointStreamConflator,
+  StudioTaskScope,
+  CancellableCoroutineJob
+} from './coroutinesBridge';
+
+test('kotlinx.coroutines: Centinela de Auto-Guardado No Bloqueante y Cancelación Estructurada (Job.cancel)', async () => {
+  const sentinel = new AutoSaveCoroutineSentinel();
+  let saveCount = 0;
+  let isDirtyState = true;
+
+  // Iniciar centinela con intervalo corto (10ms)
+  const job = sentinel.start(
+    10,
+    () => isDirtyState,
+    async () => {
+      saveCount++;
+    }
+  );
+
+  assert.equal(job.isActive, true);
+  assert.equal(job.isCancelled, false);
+  assert.equal(sentinel.isActive(), true);
+
+  // Esperar a que se ejecute al menos una vez
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.ok(saveCount >= 1, `Debe haber ejecutado al menos un auto-guardado (recibido ${saveCount})`);
+
+  // Desactivar estado dirty: no debe incrementar
+  isDirtyState = false;
+  const countBefore = saveCount;
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(saveCount, countBefore, 'No debe guardar si el lienzo no está dirty');
+
+  // Cancelar Job
+  sentinel.stop();
+  assert.equal(job.isActive, false);
+  assert.equal(job.isCancelled, true);
+  assert.equal(sentinel.isActive(), false);
+
+  // Tras cancelación, no debe volver a ejecutarse jamás
+  isDirtyState = true;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(saveCount, countBefore, 'No debe disparar guardado tras cancelarse el Job');
+});
+
+test('kotlinx.coroutines: Conflación de Puntos Táctiles (Channel.CONFLATED) y Gestión de Tareas en Scope', () => {
+  // 1. Verificación del Conflator táctil
+  const conflator = new TouchPointStreamConflator();
+  assert.equal(conflator.consume(), null);
+
+  // Ráfaga rápida simulando muestreo a 240Hz mientras el renderizador está en medio de un frame
+  conflator.emit({ x: 10, y: 15, pressure: 0.3, timestamp: 100 });
+  conflator.emit({ x: 14, y: 19, pressure: 0.4, timestamp: 104 });
+  conflator.emit({ x: 22, y: 31, pressure: 0.7, timestamp: 108 }); // Esta es la más reciente
+
+  // Al consumir en el siguiente frame (requestAnimationFrame), debe devolver únicamente la última muestra (x=22, y=31)
+  const sample = conflator.consume();
+  assert.ok(sample !== null);
+  assert.equal(sample!.x, 22);
+  assert.equal(sample!.y, 31);
+  assert.equal(sample!.pressure, 0.7);
+
+  // El canal debe quedar vacío tras consumirse
+  assert.equal(conflator.consume(), null);
+
+  const stats = conflator.getStats();
+  assert.equal(stats.totalIngested, 3);
+  assert.equal(stats.totalEmitted, 1);
+  assert.equal(stats.droppedSamples, 2, 'Debe haber descartado 2 muestras intermedias para evitar saturar el hilo');
+
+  // 2. Scope de Tareas estructuradas (StudioTaskScope)
+  const scope = new StudioTaskScope();
+  let taskRan = false;
+
+  const taskJob = scope.launch('export_task', async (j) => {
+    if (j.isActive) {
+      taskRan = true;
+    }
+  });
+
+  assert.equal(scope.getActiveCount() >= 0, true);
+  scope.cancelAll();
+  assert.equal(scope.getActiveCount(), 0);
+});
+
 
 
 

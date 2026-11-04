@@ -1,6 +1,6 @@
-# InkFlow Studio (PWA Nativa con Kotlin/Wasm, Rust & C++23)
+# InkFlow Studio (PWA Nativa con C++23, Rust & Kotlin/Android)
 
-Aplicación de dibujo e ilustración digital profesional para dispositivos móviles. Diseñada y construida **exclusivamente como una Aplicación Web Progresiva (PWA Nativa)**, con renderizado acelerado por **WebGPU (WGSL)**, motor vectorial en **Kotlin (Kotlin/Wasm)**, núcleo de bajo nivel en **Rust (Wasm)**, motor analítico en **C++23** y pipeline reactivo en **React 19 / TypeScript**.
+Aplicación de dibujo e ilustración digital profesional para dispositivos móviles. Diseñada y construida **exclusivamente como una Aplicación Web Progresiva (PWA Nativa)**, con renderizado acelerado por **WebGPU (WGSL)**, motor vectorial analítico en **C++23 (WebAssembly)**, núcleo de bajo nivel en **Rust (Wasm)**, persistencia masiva en **SQLite Wasm (OPFS)** y arquitectura móvil extensible con **Kotlin**.
 
 > ⚠️ **Nota de Arquitectura:** Esta aplicación es **100% PWA**. No requiere empaquetado en APK ni descargas desde tiendas de aplicaciones. Se instala directamente desde cualquier navegador móvil moderno a la pantalla de inicio del teléfono, ejecutándose en modo *standalone* a pantalla completa con soporte offline. Desplegable como sitio estático sin costes de backend en **Cloudflare Pages** mediante **GitHub Actions** manual.
 
@@ -8,13 +8,20 @@ Aplicación de dibujo e ilustración digital profesional para dispositivos móvi
 
 ## 🎨 Características Principales de la PWA
 
-- **⚡ Núcleo C++23 (ISO/IEC 14882:2023):**
-  - Ubicado en `src/cpp-core/` con especificación C++23 estricta, conceptos (`std::concepts`), vistas `std::span` y compatibilidad nativa y WebAssembly (`wasm32` con SIMD128, y arquitecturas móviles de 32 y 64 bits: `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`).
+- **⚡ Núcleo C++23 (ISO/IEC 14882:2023) & Lápiz Vectorial Analítico:**
+  - Ubicado en `src/cpp-core/` (`IbisVectorEngine.hpp/cpp` e `IbisStrokeAnalyzer.hpp/cpp`) con especificación C++23 estricta, conceptos (`std::concepts`), vistas contiguas `std::span` y compatibilidad nativa y WebAssembly (`wasm32` con SIMD128, y arquitecturas móviles de 32 y 64 bits: `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`).
+  - **Lápiz Vectorial sin Garbage Collector:** Algoritmo Douglas-Peucker en memoria continua y ajuste continuo Catmull-Rom a Bézier cúbica con continuidad C1.
+  - **Cero píxeles al hacer zoom:** A diferencia de los pinceles de mapa de bits (raster), el trazo vectorial se evalúa analíticamente a cualquier escala (100%, 200%, 400%, etc.), manteniendo bordes nítidos y vectoriales sin pixelación ni pausas de recolección de basura.
   - Licencia permisiva MIT / Apache-2.0 sin restricciones copyleft ni requerimientos de código abierto forzoso.
-- **⚡ Lápiz Vectorial Potenciado por Kotlin/Wasm:**
-  - Implementado en `src/kotlin-core/VectorEngine.kt` y ejecutado en el navegador mediante WebAssembly (`wasmJs` con Wasm-GC).
-  - Curvas de Bézier cúbicas continuas con continuidad C1 y decodificación de presión.
-  - **Cero píxeles al hacer zoom:** A diferencia de los pinceles de mapa de bits (raster), el trazo vectorial se evalúa analíticamente a cualquier escala (100%, 200%, 400%, etc.), manteniendo bordes nítidos y vectoriales sin pixelación.
+- **🤖 Kotlin: Puente Nativo Android (Galería Real MediaStore & WakeLock) y Orquestación con `kotlinx.coroutines`:**
+  - Código fuente en `src/kotlin-core/AndroidPlatformBridge.kt`, `src/kotlin-core/CoroutineOrchestrator.kt` y `src/engine/coroutinesBridge.ts`:
+    1. **Concurrencia Estructurada con `kotlinx.coroutines` (`InkFlowCoroutineOrchestrator` & `StudioTaskScope`):** Orquestación reactiva de tareas de fondo en `Dispatchers.Default` / `Dispatchers.IO` / Wasm `Dispatchers.Main` con SupervisorJob para aislar errores.
+    2. **Centinela de Auto-Guardado No Bloqueante (`AutoSaveCoroutineSentinel`):** Bucle continuo con `delay()` cooperativo que inspecciona el estado dirty sin congelar los 60–120 FPS del pincel táctil.
+    3. **Conflación de Puntos Táctiles (`TouchPointStreamConflator` / `Channel.CONFLATED`):** Absorbe el torrente de coordenadas del sensor (hasta 240Hz) y descarta automáticamente muestras intermedias obsoletas si el renderizado tarda, previniendo lag y retraso acumulado.
+    4. **Guardado REAL en la Galería de Fotos del Teléfono (`AndroidGalleryManager`):** Utiliza la API nativa `MediaStore.Images.Media` de Android para guardar ilustraciones directamente en la carpeta visible `Pictures/InkFlow Studio` de la galería de fotos, eliminando las molestas "descargas web" de archivos anónimos con soporte transaccional `IS_PENDING`.
+    5. **WakeLock de Pantalla Encendida (`AndroidScreenWakeLockManager` & `wakeLockService.ts`):** Mantiene la pantalla encendida permanentemente mientras el artista ilustra o calca, con `FLAG_KEEP_SCREEN_ON` en Android y el estándar PWA `navigator.wakeLock.request('screen')` con auto-reactivación al volver a la app (`visibilitychange`).
+    6. **Serializador y Empaquetador de Archivos Propietarios `.inkflow`:** Contenedor comprimido ZIP con metadatos JSON/Protobuf para compartir obras multi-capa entre dispositivos.
+    7. **Motor de Armonía Cromática:** Algoritmos de teoría del color y accesibilidad en espacios perceptualmente uniformes (Oklab y CIELAB).
 - **📷 Modo Calco de Galería con Panel Minimizable y Filtros Wasm:**
   - Selecciona cualquier imagen o foto de la galería del teléfono para calcarla sobre el lienzo.
   - Se sitúa automáticamente en el centro de la hoja con escala proporcional.
@@ -154,13 +161,15 @@ Abre `http://localhost:3000` en tu teléfono móvil y pulsa el botón **"Instala
 
 ## 🧪 Pruebas Unitarias de Lógica
 
-El proyecto cuenta con **55 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
+## 🧪 Pruebas Unitarias de Lógica
 
-### Suite 1: Motor Gráfico, Calco, Wasm, Historial, Caché GPU, Expansión, Huecos, Accesorios & Texturas (50 tests)
+El proyecto cuenta con **59 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
+
+### Suite 1: Motor Gráfico, C++23 Vectores, Calco, Wasm, Historial, Caché GPU, Expansión, Huecos, Accesorios, Texturas, Corrutinas & Kotlin / PWA (54 tests)
 1. Interpolación lineal y cálculo euclidiano Wasm.
 2. Estabilizador exponencial anti-temblor S-Form.
 3. Simulación de curva de presión táctil por velocidad.
-4. Algoritmo de reducción Douglas-Peucker de Kotlin/Wasm.
+4. Algoritmo de reducción Douglas-Peucker de vectores.
 5. Generación continua de segmentos Bézier cúbicos para el Lápiz Vectorial.
 6. Cálculo de escala y desplazamientos en gestos multitáctiles pinch-to-zoom.
 7. Invarianza del punto focal en zoom táctil.
@@ -207,16 +216,20 @@ El proyecto cuenta con **55 pruebas unitarias automatizadas deterministas** con 
 48. Wasm History Engine: Buffer circular (FIFO) acota la memoria al límite maxDepth.
 49. Bote de Pintura Scanline (Rust Wasm Core): Llenado continuo, dilatación morfológica y contención.
 50. Extracción Sobel 3x3 y Cierre de Huecos C++23: Gradiente ortogonal y puente morfológico de brechas.
+51. C++23 Wasm Motor Vectorial Analítico: Douglas-Peucker y Curvas Bézier Catmull-Rom C1.
+52. Kotlin / PWA Integración: Guardado Real en Galería (MediaStore) y WakeLock de Pantalla Encendida.
+53. `kotlinx.coroutines`: Centinela de Auto-Guardado no bloqueante y cancelación estructurada con `Job.cancel()`.
+54. `kotlinx.coroutines`: Conflación de eventos táctiles (`Channel.CONFLATED`) a 240Hz y gestión en `StudioTaskScope`.
 
 ### Suite 2: Persistencia Masiva SQLite Wasm sobre OPFS (5 tests)
-51. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
-52. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
-53. Transacción ACID completa de proyectos con capas y orden z.
-54. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
-55. Eliminación limpia en cascada sin fugas de almacenamiento.
+55. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
+56. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
+57. Transacción ACID completa de proyectos con capas y orden z.
+58. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
+59. Eliminación limpia en cascada sin fugas de almacenamiento.
 
 ```bash
-# Ejecutar todas las pruebas deterministas (55 tests)
+# Ejecutar todas las pruebas deterministas (59 tests)
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 ```
 

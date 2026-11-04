@@ -43,7 +43,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-[#0c0d12] text-[#e5e7eb] flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+    <div 
+      className="w-full h-full h-[100dvh] max-h-[100dvh] overflow-y-auto overflow-x-hidden touch-pan-y overscroll-y-contain bg-[#0c0d12] text-[#e5e7eb] flex flex-col font-sans selection:bg-amber-500 selection:text-black"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       
       {/* 1. BARRA SUPERIOR ELEGANTE */}
       <header className="h-14 px-4 sm:px-6 bg-[#12131a]/90 backdrop-blur-md border-b border-[#20222f] flex items-center justify-between sticky top-0 z-30 shadow-md">
@@ -110,7 +113,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </h2>
 
           <p className="text-sm sm:text-base text-gray-300 max-w-xl leading-relaxed">
-            InkFlow Studio combina un <strong>Lápiz Vectorial en Kotlin/Wasm</strong> (con cero píxeles al hacer zoom), shaders acelerados por <strong>WebGPU</strong>, análisis de grosor por <strong>visión artificial en C++23</strong> y gestos multitáctiles con tus propios dedos.
+            InkFlow Studio combina un <strong>Lápiz Vectorial en C++23/Wasm</strong> (con cero píxeles al hacer zoom), shaders acelerados por <strong>WebGPU</strong>, análisis de grosor por <strong>visión artificial</strong>, puente <strong>Kotlin de Guardado en Galería Real y WakeLock</strong> y gestos multitáctiles con tus propios dedos.
           </p>
 
           {/* BOTONES PRINCIPALES HERO */}
@@ -216,19 +219,19 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             
-            {/* 1. Lápiz Vectorial Kotlin/Wasm */}
+            {/* 1. Lápiz Vectorial C++23/Wasm */}
             <div className="bg-[#151622] border border-[#252738] rounded-2xl p-4 flex flex-col gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
                   <Zap size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">Lápiz Vectorial (Kotlin/Wasm)</h4>
+                  <h4 className="text-sm font-bold text-white">Lápiz Vectorial Analítico (C++23/Wasm)</h4>
                   <span className="text-[10px] text-amber-300/80 font-mono">Cero píxeles al hacer zoom</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Trazos matemáticos analíticos basados en curvas Bézier cúbicas con continuidad C1. Al acercar el zoom al 200%, 400% o 600%, la línea se reevalúa en WebAssembly sin pixelación alguna.
+                Trazos matemáticos analíticos basados en curvas Bézier cúbicas con continuidad C1 y algoritmo Douglas-Peucker en C++23 WebAssembly. Al acercar el zoom al 200%, 400% o 600%, la línea se reevalúa en Wasm sin pixelación alguna.
               </p>
             </div>
 
@@ -296,19 +299,19 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               </p>
             </div>
 
-            {/* 6. Capas Profesionales y Auto-Crop */}
+            {/* 6. Guardado Real en Galería y WakeLock */}
             <div className="bg-[#151622] border border-[#252738] rounded-2xl p-4 flex flex-col gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
                   <Layers size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">Capas y Guardado con Auto-Crop</h4>
-                  <span className="text-[10px] text-amber-300/80 font-mono">Estimación de peso exacto en KB/MB</span>
+                  <h4 className="text-sm font-bold text-white">Guardado en Galería Real y WakeLock (Kotlin/PWA)</h4>
+                  <span className="text-[10px] text-amber-300/80 font-mono">Sin descargas web molestas</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Gestión de capas estilo IbisPaint y modal de guardado que permite elegir entre Hoja Completa o Auto-Crop inteligente de los trazos reales, guardando directo en la galería con Web Share API.
+                Guarda tus obras maestras directamente en la Galería de Fotos del teléfono a través del puente nativo Kotlin (MediaStore) y Web Share API, manteniendo la pantalla siempre encendida mientras dibujas sin apagones inoportunos.
               </p>
             </div>
 

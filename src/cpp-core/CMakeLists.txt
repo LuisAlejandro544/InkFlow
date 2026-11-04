@@ -27,10 +27,12 @@ endif()
 # Archivos de cabecera e implementación
 set(SOURCES
     src/IbisStrokeAnalyzer.cpp
+    src/IbisVectorEngine.cpp
 )
 
 set(HEADERS
     include/IbisStrokeAnalyzer.hpp
+    include/IbisVectorEngine.hpp
 )
 
 # 1. Biblioteca estática nativa (para pruebas nativas y NDK Android)
@@ -48,8 +50,8 @@ if(EMSCRIPTEN)
         "-sWASM=1"
         "-sMODULARIZE=1"
         "-sEXPORT_NAME=createInkflowCppModule"
-        "-sEXPORTED_FUNCTIONS=['_ibis_analyze_stroke_role','_ibis_sample_point_thickness','_malloc','_free']"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8']"
+        "-sEXPORTED_FUNCTIONS=['_ibis_analyze_stroke_role','_ibis_sample_point_thickness','_ibis_close_boundary_gaps','_ibis_apply_sobel_lineart','_ibis_vector_simplify_points','_ibis_vector_generate_bezier_segments','_ibis_vector_evaluate_bezier','_malloc','_free']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8','HEAPF32']"
         "-sALLOW_MEMORY_GROWTH=1"
         "-sNO_FILESYSTEM=1"
         "-O3"

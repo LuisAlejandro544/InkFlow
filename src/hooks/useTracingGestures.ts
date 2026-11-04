@@ -38,13 +38,15 @@ export function useTracingGestures({
   const rafIdRef = useRef<number | null>(null);
 
   const dragRef = useRef<{
-    type: 'move' | 'corner';
+    type: 'move' | 'corner' | 'rotate';
     corner?: 'tl' | 'tr' | 'bl' | 'br';
     startX: number;
     startY: number;
     startClientX: number;
     startClientY: number;
     startScale: number;
+    startRotation: number;
+    startAngle: number;
     centerX: number;
     centerY: number;
     startDist: number;
@@ -116,21 +118,47 @@ export function useTracingGestures({
       
       currentTransformRef.current.scale = nextScale;
       scheduleDOMTransform();
+    } else if (dragRef.current.type === 'rotate') {
+      // Rotación angular suave con 1 dedo alrededor del centro de la imagen
+      const currentAngle = Math.atan2(
+        e.clientY - dragRef.current.centerY,
+        e.clientX - dragRef.current.centerX
+      );
+      const deltaAngle = currentAngle - dragRef.current.startAngle;
+      let nextRot = dragRef.current.startRotation + deltaAngle;
+
+      // Snapping magnético inteligente en ángulos ortogonales cardinales (0°, 90°, 180°, 270°) si está cerca de ±3.5°
+      const deg = ((nextRot * 180 / Math.PI) % 360 + 360) % 360;
+      const snapThreshold = 3.5;
+      if (Math.abs(deg - 0) < snapThreshold || Math.abs(deg - 360) < snapThreshold) {
+        nextRot = Math.round(nextRot / (2 * Math.PI)) * 2 * Math.PI;
+      } else if (Math.abs(deg - 90) < snapThreshold) {
+        nextRot = Math.round((nextRot - Math.PI / 2) / (2 * Math.PI)) * 2 * Math.PI + Math.PI / 2;
+      } else if (Math.abs(deg - 180) < snapThreshold) {
+        nextRot = Math.round((nextRot - Math.PI) / (2 * Math.PI)) * 2 * Math.PI + Math.PI;
+      } else if (Math.abs(deg - 270) < snapThreshold) {
+        nextRot = Math.round((nextRot - (3 * Math.PI) / 2) / (2 * Math.PI)) * 2 * Math.PI + (3 * Math.PI) / 2;
+      }
+
+      currentTransformRef.current.rotation = Number(nextRot.toFixed(3));
+      scheduleDOMTransform();
     }
   }, [canvasRotation, screenScale, scheduleDOMTransform]);
 
   const onGlobalPointerUp = useCallback((e: PointerEvent) => {
     if (!dragRef.current) return;
     e.preventDefault();
-    const wasCorner = dragRef.current.type === 'corner';
+    const dragType = dragRef.current.type;
     dragRef.current = null;
 
     window.removeEventListener('pointermove', onGlobalPointerMove);
     window.removeEventListener('pointerup', onGlobalPointerUp);
     window.removeEventListener('pointercancel', onGlobalPointerUp);
 
-    if (wasCorner) {
+    if (dragType === 'corner') {
       onChangeTransform({ scale: currentTransformRef.current.scale });
+    } else if (dragType === 'rotate') {
+      onChangeTransform({ rotation: currentTransformRef.current.rotation });
     } else {
       onChangeTransform({
         x: currentTransformRef.current.x,
@@ -150,6 +178,8 @@ export function useTracingGestures({
       startClientX: e.clientX,
       startClientY: e.clientY,
       startScale: currentTransformRef.current.scale,
+      startRotation: currentTransformRef.current.rotation,
+      startAngle: 0,
       centerX: 0,
       centerY: 0,
       startDist: 0,
@@ -177,9 +207,40 @@ export function useTracingGestures({
       startClientX: e.clientX,
       startClientY: e.clientY,
       startScale: currentTransformRef.current.scale,
+      startRotation: currentTransformRef.current.rotation,
+      startAngle: 0,
       centerX,
       centerY,
       startDist: Math.max(10, startDist),
+    };
+
+    window.addEventListener('pointermove', onGlobalPointerMove, { passive: false });
+    window.addEventListener('pointerup', onGlobalPointerUp);
+    window.addEventListener('pointercancel', onGlobalPointerUp);
+  };
+
+  const handlePointerDownRotate = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = boxRef.current ? boxRef.current.getBoundingClientRect() : null;
+    const centerX = rect ? rect.left + rect.width / 2 : e.clientX;
+    const centerY = rect ? rect.top + rect.height / 2 : e.clientY;
+    // Ángulo inicial desde el centro hasta el tirador superior tocado
+    const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+
+    dragRef.current = {
+      type: 'rotate',
+      startX: currentTransformRef.current.x,
+      startY: currentTransformRef.current.y,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startScale: currentTransformRef.current.scale,
+      startRotation: currentTransformRef.current.rotation,
+      startAngle,
+      centerX,
+      centerY,
+      startDist: 0,
     };
 
     window.addEventListener('pointermove', onGlobalPointerMove, { passive: false });
@@ -281,5 +342,6 @@ export function useTracingGestures({
     boxRef,
     handlePointerDownMove,
     handlePointerDownCorner,
+    handlePointerDownRotate,
   };
 }

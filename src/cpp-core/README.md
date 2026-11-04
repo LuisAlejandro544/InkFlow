@@ -20,7 +20,13 @@ Este módulo aloja la biblioteca de visión por computadora y análisis geométr
    - Detección y unión de brechas de contorno abiertas en lineart mediante operaciones de dilatación morfológica y erosión topológica en memoria plana continua (`close_boundary_gaps`).
    - Función C-ABI `ibis_close_boundary_gaps` para puente WebAssembly directo (`wasm32` / `wasm64`).
    - Evita la fuga de color en el bote de pintura cuando los trazos del artista no se tocan por 1 a 10 píxeles.
-4. **Compatibilidad de Arquitecturas:**
+4. **Motor Vectorial Analítico C++23 (*IbisVectorEngine*):**
+   - Implementado en `include/IbisVectorEngine.hpp` y `src/IbisVectorEngine.cpp`.
+   - Algoritmo de reducción Douglas-Peucker en memoria continua y ajuste continuo Catmull-Rom a Bézier cúbica con continuidad C1.
+   - Envoltura de grosor variable adaptada a la dinámica de presión del lápiz táctil.
+   - Cero recolector de basura (sin GC) con rendimiento óptimo a 120 FPS y evaluación a escala arbitraria sin pixelación al hacer zoom.
+   - Funciones C-ABI: `ibis_vector_simplify_points`, `ibis_vector_generate_bezier_segments`, `ibis_vector_evaluate_bezier`.
+5. **Compatibilidad de Arquitecturas:**
    - **Web:** WebAssembly 32-bit (`wasm32`) y 64-bit (`wasm64`) con aceleración vectorial SIMD de 128 bits (`-msimd128`).
    - **Móvil Android (32 y 64 bits):** `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`.
 

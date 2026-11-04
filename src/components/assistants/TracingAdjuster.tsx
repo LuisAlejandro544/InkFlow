@@ -12,7 +12,7 @@
 
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Move } from 'lucide-react';
+import { Move, RotateCw } from 'lucide-react';
 import { TracingReference, TracingFilterMode } from '../../engine/types';
 import { useTracingGestures } from '../../hooks/useTracingGestures';
 import { TracingMinimizedPill } from '../tracing/TracingMinimizedPill';
@@ -54,12 +54,15 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
     boxRef,
     handlePointerDownMove,
     handlePointerDownCorner,
+    handlePointerDownRotate,
   } = useTracingGestures({
     tracing,
     screenScale,
     canvasRotation,
     onChangeTransform,
   });
+
+  const currentDeg = Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360));
 
   return (
     <>
@@ -94,6 +97,29 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
             />
           )}
 
+          {/* Tirador superior para ROTAR con 1 dedo */}
+          <div
+            style={{
+              transform: 'scale(var(--counter-scale, 1))',
+              transformOrigin: 'bottom center',
+            }}
+            className="absolute -top-12 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto touch-none select-none z-40"
+          >
+            {/* Círculo táctil con touch target generoso de 44px */}
+            <div
+              onPointerDown={handlePointerDownRotate}
+              aria-label="Rotar foto de calco"
+              className={`w-8 h-8 rounded-full ${
+                isAccessory ? 'bg-pink-400 text-pink-950' : 'bg-amber-400 text-amber-950'
+              } border-2 border-black shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing active:scale-125 transition-transform touch-none ring-2 ring-white/70 before:absolute before:-inset-3 before:content-['']`}
+              title="Arrastra para rotar la imagen libremente"
+            >
+              <RotateCw size={15} className="stroke-[2.5]" />
+            </div>
+            {/* Línea conectora hacia el recuadro */}
+            <div className={`w-0.5 h-4 ${isAccessory ? 'bg-pink-400' : 'bg-amber-400'} opacity-80`} />
+          </div>
+
           {/* Borde guía con acento ámbar o rosa según sea calco o accesorio */}
           <div 
             onPointerDown={handlePointerDownMove}
@@ -116,15 +142,20 @@ export const TracingAdjuster: React.FC<TracingAdjusterProps> = ({
               <Move size={16} />
             </div>
 
-            {/* Píldora de ayuda gestual */}
+            {/* Píldora de ayuda gestual con grados de rotación */}
             <span 
               style={{
                 transform: 'scale(var(--counter-scale, 1))',
                 transformOrigin: 'bottom center',
               }}
-              className="absolute bottom-2 text-[10px] font-mono font-bold bg-black/90 text-amber-300 px-2.5 py-0.5 rounded-full pointer-events-none shadow-xl border border-amber-500/30 whitespace-nowrap"
+              className="absolute bottom-2 text-[10px] font-mono font-bold bg-black/90 text-amber-300 px-2.5 py-0.5 rounded-full pointer-events-none shadow-xl border border-amber-500/30 whitespace-nowrap flex items-center gap-1.5"
             >
-              1 dedo mueve • 2 dedos rotan y escalan
+              <span>1 dedo mueve • Tirador rota • Esquinas escalan</span>
+              {currentDeg !== 0 && (
+                <span className="bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded font-bold border border-amber-400/30">
+                  {currentDeg}°
+                </span>
+              )}
             </span>
           </div>
 

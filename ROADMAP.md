@@ -223,6 +223,53 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
 
 ---
 
+## ⚡ Fase 4.12: Migración del Motor Vectorial Analítico a C++23 (Wasm) (Completada ✅)
+
+- [x] **C++23 Moderno — Motor Vectorial Analítico (`IbisVectorEngine`):**
+  - Implementado en `src/cpp-core/include/IbisVectorEngine.hpp` y `src/cpp-core/src/IbisVectorEngine.cpp`.
+  - Estructuras `VectorPoint2D` y `CubicBezier2D` en memoria lineal contigua sin recolección de basura (GC).
+  - Algoritmo Douglas-Peucker de decodificación y reducción de ruido táctil en tiempo lineal.
+  - Generación de segmentos Bézier cúbicos con suavizado Catmull-Rom continuo ($C^1$) y gradiente de presión táctil.
+  - Enlaces C-ABI para WebAssembly y NDK móvil: `ibis_vector_simplify_points`, `ibis_vector_generate_bezier_segments`, `ibis_vector_evaluate_bezier`.
+- [x] **Puente WebAssembly en TypeScript (`cppWasmVectorBridge.ts`):**
+  - Módulo `src/engine/cppWasmVectorBridge.ts` con API unificada de trazos vectoriales y renderizado submétrico sin pixelación al hacer zoom en dispositivos móviles.
+  - Delegación transparente en `src/engine/kotlinWasmBridge.ts` asegurando compatibilidad completa con el historial y la expansión de hoja.
+
+---
+
+## 📱 Fase 4.13: Puente Nativo Android (Kotlin): Guardado Real en Galería & WakeLock (Completada ✅)
+
+- [x] **Kotlin — Guardado REAL en la Galería de Fotos del Teléfono (`AndroidGalleryManager`):**
+  - Implementado en `src/kotlin-core/AndroidPlatformBridge.kt`.
+  - Utiliza la API nativa `MediaStore.Images.Media` de Android para guardar ilustraciones directamente en la carpeta visible `Pictures/InkFlow Studio` de la galería de fotos, eliminando las descargas web anónimas en carpetas oscuras.
+  - Control de banderas transaccionales `IS_PENDING` para escritura atómica sin corrupciones y compatibilidad con formatos PNG, JPEG y WebP.
+- [x] **Kotlin & PWA — WakeLock de Pantalla Encendida (`wakeLockService.ts`):**
+  - Previene que el teléfono atenúe el brillo o apague la pantalla mientras el artista está dibujando o calcando.
+  - Enlace dual: `FLAG_KEEP_SCREEN_ON` en Android a través de `AndroidScreenWakeLockManager` y estándar PWA `navigator.wakeLock.request('screen')`.
+  - Auto-re-adquisición automática ante eventos de visibilidad (`visibilitychange`).
+- [x] **57 Pruebas Unitarias Deterministas:**
+  - 52 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, calco, flood fill, Sobel y Kotlin/PWA + 5 tests de SQLite Wasm OPFS.
+
+---
+
+## ⚡ Fase 4.14: Concurrencia Estructurada con `kotlinx.coroutines` (Completada ✅)
+
+- [x] **Kotlin — Orquestador de Concurrencia Estructurada (`CoroutineOrchestrator.kt`):**
+  - Implementado en `src/kotlin-core/CoroutineOrchestrator.kt` mediante la librería oficial `kotlinx.coroutines`.
+  - `InkFlowCoroutineOrchestrator` con `SupervisorJob` y despacho de tareas en segundo plano (`Dispatchers.Default` / `Dispatchers.IO`), evitando que el fallo de una tarea secundaria derribe el hilo del estudio.
+- [x] **Centinela de Auto-Guardado No Bloqueante (`AutoSaveCoroutineSentinel`):**
+  - Bucle continuo asíncrono con suspensión cooperativa (`delay`) que monitorea el estado dirty y persiste en SQLite Wasm (OPFS) sin provocar caída de frames en pantallas de 60/120 FPS.
+  - Cancelación estructurada inmediata ante cierre del lienzo o cambio de proyecto (`job.cancel()`).
+- [x] **Conflación de Puntos Táctiles (`TouchPointStreamConflator` / `Channel.CONFLATED`):**
+  - Canal confluente que absorbe el torrente de eventos de coordenadas del lápiz o stylus a alta velocidad (hasta 240Hz).
+  - Descarta automáticamente muestras intermedias obsoletas si el hilo de renderizado está procesando un cuadro previo, erradicando el lag y acumulaciones de latencia táctil.
+- [x] **Despacho Asíncrono de I/O en Galería (`AndroidPlatformBridge.kt`):**
+  - Inserciones en `MediaStore` y escritura a disco desacopladas en `withContext(Dispatchers.IO)` para que el hilo principal (MainLooper) jamás sufra bloqueos de interfaz.
+- [x] **59 Pruebas Unitarias Deterministas:**
+  - 54 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, calco, flood fill, Sobel, Kotlin/PWA y corrutinas + 5 tests de SQLite Wasm OPFS.
+
+---
+
 ## 🎨 Fase 5: Pipeline WebGPU Avanzado & Herramientas de Ilustración
 
 - [ ] Soporte para mapas de bits como puntas de pincel personalizadas (*Brush Dabs*).

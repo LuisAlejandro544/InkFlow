@@ -156,32 +156,61 @@ export const TracingControlBar: React.FC<TracingControlBarProps> = ({
           <button
             type="button"
             onClick={onCancel}
-            className="h-10 w-10 min-w-[38px] rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 flex items-center justify-center active:scale-95 transition-all shrink-0"
+            className="h-9 w-9 min-w-[34px] rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 flex items-center justify-center active:scale-95 transition-all shrink-0"
             title="Eliminar foto de calco"
             aria-label="Descartar calco"
           >
-            <X size={18} />
+            <X size={17} />
           </button>
 
-          {/* Restablecer Rotación a 0° */}
+          {/* Rotar -15° a la izquierda */}
+          <button
+            type="button"
+            onClick={() => onChangeTransform({ rotation: (tracing.rotation || 0) - (15 * Math.PI / 180) })}
+            className="h-9 px-1.5 min-w-[32px] rounded-xl bg-[#181a24] text-[10px] font-bold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
+            title="Girar 15° a la izquierda"
+          >
+            <RotateCcw size={11} className="text-amber-400" />
+            <span>15°</span>
+          </button>
+
+          {/* Rotar +15° a la derecha */}
+          <button
+            type="button"
+            onClick={() => onChangeTransform({ rotation: (tracing.rotation || 0) + (15 * Math.PI / 180) })}
+            className="h-9 px-1.5 min-w-[32px] rounded-xl bg-[#181a24] text-[10px] font-bold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
+            title="Girar 15° a la derecha"
+          >
+            <RotateCw size={11} className="text-amber-400" />
+            <span>15°</span>
+          </button>
+
+          {/* Grados actuales / Restablecer Rotación a 0° */}
           <button
             type="button"
             onClick={() => onChangeTransform({ rotation: 0 })}
-            className="h-10 px-2 min-w-[36px] rounded-xl bg-[#181a24] text-[11px] font-semibold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
-            title="Enderezar rotación a 0°"
+            className={`h-9 px-1.5 min-w-[32px] rounded-xl text-[10px] font-mono font-bold border flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0 ${
+              Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360)) !== 0
+                ? 'bg-amber-500/20 text-amber-300 border-amber-400/50 shadow-sm'
+                : 'bg-[#181a24] text-gray-400 border-[#2b2d3d]'
+            }`}
+            title={Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360)) !== 0 
+              ? `Ángulo: ${Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360))}° (Toca para enderezar a 0°)` 
+              : 'Enderezar rotación a 0°'}
           >
-            <RotateCw size={12} className="text-amber-400" />
-            <span>0°</span>
+            <span>{Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360)) !== 0 
+              ? `${Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360))}°` 
+              : '0°'}</span>
           </button>
 
           {/* Restablecer Escala 100% */}
           <button
             type="button"
             onClick={() => onChangeTransform({ scale: 1.0 })}
-            className="h-10 px-2 min-w-[40px] rounded-xl bg-[#181a24] text-[11px] font-semibold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
+            className="h-9 px-1.5 min-w-[36px] rounded-xl bg-[#181a24] text-[10px] font-semibold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
             title="Escala 100%"
           >
-            <Maximize2 size={12} className="text-amber-400" />
+            <Maximize2 size={11} className="text-amber-400" />
             <span>100%</span>
           </button>
 

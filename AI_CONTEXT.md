@@ -9,9 +9,9 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 - **Dispositivo del Usuario:** El usuario opera desde un **teléfono móvil** (sin PC de escritorio). Todas las interfaces, diálogos, deslizadores y botones deben tener un área táctil mínima de 48×48 px, ser cómodos para los dedos y no desbordarse horizontalmente en resoluciones de 360–430 px de ancho.
 - **Distribución Exclusiva:** La aplicación es **100% una Progressive Web App (PWA) nativa**. **NO se empaqueta en formato APK ni se distribuye en tiendas de aplicaciones**. Se instala directamente desde el navegador a la pantalla de inicio con soporte standalone (sin barras de URL del navegador).
 - **Stack Multi-Lenguaje:**
-  - **C++23 Moderno:** Alojado en `src/cpp-core/` bajo estándar ISO/IEC 14882:2023 con conceptos, `std::span` y CMakeLists.txt con target WebAssembly y arquitecturas móviles de 32/64 bits (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`).
-  - **Kotlin/Wasm:** Kotlin compila directamente a WebAssembly (`wasmJs` con Wasm-GC) para operar el motor de Lápiz Vectorial analítico sin pixelación al hacer zoom.
-  - **Rust/Wasm:** Núcleo de buffers continuos y matemática acelerada en `src/rust-core/src/lib.rs`.
+  - **C++23 Moderno:** Alojado en `src/cpp-core/` bajo estándar ISO/IEC 14882:2023 con conceptos, `std::span` y CMakeLists.txt con target WebAssembly y arquitecturas móviles de 32/64 bits (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`). Opera la visión artificial, percentiles de grosor, cierre morfológico de huecos y el **Motor Vectorial Analítico** (Bézier cúbica continua, Catmull-Rom C1 y Douglas-Peucker sin recolección de basura).
+  - **Kotlin:** Alojado en `src/kotlin-core/AndroidPlatformBridge.kt`, `CoroutineOrchestrator.kt` y `VectorEngine.kt` para el puente nativo Android de **Guardado REAL en la Galería de Fotos (MediaStore.Images.Media en `Pictures/InkFlow Studio`)** y **WakeLock de Pantalla Encendida (`FLAG_KEEP_SCREEN_ON`)**, orquestación con **`kotlinx.coroutines` (concurrencia estructurada, conflate de eventos táctiles a 240Hz, centinela de auto-guardado no bloqueante y Jobs cancelables)**, serialización comprimida de archivos `.inkflow` y teoría cromática/armonía de color.
+  - **Rust/Wasm:** Núcleo de buffers continuos, Wasm History Engine (compresión RLE 32-bit en memoria lineal para 40 niveles de deshacer) y scanline flood fill en `src/rust-core/src/lib.rs`.
   - **WebGPU (WGSL):** Shaders de sellos radiales y modos de fusión de capas acelerados por GPU.
 - **Preferencia de Diseño:** El usuario no tolera el minimalismo extremo ni interfaces amontonadas en una sola pantalla. Se requieren pantallas y apartados independientes para tareas complejas y popups/modales estilo **Bottom Sheet nativo móvil** (sin patrones obsoletos de formulario web como botones de submit tipo "Confirmar y Dibujar"; la selección de herramientas debe ser táctil, inmediata y con vibración háptica).
 - **Asistente de Grosor de Trazo 100% REAL:** Mide automáticamente la distribución real de contornos en la foto de calco mediante visión artificial (percentiles Silueta P92, Estructura P68, Detalles P38, Tramas P12) y permite adopción en 1 toque sin obligar al usuario.
@@ -32,10 +32,10 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 1. **Arquitectura Exclusivamente PWA:**
    - La aplicación debe funcionar de forma autónoma en el navegador móvil mediante Service Workers y Web App Manifest.
    - Jamás reintroducir archivos o referencias a APK, Gradle, Android Studio o SDKs dependientes de tiendas de aplicaciones.
-2. **Integración de Kotlin, Rust y C++23:**
-   - C++23 opera en `src/cpp-core/` para visión artificial y muestreo de trazos.
-   - Kotlin opera en `src/kotlin-core/` y `src/engine/kotlinWasmBridge.ts`.
-   - Rust opera en `src/rust-core/`.
+2. **Integración de C++23, Rust y Kotlin:**
+   - C++23 opera en `src/cpp-core/` para el motor vectorial analítico (Bézier cúbica y Douglas-Peucker sin GC), visión artificial, percentiles de grosor y cierre morfológico de huecos.
+   - Kotlin opera en `src/kotlin-core/AndroidPlatformBridge.kt` y `VectorEngine.kt` para el puente nativo Android de Guardado Real en Galería (`AndroidGalleryManager`), WakeLock de Pantalla Encendida (`AndroidScreenWakeLockManager`), serialización `.inkflow` y teoría del color.
+   - Rust opera en `src/rust-core/` para buffers de memoria lineal, compresión RLE 32-bit (Wasm History Engine) y scanline flood fill.
 3. **Gestos Táctiles con los Propios Dedos:**
    - Soporte multitáctil directo: *pinch-to-zoom*, rotación libre con snapping magnético y desplazamiento continuo a dos dedos sin dejar marcas residuales.
    - Alternador inmediato entre Modo Dibujo y Modo Mover para navegación rápida con un solo dedo.
@@ -50,7 +50,7 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 8. **Conservación de Diseño y Lógica:**
    - No cambiar el diseño ni la lógica existente a menos que el usuario lo solicite explícitamente. Las modificaciones deben ser quirúrgicas y modulares.
 9. **Pruebas de Lógica Obligatorias:**
-   - Siempre verificar cambios de lógica con pruebas unitarias deterministas (`npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts`) antes de dar por completada la tarea (55 tests pasando: 50 en motor gráfico/transformaciones/calco/Wasm/historial/VRAM/expansión/huecos/accesorios/texturas y 5 en persistencia SQLite Wasm).
+   - Siempre verificar cambios de lógica con pruebas unitarias deterministas (`npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts`) antes de dar por completada la tarea (59 tests pasando: 54 en motor gráfico/transformaciones/calco/Wasm/historial/VRAM/expansión/huecos/accesorios/texturas/C++23 vectores/Kotlin PWA/corrutinas y 5 en persistencia SQLite Wasm).
 10. **Persistencia Masiva en SQLite Wasm & OPFS:**
    - Queda terminantemente prohibido utilizar `localStorage` (límite 5MB y síncrono bloqueante) o `dexie.js` para persistencia gráfica.
    - El almacenamiento de proyectos y capas en alta resolución se realiza exclusivamente mediante `@sqlite.org/sqlite-wasm` ejecutándose en un Web Worker dedicado sobre OPFS (Origin Private File System) con transacciones ACID.

@@ -12,6 +12,7 @@ export * from './toolNavigationState';
 export * from './wasmEngine';
 export * from './wasmHistoryEngine';
 export * from './wasmStreamingCompiler';
+export * from './cppWasmVectorBridge';
 export * from './kotlinWasmBridge';
 
 // Matemática y transformaciones espaciales
@@ -24,6 +25,8 @@ export * from './brushTextureEngine';
 export * from './strokeAssistant';
 export * from './tracingEngine';
 export * from './exportEngine';
+export * from './wakeLockService';
+export * from './coroutinesBridge';
 
 // Pipeline gráfico y shaders
 export * from './bitmapCache';
