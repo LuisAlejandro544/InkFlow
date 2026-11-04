@@ -8,12 +8,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Cpu, Zap, Activity, ShieldCheck, 
-  Terminal, Layers, CheckCircle2, Play, Database, HardDrive
+  Terminal, Layers, CheckCircle2, Play, Database, HardDrive, RefreshCw
 } from 'lucide-react';
 import { wasmEngine } from '../../engine/wasmEngine';
 import { drawingEngine } from '../../engine/webgpuEngine';
 import { sqliteStorageService } from '../../storage/sqliteStorageService';
 import { StorageDiagnostics } from '../../storage/sqliteTypes';
+import { globalTouchConflator, globalAutoSaveSentinel, studioTaskScope } from '../../engine/coroutinesBridge';
 
 interface EngineInfoScreenProps {
   onReturnToStudio: () => void;
@@ -239,21 +240,23 @@ export const EngineInfoScreen: React.FC<EngineInfoScreenProps> = ({ onReturnToSt
           </div>
         )}
 
-        {/* Tab Kotlin: Núcleo Kotlin/Wasm */}
+        {/* Tab Kotlin: Núcleo Kotlin/Wasm & kotlinx.coroutines */}
         {activeTab === 'kotlin' && (
-          <div className="bg-[#18191f] border border-[#292b34] rounded-2xl p-4 sm:p-5 space-y-4 animate-fade-in">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
-                <Terminal size={22} />
+          <div className="space-y-4 animate-fade-in">
+            {/* Tarjeta 1: Motor Vectorial */}
+            <div className="bg-[#18191f] border border-[#292b34] rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+                  <Terminal size={22} />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white">Motor Vectorial Kotlin (src/kotlin-core/VectorEngine.kt)</h2>
+                  <p className="text-xs text-gray-400">Target: wasmJs (WebAssembly Wasm-GC) — Cero píxeles al hacer zoom</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-bold text-white">Motor Vectorial Kotlin (src/kotlin-core/VectorEngine.kt)</h2>
-                <p className="text-xs text-gray-400">Target: wasmJs (WebAssembly Wasm-GC) — Cero píxeles al hacer zoom</p>
-              </div>
-            </div>
 
-            <div className="bg-[#121316] p-3.5 rounded-xl border border-[#262832] font-mono text-xs text-gray-300 overflow-x-auto">
-              <pre className="text-purple-300">
+              <div className="bg-[#121316] p-3.5 rounded-xl border border-[#262832] font-mono text-xs text-gray-300 overflow-x-auto">
+                <pre className="text-purple-300">
 {`// Curvas de Bézier cúbicas con grosor dinámico e independientes de escala:
 class KotlinVectorEngine(var tension: Double = 0.5) {
     fun generateVectorSegments(
@@ -264,27 +267,109 @@ class KotlinVectorEngine(var tension: Double = 0.5) {
         // Renderizado a cualquier zoom sin pixelación alguna
     }
 }`}
-              </pre>
+                </pre>
+              </div>
+
+              <div className="bg-[#121316] p-3.5 rounded-xl border border-[#262832] text-xs space-y-2 text-gray-300">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 size={16} className="text-purple-400 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>Lápiz Vectorial Infinito:</strong> A diferencia de los pinceles de mapa de bits (raster), los trazos del Lápiz Vectorial se evalúan analíticamente a cualquier nivel de zoom (100%, 200%, 400%, etc.).
+                  </p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 size={16} className="text-purple-400 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>100% PWA en el Navegador:</strong> Kotlin compila directamente a Wasm con el compilador oficial Kotlin Multiplatform para la web sin requerir runtime de Java, Android ni empaquetado APK.
+                  </p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 size={16} className="text-purple-400 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>Filtro Douglas-Peucker:</strong> Decima puntos redundantes del sensor táctil para mantener 60–120 FPS fluidos en teléfonos móviles.
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="bg-[#121316] p-3.5 rounded-xl border border-[#262832] text-xs space-y-2 text-gray-300">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 size={16} className="text-purple-400 shrink-0 mt-0.5" />
-                <p>
-                  <strong>Lápiz Vectorial Infinito:</strong> A diferencia de los pinceles de mapa de bits (raster), los trazos del Lápiz Vectorial se evalúan analíticamente a cualquier nivel de zoom (100%, 200%, 400%, etc.).
-                </p>
+            {/* Tarjeta 2: Concurrencia Estructurada (kotlinx.coroutines) */}
+            <div className="bg-[#18191f] border border-[#292b34] rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+                    <Activity size={22} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-white">Concurrencia Estructurada (kotlinx.coroutines)</h2>
+                    <p className="text-xs text-gray-400">SupervisorJob, Conflation táctil a 240Hz y Centinela de Auto-Guardado</p>
+                  </div>
+                </div>
+                <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-green-950/60 text-green-400 border border-green-500/40">
+                  Corrutinas Activas
+                </span>
               </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 size={16} className="text-purple-400 shrink-0 mt-0.5" />
-                <p>
-                  <strong>100% PWA en el Navegador:</strong> Kotlin compila directamente a Wasm con el compilador oficial Kotlin Multiplatform para la web sin requerir runtime de Java, Android ni empaquetado APK.
-                </p>
+
+              {/* Métricas en vivo del Conflator táctil */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#121316] p-3 rounded-xl border border-[#262832] text-center">
+                <div className="p-2 bg-[#18191f] rounded-lg">
+                  <span className="text-[10px] text-gray-400 block">Sensor Táctil</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-purple-400">
+                    {globalTouchConflator.getStats().estimatedHz} Hz
+                  </span>
+                </div>
+                <div className="p-2 bg-[#18191f] rounded-lg">
+                  <span className="text-[10px] text-gray-400 block">Muestras Absorbidas</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-gray-200">
+                    {globalTouchConflator.getStats().totalIngested}
+                  </span>
+                </div>
+                <div className="p-2 bg-[#18191f] rounded-lg">
+                  <span className="text-[10px] text-gray-400 block">Conflate (Sin Lag)</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-green-400">
+                    {globalTouchConflator.getStats().droppedSamples} descartadas
+                  </span>
+                </div>
+                <div className="p-2 bg-[#18191f] rounded-lg">
+                  <span className="text-[10px] text-gray-400 block">Auto-Guardado</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-amber-400">
+                    {globalAutoSaveSentinel.isActive() ? 'Activo (10s)' : 'En reposo'}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 size={16} className="text-purple-400 shrink-0 mt-0.5" />
-                <p>
-                  <strong>Filtro Douglas-Peucker:</strong> Decima puntos redundantes del sensor táctil para mantener 60–120 FPS fluidos en teléfonos móviles.
-                </p>
+
+              {/* Botón de prueba interactiva de conflación de corrutinas */}
+              <div className="bg-[#121316] p-3 rounded-xl border border-[#262832] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-gray-200">Prueba de Conflación Táctil a 240Hz (Channel.CONFLATED)</p>
+                  <p className="text-[11px] text-gray-400">Simula una ráfaga de 100 eventos táctiles en 50ms para verificar la absorción sin lag</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const startT = performance.now();
+                    for (let i = 0; i < 100; i++) {
+                      globalTouchConflator.emit({
+                        x: 100 + i * 2,
+                        y: 150 + Math.sin(i / 5) * 20,
+                        pressure: 0.5 + Math.sin(i / 10) * 0.3,
+                        timestamp: startT + (i * 0.5)
+                      });
+                    }
+                    const consumed = globalTouchConflator.consume();
+                    // Forzar actualización visual
+                    setActiveTab('kotlin');
+                  }}
+                  className="py-2 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shrink-0 active:scale-95"
+                >
+                  <Zap size={14} />
+                  <span>Simular Ráfaga 240Hz</span>
+                </button>
+              </div>
+
+              <div className="bg-[#121316] p-3 rounded-xl border border-[#262832] text-xs font-mono space-y-1 text-gray-300">
+                <p><span className="text-gray-500">Scope de Tareas:</span> StudioTaskScope con raíz SupervisorJob (aislamiento de excepciones)</p>
+                <p><span className="text-gray-500">Canal Confluente:</span> Channel&lt;TouchSample&gt;(capacity = Channel.CONFLATED)</p>
+                <p><span className="text-gray-500">Auto-Guardado Sentinel:</span> Bucle asíncrono no bloqueante con delay cooperativo</p>
+                <p><span className="text-gray-500">Jobs en ejecución:</span> {studioTaskScope.getActiveCount()} tareas secundarias</p>
               </div>
             </div>
           </div>

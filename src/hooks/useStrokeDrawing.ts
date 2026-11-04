@@ -25,6 +25,7 @@ import { wasmEngine } from '../engine/wasmEngine';
 import { drawingEngine } from '../engine/webgpuEngine';
 import { kotlinVectorEngine } from '../engine/kotlinWasmBridge';
 import { screenToCanvasCoords } from '../engine/transformMath';
+import { TouchPointStreamConflator, globalTouchConflator } from '../engine/coroutinesBridge';
 
 interface UseStrokeDrawingProps {
   projectWidth: number;
@@ -91,6 +92,7 @@ export function useStrokeDrawing({
   const lastPointRef = useRef<Point | null>(null);
   const currentVectorStrokeRef = useRef<VectorStroke | null>(null);
   const strokeRafIdRef = useRef<number | null>(null);
+  const strokeConflatorRef = useRef<TouchPointStreamConflator>(globalTouchConflator);
 
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
@@ -131,6 +133,48 @@ export function useStrokeDrawing({
 
     return { x: coords.x, y: coords.y, pressure, timestamp: performance.now() };
   }, [displayCanvasRef, projectHeight, projectWidth, rotationRef, scaleRef]);
+
+  /**
+   * Procesa el punto confluente consumido en el ciclo de frame
+   */
+  const processConflatedPoint = useCallback((sample: Point) => {
+    if (!lastPointRef.current) return;
+    const smoothPoint = wasmEngine.stabilizePoint(sample, lastPointRef.current, stabilizerLevel);
+
+    if (activeTool === 'vector_pencil' && currentVectorStrokeRef.current) {
+      currentVectorStrokeRef.current.points.push(smoothPoint);
+      const segments = kotlinVectorEngine.generateBezierSegments(
+        currentVectorStrokeRef.current.points,
+        brushSize
+      );
+      currentVectorStrokeRef.current.segments = segments;
+      lastPointRef.current = smoothPoint;
+      renderComposite();
+      return;
+    }
+
+    drawingEngine.drawStrokeSegment(
+      activeLayer,
+      lastPointRef.current,
+      smoothPoint,
+      activeTool,
+      brushColor,
+      brushSize,
+      brushOpacity,
+      brushTexture
+    );
+    lastPointRef.current = smoothPoint;
+    renderComposite();
+  }, [
+    activeLayer,
+    activeTool,
+    brushColor,
+    brushOpacity,
+    brushSize,
+    brushTexture,
+    renderComposite,
+    stabilizerLevel
+  ]);
 
   /**
    * Manejador PointerDown
@@ -195,9 +239,18 @@ export function useStrokeDrawing({
     onSaveUndoSnapshot();
     isDrawingRef.current = true;
 
+    // Resetear el canal confluente de corrutinas para el nuevo trazo
+    strokeConflatorRef.current.clear();
+
     const pressure = e.pressure > 0.01 ? e.pressure : 0.5;
     const startPoint = getCanvasCoords(e.clientX, e.clientY, pressure);
     lastPointRef.current = startPoint;
+    strokeConflatorRef.current.emit({
+      x: startPoint.x,
+      y: startPoint.y,
+      pressure: startPoint.pressure,
+      timestamp: startPoint.timestamp ?? Date.now(),
+    });
 
     if (activeTool === 'vector_pencil') {
       currentVectorStrokeRef.current = {
@@ -226,7 +279,7 @@ export function useStrokeDrawing({
   };
 
   /**
-   * Manejador PointerMove
+   * Manejador PointerMove: Emite las coordenadas táctiles a través de TouchPointStreamConflator
    */
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (suppressDrawingRef.current || (tracingRef && tracingRef.isAdjusting)) {
@@ -249,44 +302,35 @@ export function useStrokeDrawing({
 
     const rawPressure = e.pressure > 0.01 ? e.pressure : 0.5;
     const rawPoint = getCanvasCoords(e.clientX, e.clientY, rawPressure);
-    const smoothPoint = wasmEngine.stabilizePoint(rawPoint, lastPointRef.current, stabilizerLevel);
 
-    if (activeTool === 'vector_pencil' && currentVectorStrokeRef.current) {
-      currentVectorStrokeRef.current.points.push(smoothPoint);
-      const segments = kotlinVectorEngine.generateBezierSegments(
-        currentVectorStrokeRef.current.points,
-        brushSize
-      );
-      currentVectorStrokeRef.current.segments = segments;
-
-      if (strokeRafIdRef.current === null) {
-        strokeRafIdRef.current = requestAnimationFrame(() => {
-          renderComposite();
-          strokeRafIdRef.current = null;
-        });
-      }
-      lastPointRef.current = smoothPoint;
-      return;
-    }
-
-    drawingEngine.drawStrokeSegment(
-      activeLayer,
-      lastPointRef.current,
-      smoothPoint,
-      activeTool,
-      brushColor,
-      brushSize,
-      brushOpacity,
-      brushTexture
-    );
+    // Emisión confluente en el canal de corrutinas (Channel.CONFLATED)
+    strokeConflatorRef.current.emit({
+      x: rawPoint.x,
+      y: rawPoint.y,
+      pressure: rawPoint.pressure,
+      timestamp: rawPoint.timestamp ?? Date.now(),
+    });
 
     if (strokeRafIdRef.current === null) {
       strokeRafIdRef.current = requestAnimationFrame(() => {
-        renderComposite();
         strokeRafIdRef.current = null;
+        if (!isDrawingRef.current) return;
+
+        // Consumir la muestra confluente más fresca disponible
+        const sample = strokeConflatorRef.current.consume();
+        if (sample) {
+          processConflatedPoint(sample);
+        }
+
+        // Si llegaron más muestras durante el procesamiento del frame, procesar la última remanente
+        if (strokeConflatorRef.current.hasPending() && isDrawingRef.current) {
+          const nextSample = strokeConflatorRef.current.consume();
+          if (nextSample) {
+            processConflatedPoint(nextSample);
+          }
+        }
       });
     }
-    lastPointRef.current = smoothPoint;
   };
 
   /**
@@ -313,6 +357,15 @@ export function useStrokeDrawing({
         cancelAnimationFrame(strokeRafIdRef.current);
         strokeRafIdRef.current = null;
       }
+
+      // Consumir cualquier punto remanente en el conflator para cerrar el trazo exactamente donde levantó el dedo
+      if (strokeConflatorRef.current.hasPending()) {
+        const finalSample = strokeConflatorRef.current.consume();
+        if (finalSample) {
+          processConflatedPoint(finalSample);
+        }
+      }
+      strokeConflatorRef.current.clear();
 
       if (activeTool === 'vector_pencil' && currentVectorStrokeRef.current) {
         if (currentVectorStrokeRef.current.points.length > 1) {

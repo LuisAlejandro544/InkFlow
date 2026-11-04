@@ -10,12 +10,13 @@
  * - Operaciones CRUD de proyectos en Galería (Crear, Abrir, Duplicar, Eliminar, Miniatura).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ProjectData, Layer } from '../engine/types';
 import { DEFAULT_PROJECT } from '../store/drawingStore';
 import { sqliteStorageService } from '../storage/sqliteStorageService';
 import { CrashRecoveryRecord, StoredProjectPayload } from '../storage/sqliteTypes';
 import { gpuBitmapCache } from '../engine/bitmapCache';
+import { globalAutoSaveSentinel } from '../engine/coroutinesBridge';
 
 interface UseProjectPersistenceProps {
   initProjectLayers: (project: ProjectData) => Layer[];
@@ -37,6 +38,31 @@ export function useProjectPersistence({
   const [projects, setProjects] = useState<ProjectData[]>([DEFAULT_PROJECT]);
   const [currentProject, setCurrentProject] = useState<ProjectData>(DEFAULT_PROJECT);
   const [crashRecovery, setCrashRecovery] = useState<CrashRecoveryRecord | null>(null);
+  const pendingLayersRef = useRef<Layer[] | null>(null);
+  const currentProjectRef = useRef<ProjectData>(DEFAULT_PROJECT);
+
+  useEffect(() => {
+    currentProjectRef.current = currentProject;
+  }, [currentProject]);
+
+  // Centinela de Auto-Guardado no bloqueante orquestado por Corrutinas
+  useEffect(() => {
+    const sentinelJob = globalAutoSaveSentinel.start(
+      10_000,
+      () => pendingLayersRef.current !== null && pendingLayersRef.current.length > 0,
+      async () => {
+        if (currentProjectRef.current && pendingLayersRef.current) {
+          const layersToSave = pendingLayersRef.current;
+          pendingLayersRef.current = null;
+          await sqliteStorageService.saveProject(currentProjectRef.current, layersToSave);
+        }
+      }
+    );
+
+    return () => {
+      globalAutoSaveSentinel.stop();
+    };
+  }, []);
 
   /**
    * Carga un proyecto con todas sus capas reconstruidas fielmente desde SQLite Wasm (OPFS)
@@ -284,6 +310,7 @@ export function useProjectPersistence({
   }, []);
 
   const handleStrokeEnd = useCallback((layers: Layer[]) => {
+    pendingLayersRef.current = layers;
     if (currentProject && layers.length > 0) {
       sqliteStorageService.scheduleAutoSave(currentProject, layers, 1000);
     }

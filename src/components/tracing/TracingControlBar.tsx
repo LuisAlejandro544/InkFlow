@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { 
   Check, X, RotateCcw, Sliders, Sparkles, Eye, EyeOff, 
-  ChevronDown, Layers, RotateCw, Maximize2 
+  ChevronDown, Layers, RotateCw, Maximize2, Crosshair, RefreshCw 
 } from 'lucide-react';
 import { TracingReference, TracingFilterMode } from '../../engine/types';
 
@@ -36,6 +36,10 @@ export const TracingControlBar: React.FC<TracingControlBarProps> = ({
   onMinimize,
 }) => {
   const [showFiltersMenu, setShowFiltersMenu] = useState<boolean>(false);
+
+  // Calcular el ángulo actual en grados en el rango simétrico [-180°, 180°] para el slider táctil
+  let currentDeg = Math.round((((tracing.rotation || 0) * 180 / Math.PI) % 360 + 360) % 360);
+  if (currentDeg > 180) currentDeg -= 360;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 pointer-events-auto select-none">
@@ -70,15 +74,15 @@ export const TracingControlBar: React.FC<TracingControlBarProps> = ({
         </div>
       )}
 
-      {/* BARRA COMPACTA NATIVA ESTILO IBISPAINT (~105px) CON ZERO DESBORDAMIENTO EN 320PX-430PX */}
+      {/* BARRA COMPACTA NATIVA ESTILO IBISPAINT CON CONTROLES ERGONÓMICOS DE ROTACIÓN Y OPACIDAD */}
       <div className={`bg-[#12131bf6] border-t ${
         isAccessory ? 'border-pink-500/50' : 'border-amber-500/50'
       } shadow-[0_-8px_30px_rgba(0,0,0,0.85)] backdrop-blur-2xl flex flex-col gap-1.5 text-white w-full px-2.5 pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] animate-in slide-in-from-bottom duration-150`}>
         
-        {/* FILA 1: Slider de Opacidad + Botones Icono Auxiliares (Ajuste Perfecto) */}
+        {/* FILA 1: Slider de Opacidad + Visibilidad + Centrar + Filtros + Minimizar */}
         <div className="flex items-center gap-1.5 max-w-md mx-auto w-full overflow-hidden">
-          {/* Badge de Título y % */}
-          <div className="flex items-center gap-1 bg-[#1a1c26] px-2 py-1 rounded-lg border border-[#2e3143] shrink-0">
+          {/* Badge de Título y Opacidad % */}
+          <div className="flex items-center gap-1 bg-[#1a1c26] px-2 py-1 rounded-lg border border-[#2e3143] shrink-0 min-w-[58px]">
             <span className={`text-[11px] font-bold uppercase tracking-wider ${
               isAccessory ? 'text-pink-300' : 'text-amber-400'
             }`}>
@@ -98,6 +102,7 @@ export const TracingControlBar: React.FC<TracingControlBarProps> = ({
               value={Math.round(tracing.opacity * 100)}
               onChange={(e) => onChangeTransform({ opacity: Number(e.target.value) / 100 })}
               className="w-full accent-amber-500 h-2 bg-[#202230] rounded-lg cursor-pointer"
+              title="Ajustar opacidad de la foto"
             />
           </div>
 
@@ -115,14 +120,14 @@ export const TracingControlBar: React.FC<TracingControlBarProps> = ({
             {tracing.visible ? <Eye size={15} className="text-amber-400" /> : <EyeOff size={15} />}
           </button>
 
-          {/* Botón Centrar */}
+          {/* Botón Centrar (Icono Crosshair claro para no confundir con rotación) */}
           <button
             type="button"
             onClick={onCenterImage}
             className="w-8 h-8 rounded-xl bg-[#1c1e2a] hover:bg-[#252837] text-gray-300 border border-[#2e3143] flex items-center justify-center transition-colors active:scale-95 shrink-0"
-            title="Centrar en el lienzo"
+            title="Centrar en el lienzo (reubicar al centro)"
           >
-            <RotateCcw size={14} />
+            <Crosshair size={15} className="text-gray-300" />
           </button>
 
           {/* Botón Filtros Wasm */}
@@ -150,67 +155,112 @@ export const TracingControlBar: React.FC<TracingControlBarProps> = ({
           </button>
         </div>
 
-        {/* FILA 2: Acciones Principales en la Zona del Pulgar (100% Accesible sin Recorte) */}
+        {/* FILA 2: Slider de Rotación Táctil Fluido + Pasos de Grados + Restablecer 0° */}
+        <div className="flex items-center gap-1.5 max-w-md mx-auto w-full overflow-hidden">
+          {/* Badge de Rotación y Grados */}
+          <div className="flex items-center gap-1 bg-[#1a1c26] px-2 py-1 rounded-lg border border-[#2e3143] shrink-0 min-w-[58px]">
+            <span className="text-[11px] font-bold text-amber-400">🔄</span>
+            <span className="text-xs font-mono font-black text-amber-300">
+              {currentDeg}°
+            </span>
+          </div>
+
+          {/* Slider de Rotación Táctil Fluido (-180° a +180°) */}
+          <div className="flex-1 min-w-[50px] px-1 flex items-center">
+            <input
+              type="range"
+              min="-180"
+              max="180"
+              step="1"
+              value={currentDeg}
+              onChange={(e) => {
+                const deg = Number(e.target.value);
+                const rad = Number(((deg * Math.PI) / 180).toFixed(3));
+                onChangeTransform({ rotation: rad });
+              }}
+              className="w-full accent-amber-500 h-2 bg-[#202230] rounded-lg cursor-pointer"
+              title="Desliza para rotar la imagen suavemente"
+            />
+          </div>
+
+          {/* Girar -15° a la izquierda */}
+          <button
+            type="button"
+            onClick={() => {
+              const nextRad = Number(((tracing.rotation || 0) - (15 * Math.PI / 180)).toFixed(3));
+              onChangeTransform({ rotation: nextRad });
+            }}
+            className="h-7 px-1.5 rounded-lg bg-[#181a24] text-[10px] font-bold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
+            title="Girar 15° a la izquierda"
+          >
+            <RotateCcw size={11} className="text-amber-400" />
+            <span>-15°</span>
+          </button>
+
+          {/* Girar +15° a la derecha */}
+          <button
+            type="button"
+            onClick={() => {
+              const nextRad = Number(((tracing.rotation || 0) + (15 * Math.PI / 180)).toFixed(3));
+              onChangeTransform({ rotation: nextRad });
+            }}
+            className="h-7 px-1.5 rounded-lg bg-[#181a24] text-[10px] font-bold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
+            title="Girar 15° a la derecha"
+          >
+            <RotateCw size={11} className="text-amber-400" />
+            <span>+15°</span>
+          </button>
+
+          {/* Girar +90° ortogonal */}
+          <button
+            type="button"
+            onClick={() => {
+              const nextRad = Number(((tracing.rotation || 0) + (Math.PI / 2)).toFixed(3));
+              onChangeTransform({ rotation: nextRad });
+            }}
+            className="h-7 px-1.5 rounded-lg bg-[#181a24] text-[10px] font-bold text-amber-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
+            title="Girar 90°"
+          >
+            <span>90°</span>
+          </button>
+
+          {/* Restablecer Rotación a 0° */}
+          <button
+            type="button"
+            onClick={() => onChangeTransform({ rotation: 0 })}
+            className={`h-7 px-1.5 rounded-lg text-[10px] font-mono font-bold border flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0 ${
+              currentDeg !== 0
+                ? 'bg-amber-500/20 text-amber-300 border-amber-400/50 hover:bg-amber-500/30'
+                : 'bg-[#181a24] text-gray-500 border-[#2b2d3d] opacity-50'
+            }`}
+            title="Enderezar rotación exactamente a 0°"
+          >
+            <RefreshCw size={10} />
+            <span>0°</span>
+          </button>
+        </div>
+
+        {/* FILA 3: Acciones Principales en la Zona del Pulgar (Descartar, Escala 100%, Estampar / Fijar) */}
         <div className="flex items-center gap-1.5 max-w-md mx-auto w-full pt-0.5">
-          {/* Descartar: Botón icono compacto con acento rojo para no quitar espacio */}
+          {/* Descartar */}
           <button
             type="button"
             onClick={onCancel}
             className="h-9 w-9 min-w-[34px] rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 flex items-center justify-center active:scale-95 transition-all shrink-0"
-            title="Eliminar foto de calco"
-            aria-label="Descartar calco"
+            title="Eliminar foto de calco o accesorio"
+            aria-label="Descartar"
           >
             <X size={17} />
-          </button>
-
-          {/* Rotar -15° a la izquierda */}
-          <button
-            type="button"
-            onClick={() => onChangeTransform({ rotation: (tracing.rotation || 0) - (15 * Math.PI / 180) })}
-            className="h-9 px-1.5 min-w-[32px] rounded-xl bg-[#181a24] text-[10px] font-bold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
-            title="Girar 15° a la izquierda"
-          >
-            <RotateCcw size={11} className="text-amber-400" />
-            <span>15°</span>
-          </button>
-
-          {/* Rotar +15° a la derecha */}
-          <button
-            type="button"
-            onClick={() => onChangeTransform({ rotation: (tracing.rotation || 0) + (15 * Math.PI / 180) })}
-            className="h-9 px-1.5 min-w-[32px] rounded-xl bg-[#181a24] text-[10px] font-bold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
-            title="Girar 15° a la derecha"
-          >
-            <RotateCw size={11} className="text-amber-400" />
-            <span>15°</span>
-          </button>
-
-          {/* Grados actuales / Restablecer Rotación a 0° */}
-          <button
-            type="button"
-            onClick={() => onChangeTransform({ rotation: 0 })}
-            className={`h-9 px-1.5 min-w-[32px] rounded-xl text-[10px] font-mono font-bold border flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0 ${
-              Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360)) !== 0
-                ? 'bg-amber-500/20 text-amber-300 border-amber-400/50 shadow-sm'
-                : 'bg-[#181a24] text-gray-400 border-[#2b2d3d]'
-            }`}
-            title={Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360)) !== 0 
-              ? `Ángulo: ${Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360))}° (Toca para enderezar a 0°)` 
-              : 'Enderezar rotación a 0°'}
-          >
-            <span>{Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360)) !== 0 
-              ? `${Math.round((((tracing.rotation * 180 / Math.PI) % 360 + 360) % 360))}°` 
-              : '0°'}</span>
           </button>
 
           {/* Restablecer Escala 100% */}
           <button
             type="button"
             onClick={() => onChangeTransform({ scale: 1.0 })}
-            className="h-9 px-1.5 min-w-[36px] rounded-xl bg-[#181a24] text-[10px] font-semibold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-0.5 active:scale-95 transition-all shrink-0"
-            title="Escala 100%"
+            className="h-9 px-2 min-w-[42px] rounded-xl bg-[#181a24] text-[10px] font-semibold text-gray-300 border border-[#2b2d3d] flex items-center justify-center gap-1 active:scale-95 transition-all shrink-0"
+            title="Restablecer tamaño a escala 100%"
           >
-            <Maximize2 size={11} className="text-amber-400" />
+            <Maximize2 size={12} className="text-amber-400" />
             <span>100%</span>
           </button>
 
@@ -267,3 +317,5 @@ export const TracingControlBar: React.FC<TracingControlBarProps> = ({
     </div>
   );
 };
+
+

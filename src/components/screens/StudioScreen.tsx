@@ -329,6 +329,17 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     }
   }, [layers, onUpdateProjectThumbnail, project.height, project.width, tracingRef]);
 
+  // Manejador de estampado con redibujado inmediato garantizado en displayCanvas
+  const handleStampAccessory = useCallback((asNewLayer: boolean) => {
+    if (onStampAccessory) {
+      onStampAccessory(asNewLayer);
+      requestAnimationFrame(() => {
+        renderComposite();
+        updateThumbnail();
+      });
+    }
+  }, [onStampAccessory, renderComposite, updateThumbnail]);
+
   // Hook modular de captura del trazo, estabilización y despacho gráfico
   const strokeDrawing = useStrokeDrawing({
     projectWidth: project.width,
@@ -470,8 +481,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               onCenterImage={onCenterTracing}
               onConfirm={onConfirmTracing}
               onCancel={onRemoveTracing}
-              onStampToActiveLayer={() => onStampAccessory?.(false)}
-              onStampAsNewLayer={() => onStampAccessory?.(true)}
+              onStampToActiveLayer={() => handleStampAccessory(false)}
+              onStampAsNewLayer={() => handleStampAccessory(true)}
             />
           )}
         </div>

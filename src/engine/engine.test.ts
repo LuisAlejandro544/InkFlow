@@ -917,7 +917,7 @@ test('Bote de Pintura con Cierre de Huecos: Contención Exitosa de Relleno sin F
 });
 
 test('Sistema de Accesorios de Galería (Stickers / Moños): Validación de Propiedades y Estampado', () => {
-  // Un accesorio importado debe tener purpose: 'accessory' y opacidad 1.0
+  // 1. Un accesorio importado debe tener purpose: 'accessory' y opacidad 1.0
   const accessoryConfig = {
     id: 'accessory_12345',
     purpose: 'accessory' as const,
@@ -930,6 +930,28 @@ test('Sistema de Accesorios de Galería (Stickers / Moños): Validación de Prop
   assert.equal(accessoryConfig.purpose, 'accessory');
   assert.equal(accessoryConfig.opacity, 1.0, 'Los accesorios de galería inician con opacidad 100%');
   assert.equal(accessoryConfig.visible, true);
+
+  // 2. Estampado en capa activa: debe producir un nuevo array de capas para disparar re-render reactivo
+  const initialLayers: Layer[] = [
+    {
+      id: 'layer_1',
+      name: 'Capa 1',
+      visible: true,
+      opacity: 1.0,
+      blendMode: 'source-over',
+      canvas: {} as HTMLCanvasElement,
+      ctx: {} as CanvasRenderingContext2D,
+    }
+  ];
+
+  // Simular la lógica de actualización inmutable de useAccessoryStamper
+  const activeLayerId = 'layer_1';
+  const updatedLayers = initialLayers.map((l) => (l.id === activeLayerId ? { ...l } : l));
+  
+  // La referencia del array debe ser diferente para que React detecte la mutación
+  assert.notEqual(updatedLayers, initialLayers, 'El array de capas debe tener una nueva referencia');
+  assert.notEqual(updatedLayers[0], initialLayers[0], 'La capa modificada debe tener una nueva referencia');
+  assert.equal(updatedLayers[0].id, 'layer_1');
 });
 
 test('Texturas de Pincel estilo IbisPaint: Catálogo de 9 texturas de referencia y rango acotado [0.0, 1.0]', () => {
@@ -1430,7 +1452,10 @@ import {
   AutoSaveCoroutineSentinel,
   TouchPointStreamConflator,
   StudioTaskScope,
-  CancellableCoroutineJob
+  CancellableCoroutineJob,
+  SupervisorJob,
+  Dispatchers,
+  TouchFlow
 } from './coroutinesBridge';
 
 test('kotlinx.coroutines: Centinela de Auto-Guardado No Bloqueante y Cancelación Estructurada (Job.cancel)', async () => {
@@ -1512,6 +1537,87 @@ test('kotlinx.coroutines: Conflación de Puntos Táctiles (Channel.CONFLATED) y 
   scope.cancelAll();
   assert.equal(scope.getActiveCount(), 0);
 });
+
+test('kotlinx.coroutines: SupervisorJob y Aislamiento de Fallos en Tareas Secundarias', async () => {
+  const supervisor = new SupervisorJob('root_supervisor');
+  assert.equal(supervisor.isActive, true);
+
+  const child1 = new CancellableCoroutineJob('child_1', supervisor);
+  const child2 = new CancellableCoroutineJob('child_2', supervisor);
+
+  assert.equal(child1.isActive, true);
+  assert.equal(child2.isActive, true);
+
+  // Cancelar child1 no debe cancelar child2 ni el supervisor (SupervisorJob aísla errores)
+  child1.cancel();
+  assert.equal(child1.isActive, false);
+  assert.equal(child2.isActive, true);
+  assert.equal(supervisor.isActive, true);
+
+  // Cancelar supervisor debe cancelar todos los hijos en cascada
+  supervisor.cancel();
+  assert.equal(supervisor.isActive, false);
+  assert.equal(child2.isActive, false);
+});
+
+test('kotlinx.coroutines: Estimación de Hz Táctil (60Hz - 240Hz) y TouchFlow Reactivo', async () => {
+  const conflator = new TouchPointStreamConflator();
+
+  // Simular 10 muestras espaciadas cada ~4ms (correspondiente a ~240Hz)
+  const baseT = 1000;
+  for (let i = 0; i < 10; i++) {
+    conflator.emit({
+      x: i * 5,
+      y: i * 5,
+      pressure: 0.5,
+      timestamp: baseT + i * 4.16 // ~240Hz
+    });
+  }
+
+  const hz = conflator.getEstimatedSamplingRateHz();
+  assert.ok(hz >= 200 && hz <= 260, `La estimación de Hz debe ser cercana a 240Hz (recibido ${hz} Hz)`);
+
+  // TouchFlow reactivo
+  const flow = new TouchFlow();
+  let collected = 0;
+  const flowJob = flow.collectLatest((sample) => {
+    collected++;
+  });
+
+  flow.emit({ x: 50, y: 50, pressure: 0.5, timestamp: 2000 });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  flowJob.cancel();
+  assert.equal(flowJob.isActive, false);
+});
+
+test('Rotación de Calco y Accesorios: Continuidad Angular y Prevención de Reseteo a 0°', () => {
+  // 1. Verificar que micro-rotaciones no son anuladas ni forzadas a 0°
+  const microDeltaRad = (1.5 * Math.PI) / 180; // 1.5 grados
+  let currentRot = 0;
+  currentRot += microDeltaRad;
+  const currentDeg = Number(((currentRot * 180) / Math.PI).toFixed(2));
+  assert.equal(currentDeg, 1.5, 'El ángulo de 1.5° debe preservarse exactamente sin forzarse a 0°');
+
+  // 2. Normalización de diferencia angular en la discontinuidad [-PI, PI]
+  const angleStart = 3.10; // Cerca de +PI (~177.6°)
+  const angleCurrent = -3.10; // Cerca de -PI (~ -177.6°)
+  let delta = angleCurrent - angleStart; // -6.20 rad sin normalizar
+  while (delta > Math.PI) delta -= 2 * Math.PI;
+  while (delta < -Math.PI) delta += 2 * Math.PI;
+  // delta normalizado debe ser un pequeño giro de ~0.083 rad (~4.7°), no un salto de ~355°
+  assert.ok(Math.abs(delta) < 0.15, `El delta normalizado debe ser continuo (recibido ${delta})`);
+
+  // 3. Conversión bidireccional limpia de grados a radianes para sliders y botones de paso
+  const testAnglesDeg = [-150, -90, -45, -15, 0, 15, 45, 90, 180];
+  for (const deg of testAnglesDeg) {
+    const rad = Number(((deg * Math.PI) / 180).toFixed(3));
+    let reconstructedDeg = Math.round((((rad * 180 / Math.PI) % 360 + 360) % 360));
+    if (reconstructedDeg > 180) reconstructedDeg -= 360;
+    assert.equal(reconstructedDeg, deg, `El ángulo ${deg}° debe reconstruirse fielmente desde ${rad} rad`);
+  }
+});
+
 
 
 

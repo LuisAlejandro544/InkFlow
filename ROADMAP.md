@@ -258,15 +258,15 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
   - Implementado en `src/kotlin-core/CoroutineOrchestrator.kt` mediante la librería oficial `kotlinx.coroutines`.
   - `InkFlowCoroutineOrchestrator` con `SupervisorJob` y despacho de tareas en segundo plano (`Dispatchers.Default` / `Dispatchers.IO`), evitando que el fallo de una tarea secundaria derribe el hilo del estudio.
 - [x] **Centinela de Auto-Guardado No Bloqueante (`AutoSaveCoroutineSentinel`):**
-  - Bucle continuo asíncrono con suspensión cooperativa (`delay`) que monitorea el estado dirty y persiste en SQLite Wasm (OPFS) sin provocar caída de frames en pantallas de 60/120 FPS.
+  - Bucle continuo asíncrono con suspensión cooperativa (`delay`) integrado en `useProjectPersistence.ts` que monitorea el estado dirty y persiste en SQLite Wasm (OPFS) sin provocar caída de frames en pantallas de 60/120 FPS.
   - Cancelación estructurada inmediata ante cierre del lienzo o cambio de proyecto (`job.cancel()`).
 - [x] **Conflación de Puntos Táctiles (`TouchPointStreamConflator` / `Channel.CONFLATED`):**
-  - Canal confluente que absorbe el torrente de eventos de coordenadas del lápiz o stylus a alta velocidad (hasta 240Hz).
+  - Canal confluente integrado en caliente en `useStrokeDrawing.ts` que absorbe el torrente de coordenadas del lápiz o stylus a alta velocidad (hasta 240Hz).
   - Descarta automáticamente muestras intermedias obsoletas si el hilo de renderizado está procesando un cuadro previo, erradicando el lag y acumulaciones de latencia táctil.
 - [x] **Despacho Asíncrono de I/O en Galería (`AndroidPlatformBridge.kt`):**
   - Inserciones en `MediaStore` y escritura a disco desacopladas en `withContext(Dispatchers.IO)` para que el hilo principal (MainLooper) jamás sufra bloqueos de interfaz.
-- [x] **59 Pruebas Unitarias Deterministas:**
-  - 54 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, calco, flood fill, Sobel, Kotlin/PWA y corrutinas + 5 tests de SQLite Wasm OPFS.
+- [x] **61 Pruebas Unitarias Deterministas:**
+  - 56 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, calco, flood fill, Sobel, Kotlin/PWA y corrutinas + 5 tests de SQLite Wasm OPFS.
 
 ---
 

@@ -147,7 +147,7 @@ jobs:
       - name: Validar tipos TypeScript (npm run lint)
         run: npm run lint
 
-      # 14. Ejecución determinista de la suite completa de pruebas unitarias (46 tests: Motor + SQLite Wasm OPFS)
+      # 14. Ejecución determinista de la suite completa de pruebas unitarias (62 tests: 57 Motor Wasm/C++23/Kotlin + 5 SQLite Wasm OPFS)
       - name: Ejecutar pruebas unitarias deterministas (node:test)
         run: npx tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 
@@ -236,11 +236,19 @@ jobs:
           | 🌐 **Entorno de Despliegue** | **${MODE_NAME}** |
           | 🔗 **Enlace Directo PWA** | [Abrir InkFlow Studio (${PAGE_URL})](${PAGE_URL}) |
           | 🌿 **Rama Cloudflare** | \`${BRANCH_NAME}\` |
-          | 🧪 **Pruebas Automatizadas** | ✅ **46 tests deterministas pasando** (Motor + SQLite OPFS) |
+          | 🧪 **Pruebas Automatizadas** | ✅ **62 tests deterministas pasando** (57 Motor Wasm/C++23/Kotlin + 5 SQLite OPFS) |
           | ⚡ **Optimización Wasm** | ✅ **Binaryen wasm-opt (-O3 + SIMD)** aplicado |
           | 🔒 **Aislamiento SQLite OPFS** | ✅ **COOP / COEP (Cross-Origin Isolation)** activo |
           | 📦 **Peso Total del Bundle** | **${DIST_SIZE}** |
           | 📱 **Modo PWA** | Standalone con Workbox Precaching (10 MB) |
+
+          ### 📋 Desglose de Pruebas Automatizadas en CI/CD (62 tests):
+          - **Motor Vectorial y C++23:** Algoritmos Catmull-Rom C1, simplificación Douglas-Peucker y gradientes Sobel 3x3.
+          - **Bote de Pintura Inteligente:** Scanline Wasm, dilatación 1-3px (anti halos blancos) y Cierre Inteligente de Huecos (0-10px).
+          - **Texturas de Pincel IbisPaint:** 9 texturas de superficie con modulación determinista de opacidad y profundidad.
+          - **Orquestación kotlinx.coroutines:** Conflación reactiva de eventos táctiles a 240Hz, centinela no bloqueante y cancelación cooperativa (\`Job.cancel\`, \`SupervisorJob\`).
+          - **Gestos Táctiles y Calco:** Rotación continua normalizada $[-\pi, \pi]$ sin reseteo a 0° y estampado permanente de accesorios en capa activa/nueva.
+          - **Persistencia SQLite Wasm + OPFS:** Transacciones atómicas ACID, creación de esquemas y centinela de Crash Recovery ante cierres abruptos.
 
           ---
           > 📱 **Instrucción para Teléfono Móvil:** Pulsa sobre el enlace anterior en tu teléfono para abrir InkFlow Studio y selecciona **"Instalar PWA"** para fijarla en tu pantalla de inicio como una app nativa con soporte 100% offline.
