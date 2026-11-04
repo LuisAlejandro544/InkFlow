@@ -31,6 +31,7 @@ interface UseStrokeDrawingProps {
   projectWidth: number;
   projectHeight: number;
   activeLayer: Layer;
+  layers?: Layer[];
   activeTool: ToolType;
   lastDrawingTool: ToolType;
   brushColor: string;
@@ -62,6 +63,7 @@ export function useStrokeDrawing({
   projectWidth,
   projectHeight,
   activeLayer,
+  layers,
   activeTool,
   lastDrawingTool,
   brushColor,
@@ -138,7 +140,7 @@ export function useStrokeDrawing({
    * Procesa el punto confluente consumido en el ciclo de frame
    */
   const processConflatedPoint = useCallback((sample: Point) => {
-    if (!lastPointRef.current) return;
+    if (!lastPointRef.current || !activeLayer || !activeLayer.ctx) return;
     const smoothPoint = wasmEngine.stabilizePoint(sample, lastPointRef.current, stabilizerLevel);
 
     if (activeTool === 'vector_pencil' && currentVectorStrokeRef.current) {
@@ -184,14 +186,13 @@ export function useStrokeDrawing({
       return;
     }
 
-    try {
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      // Ignorar si no está soportado
-    }
-
     // Modo Mano / Paneo táctil con 1 dedo
     if (activeTool === 'hand') {
+      try {
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {
+        // Ignorar
+      }
       isPanningRef.current = true;
       panStartRef.current = {
         x: e.clientX,
@@ -200,6 +201,16 @@ export function useStrokeDrawing({
         panY: panRef.current.y,
       };
       return;
+    }
+
+    if (!activeLayer || !activeLayer.ctx) {
+      return;
+    }
+
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // Ignorar si no está soportado
     }
 
     // Herramienta Cuentagotas
@@ -226,7 +237,8 @@ export function useStrokeDrawing({
         brushColor,
         bucketTolerance,
         bucketExpansion,
-        bucketGapClosing
+        bucketGapClosing,
+        layers
       );
       renderComposite();
       updateThumbnail();
@@ -298,7 +310,7 @@ export function useStrokeDrawing({
       return;
     }
 
-    if (!isDrawingRef.current || !lastPointRef.current) return;
+    if (!isDrawingRef.current || !lastPointRef.current || !activeLayer || !activeLayer.ctx) return;
 
     const rawPressure = e.pressure > 0.01 ? e.pressure : 0.5;
     const rawPoint = getCanvasCoords(e.clientX, e.clientY, rawPressure);

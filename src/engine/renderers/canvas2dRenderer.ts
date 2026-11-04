@@ -28,6 +28,7 @@ export function renderCanvas2DStrokeSegment(
   baseOpacity: number,
   textureConfig?: BrushTextureConfig
 ): void {
+  if (!layer || !layer.ctx) return;
   const ctx = layer.ctx;
   ctx.save();
 
@@ -169,7 +170,7 @@ export function renderCanvas2DCompositeLayers(
 
   // Dibujar cada capa visible respetando opacidad y blend mode
   for (const layer of layers) {
-    if (!layer.visible || layer.opacity <= 0) continue;
+    if (!layer || !layer.canvas || !layer.visible || layer.opacity <= 0) continue;
 
     targetCtx.save();
     targetCtx.globalAlpha = layer.opacity;

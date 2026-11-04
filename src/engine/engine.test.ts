@@ -1645,6 +1645,109 @@ test('Rotación de Calco y Accesorios: Continuidad Angular y Prevención de Rese
   }
 });
 
+test('Bote de Pintura: Relleno exclusivo de un trazo sin desbordarse al lienzo vacío (en un trazo y que no salga de ahí)', () => {
+  const width = 20;
+  const height = 20;
+  const data = new Uint8ClampedArray(width * height * 4);
+
+  // Dibujar un trazo negro horizontal de 10px en y = 10, x = 5..14 (RGBA: 0, 0, 0, 255)
+  for (let x = 5; x <= 14; x++) {
+    const idx = (10 * width + x) * 4;
+    data[idx] = 0;
+    data[idx + 1] = 0;
+    data[idx + 2] = 0;
+    data[idx + 3] = 255;
+  }
+
+  const layer = {
+    canvas: { width, height },
+    ctx: {
+      getImageData: () => ({ data }),
+      putImageData: () => {}
+    }
+  } as unknown as Layer;
+
+  // Pintar con el balde directamente sobre el trazo (x=8, y=10) con color rojo (#ff0000)
+  const result = scanlineFloodFill(layer, 8, 10, '#ff0000', 32, 0, 0);
+  assert.equal(result, true, 'El relleno del trazo debe ejecutarse con éxito');
+
+  // 1. El trazo debe estar ahora pintado de rojo
+  const strokeCenterIdx = (10 * width + 8) * 4;
+  assert.equal(data[strokeCenterIdx], 255, 'El trazo debe ser rojo (R=255)');
+  assert.equal(data[strokeCenterIdx + 1], 0, 'El trazo no debe tener verde');
+  assert.equal(data[strokeCenterIdx + 2], 0, 'El trazo no debe tener azul');
+  assert.equal(data[strokeCenterIdx + 3], 255, 'El trazo debe conservar su opacidad');
+
+  // 2. El lienzo vacío adyacente (arriba y abajo del trazo) NO debe haberse pintado (cero fugas)
+  const aboveIdx = (9 * width + 8) * 4;
+  const belowIdx = (11 * width + 8) * 4;
+  const leftIdx = (10 * width + 4) * 4;
+  const rightIdx = (10 * width + 15) * 4;
+
+  assert.equal(data[aboveIdx + 3], 0, 'El pixel superior al trazo debe permanecer transparente');
+  assert.equal(data[belowIdx + 3], 0, 'El pixel inferior al trazo debe permanecer transparente');
+  assert.equal(data[leftIdx + 3], 0, 'El pixel a la izquierda del trazo debe permanecer transparente');
+  assert.equal(data[rightIdx + 3], 0, 'El pixel a la derecha del trazo debe permanecer transparente');
+});
+
+test('Bote de Pintura: Contención de trazo abierto en colisión con otro trazo (hasta donde encuentre colisión)', () => {
+  const width = 25;
+  const height = 25;
+  const data = new Uint8ClampedArray(width * height * 4);
+
+  // Trazo A (horizontal en y = 5, x = 5..20)
+  for (let x = 5; x <= 20; x++) {
+    const idx = (5 * width + x) * 4;
+    data[idx] = 30; data[idx + 1] = 30; data[idx + 2] = 30; data[idx + 3] = 255;
+  }
+
+  // Trazo B (vertical en x = 5, colisiona con Trazo A en (5,5) y baja hasta (5,20))
+  for (let y = 5; y <= 20; y++) {
+    const idx = (y * width + 5) * 4;
+    data[idx] = 30; data[idx + 1] = 30; data[idx + 2] = 30; data[idx + 3] = 255;
+  }
+
+  // Trazo C (vertical en x = 20, colisiona con Trazo A en (20,5) y baja hasta (20,20))
+  for (let y = 5; y <= 20; y++) {
+    const idx = (y * width + 20) * 4;
+    data[idx] = 30; data[idx + 1] = 30; data[idx + 2] = 30; data[idx + 3] = 255;
+  }
+
+  // Trazo D (horizontal inferior con apertura / hueco de 4px que colisiona en los extremos)
+  // Hueco entre x = 11..14 (4px)
+  for (let x = 5; x <= 20; x++) {
+    if (x < 11 || x > 14) {
+      const idx = (20 * width + x) * 4;
+      data[idx] = 30; data[idx + 1] = 30; data[idx + 2] = 30; data[idx + 3] = 255;
+    }
+  }
+
+  const layer = {
+    canvas: { width, height },
+    ctx: {
+      getImageData: () => ({ data }),
+      putImageData: () => {}
+    }
+  } as unknown as Layer;
+
+  // Llenar en el interior (x=12, y=10) con color azul (#0000ff) y gapClosing=6 para sellar la abertura
+  scanlineFloodFill(layer, 12, 10, '#0000ff', 32, 0, 6);
+
+  // 1. El interior debe estar lleno de azul
+  const insideIdx = (10 * width + 12) * 4;
+  assert.equal(data[insideIdx + 2], 255, 'El interior debe estar relleno de azul');
+
+  // 2. En las colisiones (x=5, y=5) y (x=20, y=5), los trazos son barreras intactas
+  const cornerIdx = (5 * width + 5) * 4;
+  assert.equal(data[cornerIdx + 3], 255, 'La esquina de colisión debe ser trazo');
+
+  // 3. Afuera de los trazos (x=2, y=10) y debajo del hueco (x=12, y=23) NO debe haber fugas
+  const outsideLeftIdx = (10 * width + 2) * 4;
+  const outsideBotIdx = (23 * width + 12) * 4;
+  assert.equal(data[outsideLeftIdx + 3], 0, 'Afuera a la izquierda debe permanecer vacío');
+  assert.equal(data[outsideBotIdx + 3], 0, 'Afuera debajo de la colisión cerrada debe permanecer vacío sin fugas');
+});
+
 
 
 

@@ -6,6 +6,7 @@
  */
 
 import { Layer } from './types';
+import { kotlinVectorEngine } from './kotlinWasmBridge';
 
 /**
  * Convierte un color hexadecimal (#rrggbb o #rgb) a componentes RGB.
@@ -107,63 +108,87 @@ export function generateClosedGapBarrierMask(
 
   const total = width * height;
   const barrier = new Uint8Array(total);
+  const isTargetTransparent = targetA < 35;
 
-  // 1. Identificar píxeles que difieren del color destino (barrera / líneas)
+  // 1. Identificar píxeles de barrera / líneas de contorno
   for (let i = 0, p = 0; p < total; i += 4, p++) {
-    const dr = Math.abs(data[i] - targetR);
-    const dg = Math.abs(data[i + 1] - targetG);
-    const db = Math.abs(data[i + 2] - targetB);
-    const da = Math.abs(data[i + 3] - targetA);
-    const diff = (dr + dg + db + da) / 4;
-    if (diff > tolerance || data[i + 3] > 60) {
-      barrier[p] = 1;
-    }
-  }
-
-  const radius = Math.min(8, Math.max(1, Math.ceil(gapSize / 2)));
-
-  // 2. Dilatación de la barrera para unir extremos desconectados
-  let dilated = new Uint8Array(barrier);
-  for (let r = 0; r < radius; r++) {
-    const next = new Uint8Array(dilated);
-    for (let y = 0; y < height; y++) {
-      const row = y * width;
-      for (let x = 0; x < width; x++) {
-        if (dilated[row + x] === 1) {
-          if (x > 0) next[row + (x - 1)] = 1;
-          if (x < width - 1) next[row + (x + 1)] = 1;
-          if (y > 0) next[(y - 1) * width + x] = 1;
-          if (y < height - 1) next[(y + 1) * width + x] = 1;
-          if (x > 0 && y > 0) next[(y - 1) * width + (x - 1)] = 1;
-          if (x < width - 1 && y > 0) next[(y - 1) * width + (x + 1)] = 1;
-          if (x > 0 && y < height - 1) next[(y + 1) * width + (x - 1)] = 1;
-          if (x < width - 1 && y < height - 1) next[(y + 1) * width + (x + 1)] = 1;
+    const curA = data[i + 3];
+    if (isTargetTransparent) {
+      // Si el objetivo es transparente/vacío, cualquier trazo con opacidad es barrera
+      if (curA >= 35) {
+        barrier[p] = 1;
+      }
+    } else {
+      // Si el objetivo es un trazo, el fondo transparente o colores distintos son barrera
+      if (curA < 35) {
+        barrier[p] = 1;
+      } else {
+        const dr = Math.abs(data[i] - targetR);
+        const dg = Math.abs(data[i + 1] - targetG);
+        const db = Math.abs(data[i + 2] - targetB);
+        const diff = (dr + dg + db) / 3;
+        if (diff > tolerance) {
+          barrier[p] = 1;
         }
       }
     }
-    dilated = next;
   }
 
-  // 3. Erosión de la barrera para restaurar el grosor original pero conservando los puentes
-  let closed = new Uint8Array(dilated);
-  for (let r = 0; r < radius; r++) {
-    const next = new Uint8Array(closed);
-    for (let y = 0; y < height; y++) {
-      const row = y * width;
-      for (let x = 0; x < width; x++) {
-        if (closed[row + x] === 1) {
-          if (
-            (x > 0 && closed[row + (x - 1)] === 0) ||
-            (x < width - 1 && closed[row + (x + 1)] === 0) ||
-            (y > 0 && closed[(y - 1) * width + x] === 0) ||
-            (y < height - 1 && closed[(y + 1) * width + x] === 0)
-          ) {
-            next[row + x] = 0;
+  // 2. Puenteo en todas las direcciones de trazos que colisionan o tienen abertura <= gapSize
+  const closed = new Uint8Array(barrier);
+  const maxD = Math.max(1, Math.min(16, Math.floor(gapSize)));
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const p = row + x;
+      if (barrier[p] === 1) {
+        // Horizontal hacia la derecha
+        if (x + 2 < width && barrier[p + 1] === 0) {
+          for (let d = 2; d <= maxD && x + d < width; d++) {
+            if (barrier[row + (x + d)] === 1) {
+              for (let k = 1; k < d; k++) {
+                closed[row + (x + k)] = 1;
+              }
+              break;
+            }
+          }
+        }
+        // Vertical hacia abajo
+        if (y + 2 < height && barrier[(y + 1) * width + x] === 0) {
+          for (let d = 2; d <= maxD && y + d < height; d++) {
+            if (barrier[(y + d) * width + x] === 1) {
+              for (let k = 1; k < d; k++) {
+                closed[(y + k) * width + x] = 1;
+              }
+              break;
+            }
+          }
+        }
+        // Diagonal principal (abajo-derecha)
+        if (x + 2 < width && y + 2 < height && barrier[(y + 1) * width + (x + 1)] === 0) {
+          for (let d = 2; d <= maxD && x + d < width && y + d < height; d++) {
+            if (barrier[(y + d) * width + (x + d)] === 1) {
+              for (let k = 1; k < d; k++) {
+                closed[(y + k) * width + (x + k)] = 1;
+              }
+              break;
+            }
+          }
+        }
+        // Diagonal secundaria (abajo-izquierda)
+        if (x - 2 >= 0 && y + 2 < height && barrier[(y + 1) * width + (x - 1)] === 0) {
+          for (let d = 2; d <= maxD && x - d >= 0 && y + d < height; d++) {
+            if (barrier[(y + d) * width + (x - d)] === 1) {
+              for (let k = 1; k < d; k++) {
+                closed[(y + k) * width + (x - k)] = 1;
+              }
+              break;
+            }
           }
         }
       }
     }
-    closed = next;
   }
 
   return closed;
@@ -171,8 +196,9 @@ export function generateClosedGapBarrierMask(
 
 /**
  * Algoritmo Scanline Flood Fill de alto rendimiento con tolerancia cromática,
- * expansión de borde configurable (1 a 3 px) para eliminar rebordes blancos
- * y Cierre Inteligente de Huecos (Gap-Closing de 0 a 10 px) para evitar fugas en lineart abierto.
+ * expansión de borde configurable (1 a 3 px) para eliminar rebordes blancos,
+ * Cierre Inteligente de Huecos (Gap-Closing de 0 a 10 px) para evitar fugas en lineart abierto
+ * y soporte para referencia multicapa y trazos vectoriales analíticos.
  */
 export function scanlineFloodFill(
   layer: Layer,
@@ -181,7 +207,8 @@ export function scanlineFloodFill(
   fillColorHex: string,
   tolerance: number = 32,
   borderExpansion: number = 0,
-  gapClosing: number = 0
+  gapClosing: number = 0,
+  referenceLayers?: Layer[]
 ): boolean {
   const ctx = layer.ctx;
   const width = layer.canvas.width;
@@ -195,12 +222,56 @@ export function scanlineFloodFill(
   const imgData = ctx.getImageData(0, 0, width, height);
   const data = imgData.data;
 
+  // Obtener datos de referencia para detección de bordes (capas visibles + trazos vectoriales)
+  let refData: Uint8ClampedArray = data;
+
+  if (typeof document !== 'undefined') {
+    try {
+      const refCanvas = document.createElement('canvas');
+      refCanvas.width = width;
+      refCanvas.height = height;
+      const refCtx = refCanvas.getContext('2d');
+      if (refCtx) {
+        if (referenceLayers && referenceLayers.length > 0) {
+          for (const l of referenceLayers) {
+            if (!l.visible || l.opacity <= 0) continue;
+            refCtx.save();
+            refCtx.globalAlpha = l.opacity;
+            refCtx.drawImage(l.canvas, 0, 0);
+            try {
+              const vStrokes = kotlinVectorEngine.getStrokesForLayer(l.id);
+              if (vStrokes && vStrokes.length > 0) {
+                kotlinVectorEngine.renderVectorStrokes(refCtx, vStrokes, 1.0);
+              }
+            } catch {
+              // Si no hay motor vectorial inicializado, continuar
+            }
+            refCtx.restore();
+          }
+        } else {
+          refCtx.drawImage(layer.canvas, 0, 0);
+          try {
+            const vStrokes = kotlinVectorEngine.getStrokesForLayer(layer.id);
+            if (vStrokes && vStrokes.length > 0) {
+              kotlinVectorEngine.renderVectorStrokes(refCtx, vStrokes, 1.0);
+            }
+          } catch {
+            // Ignorar en entorno sin bridge
+          }
+        }
+        refData = refCtx.getImageData(0, 0, width, height).data;
+      }
+    } catch {
+      refData = data;
+    }
+  }
+
   const fillRgb = hexToRgb(fillColorHex);
   const targetIdx = (y * width + x) * 4;
-  const targetR = data[targetIdx];
-  const targetG = data[targetIdx + 1];
-  const targetB = data[targetIdx + 2];
-  const targetA = data[targetIdx + 3];
+  const targetR = refData[targetIdx];
+  const targetG = refData[targetIdx + 1];
+  const targetB = refData[targetIdx + 2];
+  const targetA = refData[targetIdx + 3];
 
   // Si ya tiene el mismo color exacto, evitar bucle infinito
   if (
@@ -212,9 +283,11 @@ export function scanlineFloodFill(
     return false;
   }
 
+  const isTargetTransparent = targetA < 35;
+
   // Si se solicita cierre de huecos, calcular barrera morfológica virtual
   const barrierMask = gapClosing > 0
-    ? generateClosedGapBarrierMask(data, width, height, gapClosing, targetR, targetG, targetB, targetA, tolerance)
+    ? generateClosedGapBarrierMask(refData, width, height, gapClosing, targetR, targetG, targetB, targetA, tolerance)
     : null;
 
   const matchesTarget = (idx: number, pos: number = idx >> 2) => {
@@ -222,11 +295,25 @@ export function scanlineFloodFill(
     if (barrierMask && barrierMask[pos] === 1) {
       return false;
     }
-    const dr = Math.abs(data[idx] - targetR);
-    const dg = Math.abs(data[idx + 1] - targetG);
-    const db = Math.abs(data[idx + 2] - targetB);
-    const da = Math.abs(data[idx + 3] - targetA);
-    return (dr + dg + db + da) / 4 <= tolerance;
+
+    const curA = refData[idx + 3];
+
+    if (isTargetTransparent) {
+      // Estamos rellenando un área vacía / transparente dentro de un trazo cerrado o entre trazos
+      // Cualquier trazo existente (curA >= 35) es un límite impenetrable (barrera)
+      return curA < 35;
+    } else {
+      // Estamos rellenando un trazo existente o un área previamente coloreada
+      // El fondo transparente NO coincide (el color no debe fugarse al lienzo vacío)
+      if (curA < 35) {
+        return false;
+      }
+      const dr = Math.abs(refData[idx] - targetR);
+      const dg = Math.abs(refData[idx + 1] - targetG);
+      const db = Math.abs(refData[idx + 2] - targetB);
+      const diff = (dr + dg + db) / 3;
+      return diff <= tolerance;
+    }
   };
 
   const pixelStack: [number, number][] = [[x, y]];
@@ -241,8 +328,8 @@ export function scanlineFloodFill(
     let newY = curY;
     let idx = (newY * width + curX) * 4;
 
-    // Buscar el borde superior
-    while (newY >= 0 && matchesTarget(idx)) {
+    // Buscar el borde superior sin re-visitar píxeles ya marcados
+    while (newY >= 0 && matchesTarget(idx, newY * width + curX) && !filledMask[newY * width + curX]) {
       newY--;
       idx -= width * 4;
     }
@@ -252,7 +339,7 @@ export function scanlineFloodFill(
     let spanLeft = false;
     let spanRight = false;
 
-    while (newY < height && matchesTarget(idx)) {
+    while (newY < height && matchesTarget(idx, newY * width + curX) && !filledMask[newY * width + curX]) {
       const pos = newY * width + curX;
       filledMask[pos] = 1;
       if (curX < minX) minX = curX;
@@ -264,8 +351,8 @@ export function scanlineFloodFill(
       if (curX > 0) {
         const leftIdx = idx - 4;
         const leftPos = newY * width + (curX - 1);
-        if (matchesTarget(leftIdx)) {
-          if (!spanLeft && !filledMask[leftPos]) {
+        if (matchesTarget(leftIdx, leftPos) && !filledMask[leftPos]) {
+          if (!spanLeft) {
             pixelStack.push([curX - 1, newY]);
             spanLeft = true;
           }
@@ -278,8 +365,8 @@ export function scanlineFloodFill(
       if (curX < width - 1) {
         const rightIdx = idx + 4;
         const rightPos = newY * width + (curX + 1);
-        if (matchesTarget(rightIdx)) {
-          if (!spanRight && !filledMask[rightPos]) {
+        if (matchesTarget(rightIdx, rightPos) && !filledMask[rightPos]) {
+          if (!spanRight) {
             pixelStack.push([curX + 1, newY]);
             spanRight = true;
           }
@@ -293,13 +380,14 @@ export function scanlineFloodFill(
     }
   }
 
-  // Aplicar expansión de borde (dilatación morfológica) si borderExpansion > 0
-  const clampedExpansion = Math.min(5, Math.max(0, Math.round(borderExpansion)));
+  // Aplicar expansión de borde (dilatación morfológica) SOLO en relleno de áreas transparentes
+  // Si se está pintando un trazo, no dilatar para no engrosar el trazo hacia el vacío
+  const clampedExpansion = isTargetTransparent ? Math.min(5, Math.max(0, Math.round(borderExpansion))) : 0;
   const finalMask = clampedExpansion > 0
     ? dilateBinaryMask(filledMask, width, height, clampedExpansion, { minX, maxX, minY, maxY })
     : filledMask;
 
-  // Pintar los píxeles marcados en la máscara resultante
+  // Pintar los píxeles marcados en la capa destino
   const effectiveMinX = Math.max(0, minX - clampedExpansion);
   const effectiveMaxX = Math.min(width - 1, maxX + clampedExpansion);
   const effectiveMinY = Math.max(0, minY - clampedExpansion);

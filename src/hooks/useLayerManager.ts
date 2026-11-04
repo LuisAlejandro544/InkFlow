@@ -12,9 +12,30 @@
 import { useState, useCallback } from 'react';
 import { Layer, BlendMode, ProjectData } from '../engine/types';
 
+export function createInitialLayer(width: number = 800, height: number = 1200): Layer | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  return {
+    id: 'layer_default_1',
+    name: 'Capa 1',
+    visible: true,
+    opacity: 1.0,
+    blendMode: 'source-over',
+    canvas,
+    ctx,
+  };
+}
+
 export function useLayerManager() {
-  const [layers, setLayers] = useState<Layer[]>([]);
-  const [activeLayerId, setActiveLayerId] = useState<string>('');
+  const [layers, setLayers] = useState<Layer[]>(() => {
+    const init = createInitialLayer();
+    return init ? [init] : [];
+  });
+  const [activeLayerId, setActiveLayerId] = useState<string>('layer_default_1');
 
   /**
    * Inicializa exactamente 1 capa limpia por defecto para el proyecto

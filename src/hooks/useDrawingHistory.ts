@@ -30,8 +30,8 @@ export function useDrawingHistory(
    * Guarda una instantánea de la capa activa en la memoria lineal WebAssembly
    */
   const saveUndoSnapshot = useCallback(() => {
-    const activeLayer = layers.find((l) => l.id === activeLayerId);
-    if (!activeLayer) return;
+    const activeLayer = layers.find((l) => l.id === activeLayerId) || layers[0];
+    if (!activeLayer || !activeLayer.ctx) return;
 
     try {
       const snap = activeLayer.ctx.getImageData(
@@ -61,7 +61,7 @@ export function useDrawingHistory(
     const activeLayer = layers.find((l) => l.id === activeLayerId) || layers[0];
     let currentSnapshot: { layerId: string; imageData: ImageData } | undefined;
 
-    if (activeLayer) {
+    if (activeLayer && activeLayer.ctx) {
       try {
         const currentData = activeLayer.ctx.getImageData(
           0,
@@ -76,7 +76,7 @@ export function useDrawingHistory(
     const restored = wasmHistoryEngine.undo(currentSnapshot);
     if (restored) {
       const targetLayer = layers.find((l) => l.id === restored.layerId);
-      if (targetLayer) {
+      if (targetLayer && targetLayer.ctx) {
         targetLayer.ctx.putImageData(restored.imageData, 0, 0);
         kotlinVectorEngine.popStrokeForLayer(targetLayer.id);
         setLayers([...layers]);
@@ -96,7 +96,7 @@ export function useDrawingHistory(
     const activeLayer = layers.find((l) => l.id === activeLayerId) || layers[0];
     let currentSnapshot: { layerId: string; imageData: ImageData } | undefined;
 
-    if (activeLayer) {
+    if (activeLayer && activeLayer.ctx) {
       try {
         const currentData = activeLayer.ctx.getImageData(
           0,
@@ -111,7 +111,7 @@ export function useDrawingHistory(
     const restored = wasmHistoryEngine.redo(currentSnapshot);
     if (restored) {
       const targetLayer = layers.find((l) => l.id === restored.layerId);
-      if (targetLayer) {
+      if (targetLayer && targetLayer.ctx) {
         targetLayer.ctx.putImageData(restored.imageData, 0, 0);
         setLayers([...layers]);
       }

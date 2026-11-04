@@ -160,7 +160,26 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     }
   }, []);
 
-  const activeLayer = layers.find(l => l.id === activeLayerId) || layers[0];
+  const fallbackLayerRef = useRef<Layer | null>(null);
+  if (!fallbackLayerRef.current && typeof document !== 'undefined') {
+    const fallbackCanvas = document.createElement('canvas');
+    fallbackCanvas.width = project.width;
+    fallbackCanvas.height = project.height;
+    const fallbackCtx = fallbackCanvas.getContext('2d');
+    if (fallbackCtx) {
+      fallbackLayerRef.current = {
+        id: 'layer_default_1',
+        name: 'Capa 1',
+        visible: true,
+        opacity: 1.0,
+        blendMode: 'source-over',
+        canvas: fallbackCanvas,
+        ctx: fallbackCtx,
+      };
+    }
+  }
+
+  const activeLayer = layers.find(l => l.id === activeLayerId) || layers[0] || fallbackLayerRef.current!;
 
   // Hook modular de navegación espacial y gestos de lienzo
   const {
@@ -265,7 +284,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
     // Dibujar cada capa visible respetando opacidad y modo de fusión
     for (const layer of layers) {
-      if (!layer.visible || layer.opacity <= 0) continue;
+      if (!layer || !layer.canvas || !layer.visible || layer.opacity <= 0) continue;
 
       ctx.save();
       ctx.globalAlpha = layer.opacity;
@@ -345,6 +364,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     projectWidth: project.width,
     projectHeight: project.height,
     activeLayer,
+    layers,
     activeTool,
     lastDrawingTool,
     brushColor,

@@ -81,6 +81,7 @@ export class DrawingEngine {
     baseOpacity: number,
     textureConfig?: BrushTextureConfig
   ): void {
+    if (!layer || !layer.ctx) return;
     renderCanvas2DStrokeSegment(
       layer,
       p0,
@@ -128,15 +129,18 @@ export class DrawingEngine {
     fillColorHex: string,
     tolerance: number = 32,
     borderExpansion: number = 0,
-    gapClosing: number = 0
+    gapClosing: number = 0,
+    referenceLayers?: Layer[]
   ): boolean {
-    return scanlineFloodFill(layer, startX, startY, fillColorHex, tolerance, borderExpansion, gapClosing);
+    if (!layer || !layer.ctx) return false;
+    return scanlineFloodFill(layer, startX, startY, fillColorHex, tolerance, borderExpansion, gapClosing, referenceLayers);
   }
 
   /**
    * Muestrea el color RGB en un punto específico de un canvas (Eyedropper).
    */
   public pickColor(ctx: CanvasRenderingContext2D, x: number, y: number): string {
+    if (!ctx) return '#000000';
     return pickCanvasColor(ctx, x, y);
   }
 
