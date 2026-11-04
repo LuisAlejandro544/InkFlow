@@ -110,6 +110,12 @@ async function initializeDatabase(customDbName?: string): Promise<StorageDiagnos
       preview_thumbnail_url TEXT,
       payload_json TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS project_tracings (
+      project_id TEXT PRIMARY KEY,
+      tracing_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `);
 
   return getDiagnostics();
@@ -209,6 +215,25 @@ function saveProject(payload: StoredProjectPayload): { projectId: string; timest
       });
     }
 
+    // 4. Guardar o limpiar foto de calco asociada con su ángulo, escala y posición exacta
+    if (payload.tracing) {
+      db.exec({
+        sql: `
+          INSERT INTO project_tracings (project_id, tracing_json, updated_at)
+          VALUES (?, ?, ?)
+          ON CONFLICT(project_id) DO UPDATE SET
+            tracing_json = excluded.tracing_json,
+            updated_at = excluded.updated_at;
+        `,
+        bind: [project.id, JSON.stringify(payload.tracing), now],
+      });
+    } else if (payload.tracing === null) {
+      db.exec({
+        sql: 'DELETE FROM project_tracings WHERE project_id = ?;',
+        bind: [project.id],
+      });
+    }
+
     db.exec('COMMIT;');
     lastSaveTimestamp = now;
     return { projectId: project.id, timestamp: now };
@@ -244,6 +269,17 @@ function loadProject(projectId: string): StoredProjectPayload | null {
     vectorStrokesJson: r.vector_strokes_json || undefined,
   }));
 
+  // Recuperar datos de la foto de calco con su ángulo, escala y transformación exacta
+  let tracingData: any = null;
+  try {
+    const tracingRow = db.selectObject('SELECT tracing_json FROM project_tracings WHERE project_id = ? LIMIT 1;', [projectId]);
+    if (tracingRow && tracingRow.tracing_json) {
+      tracingData = JSON.parse(tracingRow.tracing_json);
+    }
+  } catch {
+    // Si no existía registro de calco
+  }
+
   return {
     project: {
       id: projectRow.id,
@@ -256,6 +292,7 @@ function loadProject(projectId: string): StoredProjectPayload | null {
       layerCount: layers.length,
     },
     layers,
+    tracing: tracingData,
     timestamp: projectRow.updated_at,
     isCrashCheckpoint: Boolean(projectRow.is_autosaved),
   };
@@ -294,6 +331,7 @@ function deleteProject(projectId: string): boolean {
   db.exec('BEGIN TRANSACTION;');
   try {
     db.exec({ sql: 'DELETE FROM layers WHERE project_id = ?;', bind: [projectId] });
+    db.exec({ sql: 'DELETE FROM project_tracings WHERE project_id = ?;', bind: [projectId] });
     db.exec({ sql: 'DELETE FROM projects WHERE id = ?;', bind: [projectId] });
     db.exec({ sql: 'DELETE FROM crash_recovery WHERE project_id = ?;', bind: [projectId] });
     db.exec('COMMIT;');
@@ -328,6 +366,7 @@ function duplicateProject(projectId: string, newId: string, newName: string): an
   saveProject({
     project: dupProject,
     layers: dupLayers,
+    tracing: current.tracing || null,
     timestamp: now,
     isCrashCheckpoint: false,
   });

@@ -270,6 +270,23 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
 
 ---
 
+## 🛡️ Fase 4.15: Blindaje Anti-OOM en Móviles & Persistencia Integral del Calco (Completada ✅)
+
+- [x] **Deduplicación Estricta de Decodificación en VRAM (`GPUBitmapCache`):**
+  - Implementación de bloqueo de estado en vuelo (`pendingCreations` lock) para `createImageBitmap`.
+  - Erradica la invocación concurrente masiva (hasta 60–120 llamadas simultáneas durante el trazo táctil) que disparaba el *Low Memory Killer* de Android y provocaba la pantalla "¡Oh, no!" de Chrome.
+  - Reducción del límite de VRAM móvil a 32 MB y 12 entradas máximas con política de desalojo LRU para estabilidad garantizada en teléfonos con memoria reducida.
+- [x] **Persistencia Masiva y Resguardo Total de la Foto de Calco (Ángulo, Escala y Posición):**
+  - Creación de tabla relacional `project_tracings` en SQLite Wasm con clave foránea hacia proyectos.
+  - Persistencia del modelo `SerializedTracingData` incluyendo el ángulo de rotación exacto (`rotation`), escala, posición (`x, y`), opacidad, visibilidad y filtro Wasm aplicado.
+  - Sincronización continua en `useProjectPersistence.ts` y centinela de emergencia: si la app se minimiza, se cierra o el navegador se interrumpe, la foto se restaura en el ángulo milimétrico exacto para continuar calcando inmediatamente.
+- [x] **Timeout Defensivo en Inicialización WebGPU:**
+  - Carrera con timeout de 1200ms en `navigator.gpu.requestAdapter()` y `requestDevice()` para prevenir congelamientos del proceso GPU en SoCs móviles con drivers Vulkan incompletos.
+- [x] **68 Pruebas Unitarias Deterministas:**
+  - 61 tests de motor gráfico, transformaciones, Wasm y texturas + 7 tests de persistencia SQLite Wasm OPFS, deduplicación VRAM y restauración de calco ante crash.
+
+---
+
 ## 🎨 Fase 5: Pipeline WebGPU Avanzado & Herramientas de Ilustración
 
 - [ ] Soporte para mapas de bits como puntas de pincel personalizadas (*Brush Dabs*).

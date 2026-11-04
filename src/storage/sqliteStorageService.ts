@@ -9,15 +9,73 @@
  * - Errores de renderizado o excepciones no controladas de JavaScript (window.onerror).
  */
 
-import { Layer, ProjectData } from '../engine/types';
+import { Layer, ProjectData, TracingReference } from '../engine/types';
 import {
   WorkerRequest,
   WorkerResponse,
   StoredProjectPayload,
   SerializedLayerData,
+  SerializedTracingData,
   CrashRecoveryRecord,
   StorageDiagnostics,
 } from './sqliteTypes';
+
+/**
+ * Serializa la foto de calco o accesorio conservando su ángulo exacto, escala y posición
+ */
+export function serializeTracing(tracing: TracingReference | null): SerializedTracingData | null {
+  if (!tracing || !tracing.src) return null;
+  return {
+    id: tracing.id,
+    src: tracing.src,
+    x: tracing.x,
+    y: tracing.y,
+    width: tracing.width,
+    height: tracing.height,
+    scale: tracing.scale,
+    rotation: tracing.rotation, // Ángulo exacto de rotación del calco
+    opacity: tracing.opacity,
+    visible: tracing.visible,
+    isAdjusting: tracing.isAdjusting,
+    filterMode: tracing.filterMode,
+    purpose: tracing.purpose,
+    extractedColors: tracing.extractedColors,
+  };
+}
+
+/**
+ * Reconstruye el objeto TracingReference a partir de los datos serializados en disco
+ */
+export function deserializeTracing(data: SerializedTracingData | null | undefined): Promise<TracingReference | null> {
+  if (!data || !data.src) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({
+        id: data.id,
+        image: img,
+        src: data.src,
+        x: data.x,
+        y: data.y,
+        width: data.width,
+        height: data.height,
+        scale: data.scale,
+        rotation: data.rotation ?? 0,
+        opacity: data.opacity ?? 0.4,
+        visible: data.visible !== false,
+        isAdjusting: data.isAdjusting ?? false,
+        filterMode: (data.filterMode as any) || 'original',
+        purpose: data.purpose || 'tracing',
+        extractedColors: data.extractedColors,
+      });
+    };
+    img.onerror = () => {
+      console.warn('[Tracing] No se pudo recargar la imagen de calco desde el almacenamiento');
+      resolve(null);
+    };
+    img.src = data.src;
+  });
+}
 
 class SqliteStorageService {
   private worker: Worker | null = null;
@@ -28,10 +86,22 @@ class SqliteStorageService {
   private lastAutoSaveTimestamp = 0;
   private currentActiveProject: ProjectData | null = null;
   private currentActiveLayers: Layer[] = [];
+  private currentActiveTracing: TracingReference | null = null;
   private isInitialized = false;
 
   constructor() {
     this.setupLifecycleGuards();
+  }
+
+  /**
+   * Sincroniza la foto de calco activa para auto-guardado y salvaguarda de emergencia
+   */
+  public setCurrentTracing(tracing: TracingReference | null): void {
+    this.currentActiveTracing = tracing;
+  }
+
+  public getCurrentTracing(): TracingReference | null {
+    return this.currentActiveTracing;
   }
 
   /**
@@ -147,11 +217,12 @@ class SqliteStorageService {
   }
 
   /**
-   * Guarda un proyecto con todas sus capas en SQLite Wasm (OPFS)
+   * Guarda un proyecto con todas sus capas y foto de calco en SQLite Wasm (OPFS)
    */
   public async saveProject(
     project: ProjectData,
     layers: Layer[],
+    tracingRef?: TracingReference | null,
     isCrashCheckpoint = false
   ): Promise<{ projectId: string; timestamp: number }> {
     await this.init();
@@ -159,6 +230,9 @@ class SqliteStorageService {
     // Actualizar referencia en memoria para auto-guardado de ciclo de vida
     this.currentActiveProject = project;
     this.currentActiveLayers = layers;
+    if (tracingRef !== undefined) {
+      this.currentActiveTracing = tracingRef;
+    }
 
     // Serializar capas convirtiendo los Canvas a Data URLs PNG con canal alfa
     const serializedLayers: SerializedLayerData[] = layers.map((layer, index) => {
@@ -184,6 +258,7 @@ class SqliteStorageService {
     const payload: StoredProjectPayload = {
       project,
       layers: serializedLayers,
+      tracing: serializeTracing(this.currentActiveTracing),
       isCrashCheckpoint,
       timestamp: Date.now(),
     };
@@ -201,9 +276,13 @@ class SqliteStorageService {
   }
 
   /**
-   * Carga un proyecto y todas sus capas desde SQLite Wasm
+   * Carga un proyecto, todas sus capas y su foto de calco desde SQLite Wasm
    */
-  public async loadProject(projectId: string): Promise<{ project: ProjectData; layers: SerializedLayerData[] } | null> {
+  public async loadProject(projectId: string): Promise<{
+    project: ProjectData;
+    layers: SerializedLayerData[];
+    tracing?: SerializedTracingData | null;
+  } | null> {
     await this.init();
 
     const res = await this.sendRequest({
@@ -216,6 +295,7 @@ class SqliteStorageService {
     return {
       project: res.data.project,
       layers: res.data.layers,
+      tracing: res.data.tracing || null,
     };
   }
 
@@ -266,11 +346,23 @@ class SqliteStorageService {
   }
 
   /**
-   * Programa un auto-guardado inteligente (debounced a 1.2 segundos tras dibujar)
+   * Programa un auto-guardado inteligente (debounced tras dibujar o rotar/mover calco)
    */
-  public scheduleAutoSave(project: ProjectData, layers: Layer[], delayMs = 1200): void {
+  public scheduleAutoSave(
+    project: ProjectData,
+    layers: Layer[],
+    tracingRefOrDelayMs?: TracingReference | null | number,
+    delayMs = 1200
+  ): void {
     this.currentActiveProject = project;
     this.currentActiveLayers = layers;
+
+    let effectiveDelay = delayMs;
+    if (typeof tracingRefOrDelayMs === 'number') {
+      effectiveDelay = tracingRefOrDelayMs;
+    } else if (tracingRefOrDelayMs !== undefined) {
+      this.currentActiveTracing = tracingRefOrDelayMs;
+    }
 
     if (this.autoSaveTimer) {
       clearTimeout(this.autoSaveTimer);
@@ -278,7 +370,7 @@ class SqliteStorageService {
 
     this.autoSaveTimer = setTimeout(() => {
       this.executeAutoSave();
-    }, delayMs);
+    }, effectiveDelay);
   }
 
   /**
@@ -288,7 +380,7 @@ class SqliteStorageService {
     if (!this.currentActiveProject || !this.currentActiveLayers.length) return;
 
     try {
-      await this.saveProject(this.currentActiveProject, this.currentActiveLayers, true);
+      await this.saveProject(this.currentActiveProject, this.currentActiveLayers, this.currentActiveTracing, true);
       this.lastAutoSaveTimestamp = Date.now();
     } catch (err) {
       console.warn('[AutoSave SQLite Worker]: Fallo en auto-guardado periódico:', err);
@@ -313,9 +405,12 @@ class SqliteStorageService {
         imageDataUrl: layer.canvas.toDataURL('image/png'),
       }));
 
+      const serializedTracing = serializeTracing(this.currentActiveTracing);
+
       const payload: StoredProjectPayload = {
         project: this.currentActiveProject,
         layers: serializedLayers,
+        tracing: serializedTracing,
         isCrashCheckpoint: true,
         timestamp: Date.now(),
       };
@@ -331,6 +426,11 @@ class SqliteStorageService {
       try {
         sessionStorage.setItem('inkflow_emergency_saved_at', String(Date.now()));
         sessionStorage.setItem('inkflow_emergency_project_id', this.currentActiveProject.id);
+        if (serializedTracing) {
+          sessionStorage.setItem('inkflow_emergency_tracing', JSON.stringify(serializedTracing));
+        } else {
+          sessionStorage.removeItem('inkflow_emergency_tracing');
+        }
       } catch {
         // Ignorar
       }

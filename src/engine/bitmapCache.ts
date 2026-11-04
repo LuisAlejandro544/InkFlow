@@ -22,9 +22,31 @@ interface CachedBitmapEntry {
 
 export class GPUBitmapCache {
   private cache = new Map<string, CachedBitmapEntry>();
-  private maxEntries = 25; // Límite adaptado para teléfonos móviles (32 y 64 bits)
-  private maxEstimatedBytes = 64 * 1024 * 1024; // 64 MB de límite en VRAM
+  private pendingCreations = new Set<string>(); // Evita decodificaciones paralelas masivas de la misma imagen
+  private maxEntries = 12; // Límite adaptado para evitar OOM en teléfonos móviles (32 y 64 bits)
+  private maxEstimatedBytes = 32 * 1024 * 1024; // 32 MB de límite estricto en VRAM para teléfonos
   private currentEstimatedBytes = 0;
+
+  /**
+   * Comprueba si una imagen ya está siendo decodificada de forma asíncrona en este momento
+   */
+  public isPending(key: string): boolean {
+    return this.pendingCreations.has(key);
+  }
+
+  /**
+   * Marca una clave como en proceso de decodificación
+   */
+  public markPending(key: string): void {
+    this.pendingCreations.add(key);
+  }
+
+  /**
+   * Desmarca una clave tras completarse o fallar la decodificación
+   */
+  public unmarkPending(key: string): void {
+    this.pendingCreations.delete(key);
+  }
 
   /**
    * Obtiene un ImageBitmap de la caché VRAM si existe

@@ -148,7 +148,8 @@ export function renderCanvas2DCompositeLayers(
     }
     const drawW = tracingRef.width * tracingRef.scale;
     const drawH = tracingRef.height * tracingRef.scale;
-    const cachedBitmap = gpuBitmapCache.get(`tracing_${tracingRef.id}_${tracingRef.filterMode}`);
+    const cacheKey = `tracing_${tracingRef.id}_${tracingRef.filterMode}`;
+    const cachedBitmap = gpuBitmapCache.get(cacheKey);
     if (cachedBitmap) {
       targetCtx.drawImage(cachedBitmap, -drawW / 2, -drawH / 2, drawW, drawH);
     } else {
@@ -159,10 +160,16 @@ export function renderCanvas2DCompositeLayers(
         drawW,
         drawH
       );
-      if (typeof createImageBitmap === 'function') {
-        createImageBitmap(tracingRef.image).then((bmp) => {
-          gpuBitmapCache.set(`tracing_${tracingRef.id}_${tracingRef.filterMode}`, bmp);
-        }).catch(() => {});
+      if (typeof createImageBitmap === 'function' && !gpuBitmapCache.isPending(cacheKey)) {
+        gpuBitmapCache.markPending(cacheKey);
+        createImageBitmap(tracingRef.image)
+          .then((bmp) => {
+            gpuBitmapCache.set(cacheKey, bmp);
+          })
+          .catch(() => {})
+          .finally(() => {
+            gpuBitmapCache.unmarkPending(cacheKey);
+          });
       }
     }
     targetCtx.restore();

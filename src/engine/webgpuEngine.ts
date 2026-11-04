@@ -36,18 +36,27 @@ export class DrawingEngine {
   public async initWebGPU(): Promise<boolean> {
     try {
       if (typeof navigator !== 'undefined' && 'gpu' in navigator && navigator.gpu) {
-        this.adapter = await navigator.gpu.requestAdapter();
+        // Timeout de seguridad para evitar cuelgues o crasheos del proceso GPU en teléfonos móviles
+        const adapterPromise = navigator.gpu.requestAdapter();
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200));
+        this.adapter = await Promise.race([adapterPromise, timeoutPromise]);
+
         if (this.adapter) {
-          this.device = await this.adapter.requestDevice();
-          this.webgpuSupported = true;
-          this.webgpuActive = true;
-          const adapterAny = this.adapter as unknown as { 
-            info?: { vendor?: string; architecture?: string }; 
-            requestAdapterInfo?: () => Promise<{ vendor?: string; architecture?: string }> 
-          };
-          const info = adapterAny.info || (adapterAny.requestAdapterInfo ? await adapterAny.requestAdapterInfo() : null);
-          this.adapterInfo = info?.vendor || info?.architecture || 'Hardware WebGPU Device';
-          return true;
+          const devicePromise = this.adapter.requestDevice();
+          const devTimeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200));
+          this.device = (await Promise.race([devicePromise, devTimeoutPromise])) as GPUDevice | null;
+
+          if (this.device) {
+            this.webgpuSupported = true;
+            this.webgpuActive = true;
+            const adapterAny = this.adapter as unknown as { 
+              info?: { vendor?: string; architecture?: string }; 
+              requestAdapterInfo?: () => Promise<{ vendor?: string; architecture?: string }> 
+            };
+            const info = adapterAny.info || (adapterAny.requestAdapterInfo ? await adapterAny.requestAdapterInfo() : null);
+            this.adapterInfo = info?.vendor || info?.architecture || 'Hardware WebGPU Device';
+            return true;
+          }
         }
       }
     } catch {

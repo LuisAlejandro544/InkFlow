@@ -11,9 +11,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ProjectData, Layer } from '../engine/types';
+import { ProjectData, Layer, TracingReference } from '../engine/types';
 import { DEFAULT_PROJECT } from '../store/drawingStore';
-import { sqliteStorageService } from '../storage/sqliteStorageService';
+import { sqliteStorageService, deserializeTracing } from '../storage/sqliteStorageService';
 import { CrashRecoveryRecord, StoredProjectPayload } from '../storage/sqliteTypes';
 import { gpuBitmapCache } from '../engine/bitmapCache';
 import { globalAutoSaveSentinel } from '../engine/coroutinesBridge';
@@ -25,6 +25,8 @@ interface UseProjectPersistenceProps {
   setActiveLayerId: (id: string) => void;
   removeTracing: () => void;
   setCurrentScreen: (screen: 'welcome' | 'studio' | 'gallery' | 'engine') => void;
+  tracingRef?: TracingReference | null;
+  setTracingRef?: React.Dispatch<React.SetStateAction<TracingReference | null>>;
 }
 
 export function useProjectPersistence({
@@ -34,16 +36,23 @@ export function useProjectPersistence({
   setActiveLayerId,
   removeTracing,
   setCurrentScreen,
+  tracingRef,
+  setTracingRef,
 }: UseProjectPersistenceProps) {
   const [projects, setProjects] = useState<ProjectData[]>([DEFAULT_PROJECT]);
   const [currentProject, setCurrentProject] = useState<ProjectData>(DEFAULT_PROJECT);
   const [crashRecovery, setCrashRecovery] = useState<CrashRecoveryRecord | null>(null);
   const pendingLayersRef = useRef<Layer[] | null>(null);
   const currentProjectRef = useRef<ProjectData>(DEFAULT_PROJECT);
+  const tracingRefCurrent = useRef<TracingReference | null>(tracingRef || null);
 
   useEffect(() => {
     currentProjectRef.current = currentProject;
   }, [currentProject]);
+
+  useEffect(() => {
+    tracingRefCurrent.current = tracingRef || null;
+  }, [tracingRef]);
 
   // Centinela de Auto-Guardado no bloqueante orquestado por Corrutinas
   useEffect(() => {
@@ -54,7 +63,11 @@ export function useProjectPersistence({
         if (currentProjectRef.current && pendingLayersRef.current) {
           const layersToSave = pendingLayersRef.current;
           pendingLayersRef.current = null;
-          await sqliteStorageService.saveProject(currentProjectRef.current, layersToSave);
+          await sqliteStorageService.saveProject(
+            currentProjectRef.current,
+            layersToSave,
+            tracingRefCurrent.current
+          );
         }
       }
     );
@@ -70,21 +83,75 @@ export function useProjectPersistence({
   const loadProjectWithLayers = useCallback(async (proj: ProjectData) => {
     try {
       const stored = await sqliteStorageService.loadProject(proj.id);
-      if (stored && stored.layers && stored.layers.length > 0) {
-        const reconstructedLayers: Layer[] = await Promise.all(
-          stored.layers.map((sl) => {
-            return new Promise<Layer>((resolve) => {
-              const canvas = document.createElement('canvas');
-              canvas.width = proj.width;
-              canvas.height = proj.height;
-              const ctx = canvas.getContext('2d')!;
+      if (stored) {
+        // Restaurar foto de calco o accesorio con su ángulo, escala y posición exacta
+        if (stored.tracing && setTracingRef) {
+          deserializeTracing(stored.tracing).then((t) => {
+            if (t) setTracingRef(t);
+          }).catch(() => {});
+        } else if (!stored.tracing && setTracingRef) {
+          setTracingRef(null);
+        }
 
-              if (sl.imageDataUrl) {
-                if (typeof createImageBitmap === 'function') {
-                  gpuBitmapCache
-                    .getOrCreate(`layer_${sl.id}_${sl.orderIndex}`, sl.imageDataUrl)
-                    .then((bmp) => {
-                      ctx.drawImage(bmp, 0, 0);
+        if (stored.layers && stored.layers.length > 0) {
+          const reconstructedLayers: Layer[] = await Promise.all(
+            stored.layers.map((sl) => {
+              return new Promise<Layer>((resolve) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = proj.width;
+                canvas.height = proj.height;
+                const ctx = canvas.getContext('2d')!;
+
+                if (sl.imageDataUrl) {
+                  if (typeof createImageBitmap === 'function') {
+                    gpuBitmapCache
+                      .getOrCreate(`layer_${sl.id}_${sl.orderIndex}`, sl.imageDataUrl)
+                      .then((bmp) => {
+                        ctx.drawImage(bmp, 0, 0);
+                        resolve({
+                          id: sl.id,
+                          name: sl.name,
+                          visible: sl.visible,
+                          opacity: sl.opacity,
+                          blendMode: sl.blendMode,
+                          locked: sl.locked,
+                          canvas,
+                          ctx,
+                        });
+                      })
+                      .catch(() => {
+                        const img = new Image();
+                        img.onload = () => {
+                          ctx.drawImage(img, 0, 0);
+                          resolve({
+                            id: sl.id,
+                            name: sl.name,
+                            visible: sl.visible,
+                            opacity: sl.opacity,
+                            blendMode: sl.blendMode,
+                            locked: sl.locked,
+                            canvas,
+                            ctx,
+                          });
+                        };
+                        img.onerror = () => {
+                          resolve({
+                            id: sl.id,
+                            name: sl.name,
+                            visible: sl.visible,
+                            opacity: sl.opacity,
+                            blendMode: sl.blendMode,
+                            locked: sl.locked,
+                            canvas,
+                            ctx,
+                          });
+                        };
+                        img.src = sl.imageDataUrl;
+                      });
+                  } else {
+                    const img = new Image();
+                    img.onload = () => {
+                      ctx.drawImage(img, 0, 0);
                       resolve({
                         id: sl.id,
                         name: sl.name,
@@ -95,85 +162,42 @@ export function useProjectPersistence({
                         canvas,
                         ctx,
                       });
-                    })
-                    .catch(() => {
-                      const img = new Image();
-                      img.onload = () => {
-                        ctx.drawImage(img, 0, 0);
-                        resolve({
-                          id: sl.id,
-                          name: sl.name,
-                          visible: sl.visible,
-                          opacity: sl.opacity,
-                          blendMode: sl.blendMode,
-                          locked: sl.locked,
-                          canvas,
-                          ctx,
-                        });
-                      };
-                      img.onerror = () => {
-                        resolve({
-                          id: sl.id,
-                          name: sl.name,
-                          visible: sl.visible,
-                          opacity: sl.opacity,
-                          blendMode: sl.blendMode,
-                          locked: sl.locked,
-                          canvas,
-                          ctx,
-                        });
-                      };
-                      img.src = sl.imageDataUrl;
-                    });
+                    };
+                    img.onerror = () => {
+                      resolve({
+                        id: sl.id,
+                        name: sl.name,
+                        visible: sl.visible,
+                        opacity: sl.opacity,
+                        blendMode: sl.blendMode,
+                        locked: sl.locked,
+                        canvas,
+                        ctx,
+                      });
+                    };
+                    img.src = sl.imageDataUrl;
+                  }
                 } else {
-                  const img = new Image();
-                  img.onload = () => {
-                    ctx.drawImage(img, 0, 0);
-                    resolve({
-                      id: sl.id,
-                      name: sl.name,
-                      visible: sl.visible,
-                      opacity: sl.opacity,
-                      blendMode: sl.blendMode,
-                      locked: sl.locked,
-                      canvas,
-                      ctx,
-                    });
-                  };
-                  img.onerror = () => {
-                    resolve({
-                      id: sl.id,
-                      name: sl.name,
-                      visible: sl.visible,
-                      opacity: sl.opacity,
-                      blendMode: sl.blendMode,
-                      locked: sl.locked,
-                      canvas,
-                      ctx,
-                    });
-                  };
-                  img.src = sl.imageDataUrl;
+                  resolve({
+                    id: sl.id,
+                    name: sl.name,
+                    visible: sl.visible,
+                    opacity: sl.opacity,
+                    blendMode: sl.blendMode,
+                    locked: sl.locked,
+                    canvas,
+                    ctx,
+                  });
                 }
-              } else {
-                resolve({
-                  id: sl.id,
-                  name: sl.name,
-                  visible: sl.visible,
-                  opacity: sl.opacity,
-                  blendMode: sl.blendMode,
-                  locked: sl.locked,
-                  canvas,
-                  ctx,
-                });
-              }
-            });
-          })
-        );
+              });
+            })
+          );
 
-        setLayers(reconstructedLayers);
-        setActiveLayerId(reconstructedLayers[0]?.id || '');
-        resetHistory();
-        return;
+          setLayers(reconstructedLayers);
+          setActiveLayerId(reconstructedLayers[0]?.id || '');
+          resetHistory();
+          return;
+        }
       }
     } catch (err) {
       console.warn('[SQLite Wasm] No se encontraron capas previas, iniciando limpias:', err);
@@ -181,8 +205,8 @@ export function useProjectPersistence({
 
     const created = initProjectLayers(proj);
     resetHistory();
-    sqliteStorageService.scheduleAutoSave(proj, created, 800);
-  }, [initProjectLayers, resetHistory, setActiveLayerId, setLayers]);
+    sqliteStorageService.scheduleAutoSave(proj, created, tracingRefCurrent.current, 800);
+  }, [initProjectLayers, resetHistory, setActiveLayerId, setLayers, setTracingRef]);
 
   // Arranque del motor SQLite Wasm & Comprobación de Crash previo
   useEffect(() => {
@@ -296,13 +320,21 @@ export function useProjectPersistence({
       setLayers(restoredLayers);
       setActiveLayerId(restoredLayers[0]?.id || '');
       resetHistory();
+
+      // Restaurar foto de calco o accesorio guardado en el punto de rescate
+      if (payload.tracing && setTracingRef) {
+        deserializeTracing(payload.tracing).then((t) => {
+          if (t) setTracingRef(t);
+        }).catch(() => {});
+      }
+
       setCrashRecovery(null);
       await sqliteStorageService.clearCrashRecovery();
       setCurrentScreen('studio');
     } catch (err) {
       console.error('Error al restaurar sesión recuperada:', err);
     }
-  }, [crashRecovery, resetHistory, setActiveLayerId, setCurrentScreen, setLayers]);
+  }, [crashRecovery, resetHistory, setActiveLayerId, setCurrentScreen, setLayers, setTracingRef]);
 
   const handleDismissCrash = useCallback(async () => {
     setCrashRecovery(null);
@@ -312,14 +344,13 @@ export function useProjectPersistence({
   const handleStrokeEnd = useCallback((layers: Layer[]) => {
     pendingLayersRef.current = layers;
     if (currentProject && layers.length > 0) {
-      sqliteStorageService.scheduleAutoSave(currentProject, layers, 1000);
+      sqliteStorageService.scheduleAutoSave(currentProject, layers, tracingRefCurrent.current, 1000);
     }
   }, [currentProject]);
 
   const handleOpenProject = async (proj: ProjectData) => {
     setCurrentProject(proj);
     await loadProjectWithLayers(proj);
-    removeTracing();
     setCurrentScreen('studio');
   };
 
@@ -343,7 +374,7 @@ export function useProjectPersistence({
     setCurrentScreen('studio');
 
     try {
-      await sqliteStorageService.saveProject(newProj, createdLayers);
+      await sqliteStorageService.saveProject(newProj, createdLayers, null);
     } catch (e) {
       console.warn('Error al guardar nuevo proyecto en SQLite:', e);
     }

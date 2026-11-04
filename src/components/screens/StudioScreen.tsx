@@ -241,15 +241,22 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       const drawW = tracingRef.width * tracingRef.scale;
       const drawH = tracingRef.height * tracingRef.scale;
 
-      const cachedBitmap = gpuBitmapCache.get(`tracing_${tracingRef.id}_${tracingRef.filterMode}`);
+      const cacheKey = `tracing_${tracingRef.id}_${tracingRef.filterMode}`;
+      const cachedBitmap = gpuBitmapCache.get(cacheKey);
       if (cachedBitmap) {
         ctx.drawImage(cachedBitmap, -drawW / 2, -drawH / 2, drawW, drawH);
       } else {
         ctx.drawImage(tracingRef.image, -drawW / 2, -drawH / 2, drawW, drawH);
-        if (typeof createImageBitmap === 'function') {
-          createImageBitmap(tracingRef.image).then((bmp) => {
-            gpuBitmapCache.set(`tracing_${tracingRef.id}_${tracingRef.filterMode}`, bmp);
-          }).catch(() => {});
+        if (typeof createImageBitmap === 'function' && !gpuBitmapCache.isPending(cacheKey)) {
+          gpuBitmapCache.markPending(cacheKey);
+          createImageBitmap(tracingRef.image)
+            .then((bmp) => {
+              gpuBitmapCache.set(cacheKey, bmp);
+            })
+            .catch(() => {})
+            .finally(() => {
+              gpuBitmapCache.unmarkPending(cacheKey);
+            });
         }
       }
       ctx.restore();

@@ -21,9 +21,27 @@ export interface SerializedLayerData {
   vectorStrokesJson?: string;
 }
 
+export interface SerializedTracingData {
+  id: string;
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  scale: number;
+  rotation: number;
+  opacity: number;
+  visible: boolean;
+  isAdjusting?: boolean;
+  filterMode: string;
+  purpose?: 'tracing' | 'accessory';
+  extractedColors?: string[];
+}
+
 export interface StoredProjectPayload {
   project: ProjectData;
   layers: SerializedLayerData[];
+  tracing?: SerializedTracingData | null;
   isCrashCheckpoint?: boolean;
   timestamp: number;
 }

@@ -12,7 +12,7 @@
  * - Estados de apertura y cierre de ventanas modales en `useStudioModals.ts`.
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { ToolType, BrushTextureConfig, DEFAULT_BRUSH_TEXTURE } from './engine/types';
 import { StudioScreen } from './components/screens/StudioScreen';
 import { GalleryScreen } from './components/screens/GalleryScreen';
@@ -32,6 +32,7 @@ import { useProjectPersistence } from './hooks/useProjectPersistence';
 import { useCanvasResizeHandler } from './hooks/useCanvasResizeHandler';
 import { useAccessoryStamper } from './hooks/useAccessoryStamper';
 import { useStudioModals } from './hooks/useStudioModals';
+import { sqliteStorageService } from './storage/sqliteStorageService';
 
 export default function App() {
   // Pantalla activa: 'welcome' | 'studio' | 'gallery' | 'engine'
@@ -135,6 +136,8 @@ export default function App() {
     setActiveLayerId,
     removeTracing,
     setCurrentScreen,
+    tracingRef,
+    setTracingRef,
   });
 
   const { handleApplyCanvasResize } = useCanvasResizeHandler({
@@ -173,6 +176,15 @@ export default function App() {
     isCanvasResizeModalOpen,
     setIsCanvasResizeModalOpen,
   } = useStudioModals();
+
+  // Sincronizar permanentemente la foto de calco con el almacenamiento SQLite Wasm
+  // asegurando que cualquier cambio de rotación, escala o posición quede resguardado ante cierre o crash
+  useEffect(() => {
+    sqliteStorageService.setCurrentTracing(tracingRef);
+    if (tracingRef && currentProject && layers.length > 0) {
+      sqliteStorageService.scheduleAutoSave(currentProject, layers, tracingRef, 1200);
+    }
+  }, [tracingRef, currentProject, layers]);
 
   // Input oculto para galería de fotos y accesorios
   const fileInputRef = useRef<HTMLInputElement | null>(null);

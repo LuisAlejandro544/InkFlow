@@ -37,6 +37,7 @@ import {
 import { Layer, BrushTextureConfig } from './types';
 import { wakeLockService } from './wakeLockService';
 import { saveArtworkToUserGallery } from './exportEngine';
+import { gpuBitmapCache } from './bitmapCache';
 
 test('Wasm Lerp e Interpolación Lineal', () => {
   const result = wasmEngine.lerp(10, 20, 0.5);
@@ -1748,14 +1749,26 @@ test('Bote de Pintura: Contención de trazo abierto en colisión con otro trazo 
   assert.equal(data[outsideBotIdx + 3], 0, 'Afuera debajo de la colisión cerrada debe permanecer vacío sin fugas');
 });
 
+test('Caché VRAM en GPU (GPUBitmapCache): Bloqueo de deduplicación contra decodificaciones paralelas y límites móviles', () => {
+  const testKey = 'test_tracing_image_key_123';
 
+  // 1. Inicialmente no debe estar pendiente ni en caché
+  assert.equal(gpuBitmapCache.isPending(testKey), false);
+  assert.equal(gpuBitmapCache.get(testKey), null);
 
+  // 2. Al iniciar decodificación, marcar pendiente para evitar que 60-120 FPS disparen decodificaciones masivas
+  gpuBitmapCache.markPending(testKey);
+  assert.equal(gpuBitmapCache.isPending(testKey), true, 'Debe registrarse como pendiente de decodificación');
 
+  // Llamadas concurrentes detectan que ya está pendiente
+  const shouldSkipConcurrentDecode = gpuBitmapCache.isPending(testKey);
+  assert.equal(shouldSkipConcurrentDecode, true, 'Debe prevenir decodificaciones concurrentes duplicadas');
 
+  // 3. Al finalizar decodificación, desmarcar pendiente
+  gpuBitmapCache.unmarkPending(testKey);
+  assert.equal(gpuBitmapCache.isPending(testKey), false, 'Debe liberarse tras completar decodificación');
 
-
-
-
-
-
-
+  // 4. Métricas de VRAM dentro del rango seguro móvil
+  const stats = gpuBitmapCache.getStats();
+  assert.ok(stats.maxVramMB <= 32, 'El límite de VRAM debe estar adaptado para evitar OOM en teléfonos');
+});

@@ -65,12 +65,19 @@ describe('📦 Motor de Almacenamiento SQLite Wasm & OPFS', () => {
         preview_thumbnail_url TEXT,
         payload_json TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS project_tracings (
+        project_id TEXT PRIMARY KEY,
+        tracing_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
     `);
 
     const tables = db.selectValues("SELECT name FROM sqlite_master WHERE type='table';");
     assert.ok(tables.includes('projects'), 'Debe existir la tabla projects');
     assert.ok(tables.includes('layers'), 'Debe existir la tabla layers');
     assert.ok(tables.includes('crash_recovery'), 'Debe existir la tabla crash_recovery');
+    assert.ok(tables.includes('project_tracings'), 'Debe existir la tabla project_tracings');
   });
 
   it('3. Debe guardar un proyecto y sus capas de manera atómica con transacción ACID', () => {
@@ -189,6 +196,7 @@ describe('📦 Motor de Almacenamiento SQLite Wasm & OPFS', () => {
     const projId = 'proj_test_1';
     db.exec('BEGIN TRANSACTION;');
     db.exec({ sql: 'DELETE FROM layers WHERE project_id = ?;', bind: [projId] });
+    db.exec({ sql: 'DELETE FROM project_tracings WHERE project_id = ?;', bind: [projId] });
     db.exec({ sql: 'DELETE FROM projects WHERE id = ?;', bind: [projId] });
     db.exec('COMMIT;');
 
@@ -197,5 +205,120 @@ describe('📦 Motor de Almacenamiento SQLite Wasm & OPFS', () => {
 
     const l = db.selectObjects('SELECT * FROM layers WHERE project_id = ?;', [projId]);
     assert.equal(l.length, 0);
+  });
+
+  it('6. Debe persistir y recuperar la foto de calco con su ángulo, escala y posición exacta', () => {
+    const projId = 'proj_tracing_test';
+    const now = Date.now();
+    const testTracing = {
+      id: 'trace_test_123',
+      src: 'data:image/jpeg;base64,calco_foto_real',
+      x: 540,
+      y: 960,
+      width: 1200,
+      height: 1600,
+      scale: 1.35,
+      rotation: 0.523599, // 30 grados exactos en radianes
+      opacity: 0.45,
+      visible: true,
+      filterMode: 'lineart',
+      purpose: 'tracing',
+    };
+
+    // Guardar calco en la tabla project_tracings
+    db.exec({
+      sql: `
+        INSERT INTO project_tracings (project_id, tracing_json, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(project_id) DO UPDATE SET
+          tracing_json = excluded.tracing_json,
+          updated_at = excluded.updated_at;
+      `,
+      bind: [projId, JSON.stringify(testTracing), now],
+    });
+
+    const row = db.selectObject('SELECT tracing_json FROM project_tracings WHERE project_id = ?;', [projId]);
+    assert.ok(row, 'Debe existir el registro en project_tracings');
+
+    const recovered = JSON.parse(row.tracing_json);
+    assert.equal(recovered.id, 'trace_test_123');
+    assert.equal(recovered.x, 540);
+    assert.equal(recovered.y, 960);
+    assert.equal(recovered.scale, 1.35);
+    assert.equal(recovered.rotation, 0.523599, 'El ángulo exacto debe preservarse');
+    assert.equal(recovered.opacity, 0.45);
+    assert.equal(recovered.visible, true);
+    assert.equal(recovered.filterMode, 'lineart');
+    assert.equal(recovered.purpose, 'tracing');
+  });
+
+  it('7. Crash Recovery: Debe rescatar y restaurar la foto de calco con su rotación tras crash inesperado', () => {
+    const crashWithTracing = {
+      project: {
+        id: 'proj_crash_with_tracing',
+        name: 'Dibujo Calqueado',
+        width: 1080,
+        height: 1920,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        thumbnailUrl: '',
+        layerCount: 1,
+      },
+      layers: [
+        {
+          id: 'l1',
+          name: 'Capa 1',
+          orderIndex: 0,
+          visible: true,
+          opacity: 1,
+          blendMode: 'source-over',
+          imageDataUrl: 'data:image/png;base64,trazos_hechos',
+        },
+      ],
+      tracing: {
+        id: 'trace_saved_crash',
+        src: 'data:image/jpeg;base64,calco_foto_crash',
+        x: 400,
+        y: 600,
+        width: 800,
+        height: 1000,
+        scale: 0.85,
+        rotation: 1.570796, // 90 grados exactos
+        opacity: 0.6,
+        visible: true,
+        filterMode: 'original',
+      },
+      isCrashCheckpoint: true,
+      timestamp: Date.now(),
+    };
+
+    db.exec({
+      sql: `
+        INSERT INTO crash_recovery (
+          id, project_id, project_name, width, height, timestamp, layer_count, preview_thumbnail_url, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET payload_json = excluded.payload_json;
+      `,
+      bind: [
+        'latest_emergency_checkpoint',
+        crashWithTracing.project.id,
+        crashWithTracing.project.name,
+        crashWithTracing.project.width,
+        crashWithTracing.project.height,
+        crashWithTracing.timestamp,
+        1,
+        '',
+        JSON.stringify(crashWithTracing),
+      ],
+    });
+
+    const checkpoint = db.selectObject("SELECT payload_json FROM crash_recovery WHERE id = 'latest_emergency_checkpoint';");
+    assert.ok(checkpoint);
+    const parsedCheckpoint = JSON.parse(checkpoint.payload_json);
+    assert.ok(parsedCheckpoint.tracing, 'El payload de crash debe incluir la foto de calco');
+    assert.equal(parsedCheckpoint.tracing.rotation, 1.570796, 'La rotación de la foto de calco debe estar intacta');
+    assert.equal(parsedCheckpoint.tracing.scale, 0.85);
+    assert.equal(parsedCheckpoint.tracing.x, 400);
+    assert.equal(parsedCheckpoint.tracing.y, 600);
   });
 });
