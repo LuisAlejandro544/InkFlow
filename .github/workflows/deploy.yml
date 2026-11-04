@@ -147,7 +147,7 @@ jobs:
       - name: Validar tipos TypeScript (npm run lint)
         run: npm run lint
 
-      # 14. Ejecución determinista de la suite completa de pruebas unitarias (62 tests: 57 Motor Wasm/C++23/Kotlin + 5 SQLite Wasm OPFS)
+      # 14. Ejecución determinista de la suite completa de pruebas unitarias (63 tests: 58 Motor Wasm/C++23/Kotlin + 5 SQLite Wasm OPFS)
       - name: Ejecutar pruebas unitarias deterministas (node:test)
         run: npx tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 
@@ -236,13 +236,13 @@ jobs:
           | 🌐 **Entorno de Despliegue** | **${MODE_NAME}** |
           | 🔗 **Enlace Directo PWA** | [Abrir InkFlow Studio (${PAGE_URL})](${PAGE_URL}) |
           | 🌿 **Rama Cloudflare** | \`${BRANCH_NAME}\` |
-          | 🧪 **Pruebas Automatizadas** | ✅ **62 tests deterministas pasando** (57 Motor Wasm/C++23/Kotlin + 5 SQLite OPFS) |
+          | 🧪 **Pruebas Automatizadas** | ✅ **63 tests deterministas pasando** (58 Motor Wasm/C++23/Kotlin + 5 SQLite OPFS) |
           | ⚡ **Optimización Wasm** | ✅ **Binaryen wasm-opt (-O3 + SIMD)** aplicado |
           | 🔒 **Aislamiento SQLite OPFS** | ✅ **COOP / COEP (Cross-Origin Isolation)** activo |
           | 📦 **Peso Total del Bundle** | **${DIST_SIZE}** |
           | 📱 **Modo PWA** | Standalone con Workbox Precaching (10 MB) |
 
-          ### 📋 Desglose de Pruebas Automatizadas en CI/CD (62 tests):
+          ### 📋 Desglose de Pruebas Automatizadas en CI/CD (63 tests):
           - **Motor Vectorial y C++23:** Algoritmos Catmull-Rom C1, simplificación Douglas-Peucker y gradientes Sobel 3x3.
           - **Bote de Pintura Inteligente:** Scanline Wasm, dilatación 1-3px (anti halos blancos) y Cierre Inteligente de Huecos (0-10px).
           - **Texturas de Pincel IbisPaint:** 9 texturas de superficie con modulación determinista de opacidad y profundidad.

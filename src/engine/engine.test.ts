@@ -309,6 +309,33 @@ test('Asistente de Grosor de Trazo - Detección de Roles Canónicos', () => {
   assert.equal(detectRoleFromSize(1), 'hatching');
 });
 
+test('Asistente de Grosor de Trazo - Calibrado por Foto con Valores Reales (64, 56, 39, 32px)', () => {
+  const calibratedAnalysis = {
+    silhouettePx: 64,
+    structurePx: 56,
+    detailsPx: 39,
+    hatchingPx: 32,
+    minDetectedPx: 10,
+    maxDetectedPx: 70,
+    averagePx: 45,
+    sampledEdgesCount: 3465,
+    isImageCalibrated: true,
+  };
+
+  // Coincidencias exactas al tocar cada tarjeta
+  assert.equal(detectRoleFromSize(32, calibratedAnalysis), 'hatching', 'Tramas (32px) debe activarse como hatching');
+  assert.equal(detectRoleFromSize(39, calibratedAnalysis), 'details', 'Detalles (39px) debe activarse como details');
+  assert.equal(detectRoleFromSize(56, calibratedAnalysis), 'structure', 'Estructura (56px) debe activarse como structure');
+  assert.equal(detectRoleFromSize(64, calibratedAnalysis), 'silhouette', 'Silueta (64px) debe activarse como silhouette');
+
+  // Valores intermedios según umbrales (60, 47.5, 35.5)
+  assert.equal(detectRoleFromSize(33, calibratedAnalysis), 'hatching');
+  assert.equal(detectRoleFromSize(35, calibratedAnalysis), 'hatching');
+  assert.equal(detectRoleFromSize(37, calibratedAnalysis), 'details');
+  assert.equal(detectRoleFromSize(50, calibratedAnalysis), 'structure');
+  assert.equal(detectRoleFromSize(62, calibratedAnalysis), 'silhouette');
+});
+
 test('Asistente de Grosor de Trazo - Tamaños Recomendados e Información de Rol', () => {
   assert.equal(getRecommendedSizeForRole('silhouette'), 24);
   assert.equal(getRecommendedSizeForRole('structure'), 14);

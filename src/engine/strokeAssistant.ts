@@ -316,18 +316,27 @@ export function getCalibratedStrokeRoles(analysis: ImageStrokeAnalysis | null): 
  * Determina el rol de ilustración correspondiente a un grosor en píxeles.
  */
 export function detectRoleFromSize(sizePx: number, analysis?: ImageStrokeAnalysis | null): StrokeRoleType {
+  const roundedSize = Math.round(Number(sizePx) || 1);
   const roles = getCalibratedStrokeRoles(analysis || null);
   const sil = roles.find(r => r.id === 'silhouette')!.recommendedPx;
   const str = roles.find(r => r.id === 'structure')!.recommendedPx;
   const det = roles.find(r => r.id === 'details')!.recommendedPx;
+  const hat = roles.find(r => r.id === 'hatching')!.recommendedPx;
 
+  // 1. Coincidencia exacta con el valor recomendado de cualquiera de los 4 roles
+  if (roundedSize === sil) return 'silhouette';
+  if (roundedSize === str) return 'structure';
+  if (roundedSize === det) return 'details';
+  if (roundedSize === hat) return 'hatching';
+
+  // 2. Umbrales basados en los puntos medios entre los 4 roles reales
   const thresholdSil = (sil + str) / 2;
   const thresholdStr = (str + det) / 2;
-  const thresholdDet = (det + 1) / 2;
+  const thresholdDet = (det + hat) / 2;
 
-  if (sizePx >= thresholdSil) return 'silhouette';
-  if (sizePx >= thresholdStr) return 'structure';
-  if (sizePx >= thresholdDet) return 'details';
+  if (roundedSize >= thresholdSil) return 'silhouette';
+  if (roundedSize >= thresholdStr) return 'structure';
+  if (roundedSize >= thresholdDet) return 'details';
   return 'hatching';
 }
 
