@@ -247,7 +247,7 @@ jobs:
           - **Bote de Pintura Inteligente:** Scanline Wasm, dilatación 1-3px (anti halos blancos) y Cierre Inteligente de Huecos (0-10px).
           - **Texturas de Pincel IbisPaint:** 9 texturas de superficie con modulación determinista de opacidad y profundidad.
           - **Orquestación kotlinx.coroutines:** Conflación reactiva de eventos táctiles a 240Hz, centinela no bloqueante y cancelación cooperativa (\`Job.cancel\`, \`SupervisorJob\`).
-          - **Gestos Táctiles y Calco:** Rotación continua normalizada $[-\pi, \pi]$ sin reseteo a 0° y estampado permanente de accesorios en capa activa/nueva.
+          - **Gestos Táctiles y Calco:** Rotación continua normalizada (-π a +π / -180° a +180°) sin reseteo a 0° y estampado permanente de accesorios en capa activa/nueva.
           - **Persistencia SQLite Wasm + OPFS:** Transacciones atómicas ACID, creación de esquemas y centinela de Crash Recovery ante cierres abruptos.
 
           ---
