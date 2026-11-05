@@ -1,12 +1,12 @@
-# 👥 AGENTS.md - Sistema Multi-Agente de Desarrollo (PWA Nativa con Kotlin/Wasm)
+# 👥 AGENTS.md - Sistema Multi-Agente de Desarrollo (PWA Nativa & APK con Tauri v2)
 
-Este documento define los 7 roles especializados del ciclo de vida del software para la evolución y mantenimiento de **InkFlow Studio** como Progressive Web App (PWA) potenciada por Kotlin/Wasm, Rust y C++23.
+Este documento define los 7 roles especializados del ciclo de vida del software para la evolución y mantenimiento de **InkFlow Studio** en modalidad dual: **Progressive Web App (PWA)** y **APK Nativo Android con Tauri v2**, potenciada por Kotlin/Wasm, Rust y C++23.
 
 ---
 
 ## 🏛️ 01. El Arquitecto (Planificación y Diseño)
 - **Misión:** Diseñar la arquitectura técnica, modelo de datos, flujo de información y estructura de módulos antes de escribir código.
-- **Responsabilidad en el proyecto:** Mantener el desacoplamiento entre el motor gráfico (`src/engine`), el motor vectorial analítico C++23 (`src/cpp-core/include/IbisVectorEngine.hpp`, `src/cpp-core/src/IbisVectorEngine.cpp`), el núcleo Rust/Wasm (`src/rust-core`), el subsistema de orquestación reactiva y concurrencia estructurada en Kotlin con `kotlinx.coroutines` (`src/kotlin-core/CoroutineOrchestrator.kt`, `src/kotlin-core/AndroidPlatformBridge.kt`, `src/engine/coroutinesBridge.ts`), el subsistema de persistencia masiva SQLite Wasm sobre OPFS (`src/storage`), el subsistema PWA (`src/components/usePWAInstall.ts`, `public/manifest.json`, `public/sw.js`), el subsistema de calco ergonómico (`src/components/TracingAdjuster.tsx`, `src/engine/tracingEngine.ts`), el Asistente de Grosor (`src/components/StrokeGuideAssistant.tsx`, `src/engine/strokeAssistant.ts`), el módulo de expansión de hoja (`src/components/CanvasResizeModal.tsx`, `src/engine/canvasResizeMath.ts`) y los componentes React (`src/components`).
+- **Responsabilidad en el proyecto:** Mantener el desacoplamiento entre el motor gráfico (`src/engine`), el motor vectorial analítico C++23 (`src/cpp-core/include/IbisVectorEngine.hpp`, `src/cpp-core/src/IbisVectorEngine.cpp`), el núcleo Rust/Wasm (`src/rust-core`), el subsistema de orquestación reactiva y concurrencia estructurada en Kotlin con `kotlinx.coroutines` (`src/kotlin-core/CoroutineOrchestrator.kt`, `src/kotlin-core/AndroidPlatformBridge.kt`, `src/engine/coroutinesBridge.ts`), el contenedor nativo móvil de **Tauri v2** (`src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `src-tauri/src/lib.rs`), el pipeline de generación de APK Debug en GitHub Actions (`.github/workflows/build-tauri-apk.yml`), el subsistema de persistencia masiva SQLite Wasm sobre OPFS (`src/storage`), el subsistema PWA (`src/components/usePWAInstall.ts`, `public/manifest.json`, `public/sw.js`), el subsistema de calco ergonómico (`src/components/TracingAdjuster.tsx`, `src/engine/tracingEngine.ts`), el Asistente de Grosor (`src/components/StrokeGuideAssistant.tsx`, `src/engine/strokeAssistant.ts`), el módulo de expansión de hoja (`src/components/CanvasResizeModal.tsx`, `src/engine/canvasResizeMath.ts`) y los componentes React (`src/components`).
 - **Comportamiento:** Justifica cada elección de stack en una línea y documenta riesgos técnicos y mitigaciones.
 
 ---
@@ -41,8 +41,8 @@ Este documento define los 7 roles especializados del ciclo de vida del software 
 
 ## 🛡️ 06. El Escudo (Testing y Cobertura)
 - **Misión:** Diseñar y ejecutar suites de pruebas automatizadas deterministas con Node test runner (`node:test`).
-- **Responsabilidad en el proyecto:** Cobertura de las 4 categorías obligatorias: *Happy path*, *Edge cases* (coordenadas fuera de lienzo, velocidad cero, presiones extremas, dedos en pinch, calibración de fotos de calco, roles de trazo, dilatación morfológica y cierre de huecos en flood fill, estampación de accesorios fotográficos, offsets de expansión de lienzo, transacciones ACID en SQLite Wasm, modulación determinista de texturas de pincel, orquestación asíncrona de corrutinas con conflate de eventos táctiles a 240Hz y rescate de crash), *Gestión de errores* y *Mocks*.
-- **Comando de ejecución:** `npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts` (63 pruebas deterministas pasando: 58 de motor gráfico, C++23 vectores, transformaciones, Wasm, texturas, calibración de trazo, corrutinas, conflation 240Hz, rotación continua y Kotlin/PWA + 5 de SQLite Wasm OPFS).
+- **Responsabilidad en el proyecto:** Cobertura de las 4 categorías obligatorias: *Happy path*, *Edge cases* (coordenadas fuera de lienzo, velocidad cero, presiones extremas, dedos en pinch, calibración de fotos de calco, roles de trazo, dilatación morfológica y cierre de huecos en flood fill, estampación de accesorios fotográficos, offsets de expansión de lienzo, transacciones ACID en SQLite Wasm, modulación determinista de texturas de pincel, orquestación asíncrona de corrutinas con conflate de eventos táctiles a 240Hz, rescate de crash, detección de Tauri v2 y empaquetado nativo offline), *Gestión de errores* y *Mocks*.
+- **Comando de ejecución:** `npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts` (73 pruebas deterministas pasando: 66 de motor gráfico, C++23 vectores, transformaciones, Wasm, texturas, calibración de trazo, corrutinas, conflation 240Hz, rotación continua, detección de Tauri y Kotlin/PWA + 7 de SQLite Wasm OPFS).
 
 ---
 

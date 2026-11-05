@@ -23,9 +23,9 @@ Este documento proporciona instrucciones de compilación, patrones de arquitectu
 | **Expansión y Redimensionado de Hoja** | Matriz visual 3x3, cálculo de offsets y presets de espacio (+25%, +50%, 2x, 1:1, 9:16) | `src/components/CanvasResizeModal.tsx`, `src/engine/canvasResizeMath.ts` |
 | **Guardado de Obra a Galería** | Guardado Real en Galería (MediaStore / Web Share API) + Hoja Completa vs Auto-Crop | `src/components/ExportModal.tsx`, `src/engine/exportEngine.ts` |
 | **Persistencia Masiva SQLite Wasm** | Base de datos ACID sobre OPFS en Web Worker dedicado + Centinela Crash | `src/storage/sqliteStorage.worker.ts`, `src/storage/sqliteStorageService.ts` |
-| **Caché Integral & Aceleración VRAM** | Workbox 10MB + Wasm Streaming JIT + Inmutabilidad Cloudflare + GPU ImageBitmap | `vite.config.ts`, `public/_headers`, `src/engine/wasmStreamingCompiler.ts`, `src/engine/bitmapCache.ts` |
-| **Arquitectura de App & CI/CD** | Progressive Web App (PWA) + GitHub Actions Wasm Resiliente + Cloudflare Pages | `.github/workflows/deploy.yml`, `public/manifest.json`, `public/sw.js` |
-| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (59 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
+| **Caché Integral & Aceleración VRAM** | Workbox 15MB + Wasm Streaming JIT + Inmutabilidad Cloudflare + GPU ImageBitmap | `vite.config.ts`, `public/_headers`, `src/engine/wasmStreamingCompiler.ts`, `src/engine/bitmapCache.ts` |
+| **Arquitectura Dual: PWA + Tauri APK** | PWA Nativa (Cloudflare Pages) + APK Nativo con Tauri v2 (Android WebView, Keystore Debug automático) | `.github/workflows/deploy.yml`, `.github/workflows/build-tauri-apk.yml`, `src-tauri/*` |
+| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (73 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
 
 ---
 

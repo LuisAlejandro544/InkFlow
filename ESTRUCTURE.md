@@ -10,7 +10,17 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 /
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml            # Pipeline GitHub Actions (activación manual, Wasm C++/Rust/Kotlin & Cloudflare Pages)
+│       ├── deploy.yml            # Pipeline GitHub Actions (activación manual, Wasm C++/Rust/Kotlin & Cloudflare Pages)
+│       └── build-tauri-apk.yml   # Pipeline GitHub Actions para compilar APK Debug con Tauri v2 (Android)
+├── src-tauri/                    # Contenedor nativo Tauri v2 Mobile para Android (empaqueta Wasm, SQLite y C++23)
+│   ├── Cargo.toml                # Manifiesto Rust de Tauri v2 y plugins móviles
+│   ├── tauri.conf.json           # Configuración de Tauri: identificador com.inkflow.studio y frontendDist ../dist
+│   ├── AndroidManifest.xml       # Manifiesto nativo optimizado (largeHeap, hardwareAccelerated, configChanges y Scoped Storage)
+│   ├── build.rs                  # Build script de Tauri
+│   ├── icons/                    # Iconos nativos empaquetados para la app Android
+│   └── src/
+│       ├── lib.rs                # Punto de entrada móvil (mobile_entry_point) de Tauri v2
+│       └── main.rs               # Entrada binaria nativa
 ├── public/                       # Activos estáticos públicos e iconos PWA
 │   ├── favicon.ico               # Favicon estándar para navegadores
 │   ├── icon.svg                  # Gráfico vectorial base del icono de la app

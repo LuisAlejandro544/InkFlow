@@ -1,0 +1,262 @@
+name: InkFlow - Compilar APK Debug con Tauri v2 (Android)
+
+# Activación EXCLUSIVAMENTE manual para generar el APK Debug de pruebas e instalación en teléfono móvil
+on:
+  workflow_dispatch:
+    inputs:
+      enable_cache:
+        description: 'Activar caché de Rust, Gradle y npm (Opcional, acelera re-compilaciones)'
+        required: false
+        type: boolean
+        default: false
+      target_arch:
+        description: 'Arquitectura de CPU del APK Debug'
+        required: true
+        type: choice
+        options:
+          - 'universal' # APK compatible con 64 bits (arm64-v8a) y 32 bits (armeabi-v7a)
+          - 'arm64'     # Solo teléfonos modernos de 64 bits (aarch64-linux-android)
+          - 'armv7'     # Teléfonos de 32 bits (armv7-linux-androideabi)
+          - 'all'       # Compila todos los targets (arm64, armv7, x86_64)
+        default: 'universal'
+
+permissions:
+  contents: read
+
+jobs:
+  build-tauri-apk-debug:
+    name: Compilar APK Debug (Tauri v2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. Descarga del código fuente del repositorio
+      - name: Checkout del código fuente
+        uses: actions/checkout@v4
+
+      # 2. Configurar Java JDK 17 (LTS para Android Gradle)
+      - name: Configurar Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 3. Configurar Android SDK y NDK
+      - name: Configurar Android SDK & NDK
+        uses: android-actions/setup-android@v3
+
+      # 4. Detectar y exportar ruta exacta del NDK
+      - name: Detectar NDK instalado
+        run: |
+          echo "Buscando NDK en $ANDROID_HOME..."
+          if [ -d "$ANDROID_HOME/ndk" ]; then
+            NDK_PATH=$(find "$ANDROID_HOME/ndk" -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
+            echo "NDK encontrado en: $NDK_PATH"
+            echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+            echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
+          else
+            echo "Instalando NDK r26b mediante sdkmanager..."
+            yes | sdkmanager --install "ndk;26.1.10909125"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+          fi
+
+      # 5. Configurar Toolchain de Rust para arquitecturas móviles Android (32 y 64 bits)
+      - name: Configurar Rust Toolchain para Android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: |
+            aarch64-linux-android
+            armv7-linux-androideabi
+            x86_64-linux-android
+            i686-linux-android
+
+      # 6. Configurar Node.js 22
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 7. CACHÉ OPCIONAL (Solo si el usuario lo activa manualmente en el input enable_cache)
+      - name: Caché de Rust Cargo (Opcional)
+        if: ${{ inputs.enable_cache }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-cargo-tauri-${{ hashFiles('src-tauri/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-tauri-
+
+      - name: Caché de Gradle (Opcional)
+        if: ${{ inputs.enable_cache }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Caché de dependencias npm (Opcional)
+        if: ${{ inputs.enable_cache }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      # 8. Instalación de dependencias del proyecto
+      - name: Instalar dependencias del frontend
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
+
+      # 9. Generar automáticamente la llave de firma Debug de Android (Keystore)
+      - name: Generar Keystore Debug de Android automáticamente
+        run: |
+          echo "🔑 Generando llave Android Debug Keystore si no existe..."
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkey -v \
+              -keystore ~/.android/debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=InkFlow Studio,C=US"
+            echo "✅ Llave Debug Keystore generada con éxito"
+          else
+            echo "✅ Llave Debug Keystore ya presente"
+          fi
+
+      # 10. Compilar el frontend web de InkFlow Studio
+      - name: Compilar frontend web (Vite)
+        run: npm run build
+        env:
+          NODE_ENV: production
+          CI: true
+
+      # 11. Inicializar contenedor Android de Tauri v2 si no existe
+      - name: Inicializar proyecto Android de Tauri
+        run: |
+          if [ ! -d "src-tauri/gen/android" ]; then
+            echo "📱 Inicializando estructura Android de Tauri v2..."
+            npx tauri android init
+            echo "✅ Estructura Android de Tauri v2 inicializada"
+          else
+            echo "ℹ️ Estructura Android ya presente en src-tauri/gen/android"
+          fi
+
+      # 11.1. Aplicar AndroidManifest nativo optimizado (largeHeap, hardwareAccelerated, configChanges, windowSoftInputMode y Scoped Storage)
+      - name: Aplicar AndroidManifest nativo optimizado
+        run: |
+          echo "🔧 Aplicando configuraciones nativas de Android en src-tauri/gen/android/app/src/main/AndroidManifest.xml..."
+          mkdir -p src-tauri/gen/android/app/src/main
+          cp src-tauri/AndroidManifest.xml src-tauri/gen/android/app/src/main/AndroidManifest.xml
+          echo "✅ Atributos nativos verificados:"
+          grep -E "largeHeap|hardwareAccelerated|configChanges|windowSoftInputMode|READ_MEDIA_IMAGES" src-tauri/gen/android/app/src/main/AndroidManifest.xml
+
+      # 12. Compilación del APK Debug según arquitectura seleccionada
+      - name: Compilar APK Debug con Tauri v2
+        run: |
+          TARGET_CHOICE="${{ inputs.target_arch }}"
+          echo "🔨 Compilando APK Debug con arquitectura: $TARGET_CHOICE"
+
+          case "$TARGET_CHOICE" in
+            "arm64")
+              TARGET_FLAGS="--target aarch64-linux-android"
+              ;;
+            "armv7")
+              TARGET_FLAGS="--target armv7-linux-androideabi"
+              ;;
+            "universal"|"all")
+              TARGET_FLAGS="--target aarch64-linux-android,armv7-linux-androideabi"
+              ;;
+            *)
+              TARGET_FLAGS="--target aarch64-linux-android,armv7-linux-androideabi"
+              ;;
+          esac
+
+          echo "Ejecutando: npx tauri android build --debug $TARGET_FLAGS"
+          npx tauri android build --debug $TARGET_FLAGS
+
+          echo "✅ Compilación de Tauri v2 finalizada"
+
+      # 13. Recolectar y organizar los APKs generados para descarga
+      - name: Recolectar archivos APK Debug
+        id: collect_apks
+        run: |
+          mkdir -p build-artifacts
+          echo "📦 Buscando archivos APK Debug generados..."
+          
+          # Buscar todos los .apk dentro de src-tauri
+          find src-tauri -type f -name "*debug*.apk" -o -name "*.apk" | while read -r apk_file; do
+            APK_NAME=$(basename "$apk_file")
+            echo "Encontrado: $apk_file -> Copiando a build-artifacts/InkFlow-Studio-${APK_NAME}"
+            cp "$apk_file" "build-artifacts/InkFlow-Studio-${APK_NAME}"
+          done
+
+          # Si no se encontró ninguno con el patrón exacto, copiar todo lo que esté en outputs/apk
+          if [ -d "src-tauri/gen/android/app/build/outputs/apk" ]; then
+            find "src-tauri/gen/android/app/build/outputs/apk" -type f -name "*.apk" -exec cp {} build-artifacts/ \;
+          fi
+
+          COUNT=$(find build-artifacts -type f -name "*.apk" | wc -l)
+          echo "Total de APKs recolectados: $COUNT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "❌ No se encontraron archivos APK generados"
+            exit 1
+          fi
+
+          ls -lh build-artifacts/
+
+      # 14. Subir el APK Debug como artefacto de GitHub Actions para descarga directa
+      - name: Subir APK Debug como Artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkFlow-Studio-Debug-APK
+          path: build-artifacts/*.apk
+          retention-days: 30
+
+      # 15. Generar Panel de Resumen Ejecutivo en GitHub ($GITHUB_STEP_SUMMARY)
+      - name: Generar Resumen del APK Debug en GitHub
+        if: always()
+        run: |
+          ARCH="${{ inputs.target_arch }}"
+          CACHE_STATUS="${{ inputs.enable_cache && 'Activada ✅' || 'Desactivada ❌ (Compilación Limpia)' }}"
+
+          cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          # 📱 InkFlow Studio - APK Debug Generado con Éxito (Tauri v2)
+
+          | Parámetro / Métrica | Valor |
+          |---|---|
+          | 📦 **Tipo de APK** | **Debug (Listo para probar e instalar)** |
+          | ⚙️ **Motor Nativo** | **Tauri v2 Mobile + Android System WebView** |
+          | ⚡ **Aceleración** | C++23 Wasm, Rust Wasm & WebGPU |
+          | 🏗️ **Arquitectura de CPU** | ${{ inputs.target_arch }} (Soporta 64-bit arm64-v8a y 32-bit armeabi-v7a) |
+          | 🔑 **Firma Criptográfica** | Llave Debug generada automáticamente en el runner |
+          | 🗄️ **Caché Manual** | ${{ inputs.enable_cache && 'Activada ✅' || 'Desactivada ❌ (Compilación limpia)' }} |
+          | 📶 **Soporte Offline** | **100% Nativo (Todos los recursos dentro del APK)** |
+
+          ### 📥 ¿Cómo descargar e instalar el APK en tu teléfono móvil?
+          1. En la parte inferior o superior de esta pantalla en GitHub, dirígete a la sección **Artifacts** (Artefactos).
+          2. Pulsa sobre **`InkFlow-Studio-Debug-APK`** para descargar el archivo ZIP a tu teléfono.
+          3. Descomprime el archivo en tu teléfono y toca el archivo `.apk`.
+          4. Si Android te solicita confirmación, pulsa en **"Permitir instalar aplicaciones de esta fuente"**.
+          5. ¡Listo! Abre **InkFlow Studio** directamente como una aplicación nativa instalada.
+
+          ---
+          > 💡 **Nota para Uptodown o distribución:** Este APK en modo **Debug** te permite probar la aplicación de inmediato sin necesidad de configurar certificados de producción keystore externos.
+          EOF

@@ -59,22 +59,6 @@ export default defineConfig(() => {
           skipWaiting: true,
           runtimeCaching: [
             {
-              // Estrategia para navegación: NetworkFirst con fallback a index.html cacheado para 0% internet
-              urlPattern: ({ request }) => request.mode === 'navigate',
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'pages-cache',
-                networkTimeoutSeconds: 3,
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            {
               // Scripts, estilos y workers
               urlPattern: ({ request }) => 
                 request.destination === 'script' || 

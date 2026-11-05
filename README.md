@@ -1,8 +1,10 @@
-# InkFlow Studio v1.0.0 estable (PWA Nativa con C++23, Rust & Kotlin/Android)
+# InkFlow Studio v1.0.0 estable (PWA Nativa & APK Android con Tauri v2)
 
-Aplicación de dibujo e ilustración digital profesional para dispositivos móviles. Diseñada y construida **exclusivamente como una Aplicación Web Progresiva (PWA Nativa)**, con renderizado acelerado por **WebGPU (WGSL)**, motor vectorial analítico en **C++23 (WebAssembly)**, núcleo de bajo nivel en **Rust (Wasm)**, persistencia masiva en **SQLite Wasm (OPFS)** y arquitectura móvil extensible con **Kotlin**.
+Aplicación de dibujo e ilustración digital profesional para dispositivos móviles. Diseñada y construida en **modalidad dual: Progressive Web App (PWA Nativa) y APK Android Nativo con Tauri v2**, con renderizado acelerado por **WebGPU (WGSL)**, motor vectorial analítico en **C++23 (WebAssembly)**, núcleo de bajo nivel en **Rust (Wasm y Tauri)**, persistencia masiva en **SQLite Wasm (OPFS)** y arquitectura móvil extensible con **Kotlin**.
 
-> ⚠️ **Nota de Arquitectura:** Esta aplicación es **100% PWA** y versión `v1.0.0 estable`. No requiere empaquetado en APK ni descargas desde tiendas de aplicaciones. Se instala directamente desde cualquier navegador móvil moderno a la pantalla de inicio del teléfono, ejecutándose en modo *standalone* a pantalla completa con soporte offline. Desplegable como sitio estático sin costes de backend en **Cloudflare Pages** mediante **GitHub Actions** manual.
+> 💡 **Estrategia de Despliegue Dual:**
+> 1. **PWA Nativa (Canary / Pruebas en Vivo):** Se actualiza y despliega automáticamente a **Cloudflare Pages** mediante GitHub Actions. Permite probar cambios al instante desde el navegador móvil con soporte 100% offline.
+> 2. **APK Nativo con Tauri v2 (Estable / Uptodown):** Empaquetado ligero que corre sobre el Android System WebView nativo (sin empaquetar Chromium pesado). Se compila mediante el workflow `.github/workflows/build-tauri-apk.yml` generando un **APK Debug** listo para instalar en el teléfono o subir a tiendas de terceros como **Uptodown**.
 
 ---
 
@@ -257,9 +259,36 @@ El proyecto cuenta con **71 pruebas unitarias automatizadas deterministas** con 
 71. Crash Recovery de calco: Rescate y restauración de rotación angular tras fallo del navegador.
 
 ```bash
-# Ejecutar todas las pruebas deterministas (71 tests)
+# Ejecutar todas las pruebas deterministas (73 tests)
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 ```
+
+---
+
+## 📱 Compilación de APK Debug con Tauri v2 vía GitHub Actions
+
+El proyecto incluye el workflow `.github/workflows/build-tauri-apk.yml` diseñado para compilar e instalar el archivo `.apk` directamente en tu teléfono móvil sin necesidad de tener una computadora física:
+
+### Características del Pipeline APK:
+- **🔒 Activación Exclusivamente Manual:** Cero ejecuciones no deseadas por cada `git commit` o `pull request`. Solo se activa cuando tú presionas el botón "Run workflow".
+- **🚀 Memoria Expandida de 512MB a 1GB (`android:largeHeap="true"`):** Triplica la cuota de RAM asignada por Android al proceso para ilustrar en 2K/4K con múltiples capas y fotos de calco sin crasheos por OOM.
+- **⚡ Aceleración por GPU Nativa (`android:hardwareAccelerated="true"`):** Renderizado fluido a 60–120 FPS en el motor WebView nativo.
+- **🔄 Rotación sin Destrucción de Pantalla (`android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"`):** Girar el teléfono de vertical a horizontal no reinicia la aplicación ni destruye el lienzo de dibujo.
+- **⌨️ Teclado Virtual No Invasivo (`android:windowSoftInputMode="adjustResize|stateHidden"`):** Previene que el teclado empuje o desconfigure el viewport al editar nombres de capas o proyectos.
+- **📁 Guardado Real y Scoped Storage sin Permisos Peligrosos:** Guarda directamente en `Pictures/InkFlow Studio` con compatibilidad para Android 13+ (`READ_MEDIA_IMAGES`), Android 10–12 (`READ_EXTERNAL_STORAGE` acotado) y Android 9 hacia atrás (`WRITE_EXTERNAL_STORAGE` con `requestLegacyExternalStorage="true"`).
+- **⚙️ Generación Automática de Llave (Keystore):** Genera la clave de depuración `debug.keystore` de forma autónoma en el runner de GitHub. Cero configuración de certificados manuales.
+- **⚡ Interruptor Manual de Caché (`enable_cache`):** Permite activar opcionalmente la caché de Rust, Gradle y npm para compilaciones ultrarrápidas, o dejarla desactivada para una compilación 100% limpia.
+- **🏗️ Soporte de Arquitecturas Móviles de 32 y 64 bits:** Opciones para compilar en modo `universal` (compatible con `arm64-v8a` y `armeabi-v7a`), `arm64` o `armv7`.
+- **📦 Descarga Directa del APK:** Publica el archivo `.apk` firmado en la sección **Artifacts** de GitHub Actions para descargarlo directo al teléfono móvil o subirlo a plataformas como **Uptodown**.
+
+### Pasos para compilar y descargar el APK en tu teléfono:
+1. Entra a tu repositorio en GitHub desde el navegador de tu teléfono móvil.
+2. Ve a la pestaña **Actions** ➔ selecciona **"InkFlow - Compilar APK Debug con Tauri v2 (Android)"**.
+3. Pulsa **"Run workflow"**.
+4. (Opcional) Activa la casilla `enable_cache` si deseas acelerar la compilación.
+5. Pulsa el botón verde **"Run workflow"**.
+6. En 3-5 minutos, cuando termine, pulsa en la ejecución y baja hasta la sección **Artifacts**.
+7. Descarga el archivo **`InkFlow-Studio-Debug-APK`**, descomprímelo e instálalo con 1 toque en tu teléfono.
 
 ---
 
@@ -270,11 +299,11 @@ El repositorio incluye un workflow en `.github/workflows/deploy.yml` configurado
 ### Resiliencia y Optimización de CI/CD:
 - **⚡ Optimización Extrema con `wasm-opt` (Binaryen):** Comprime los binarios Wasm de Rust y C++ con `-O3 --enable-simd --enable-bulk-memory` reduciendo su peso un 25-40% para arranque instantáneo en móviles.
 - **🌐 Despliegue Dual (Producción vs Vista Previa Aislada):** Selector en `workflow_dispatch` para elegir entre publicar en la rama principal (`main`) o en una URL de vista previa aislada temporal (`preview-<run_id>`) para probar cambios sin riesgo.
-- **📊 Panel de Resumen Ejecutivo en GitHub (`$GITHUB_STEP_SUMMARY`):** Renderiza una tarjeta visual con enlace directo a la PWA, peso del bundle y estado de las 46 pruebas automatizadas.
+- **📊 Panel de Resumen Ejecutivo en GitHub (`$GITHUB_STEP_SUMMARY`):** Renderiza una tarjeta visual con enlace directo a la PWA, peso del bundle y estado de las 73 pruebas automatizadas.
 - **🔒 Aislamiento de Origen Cruzado (COOP / COEP):** Inyección y validación de cabeceras en `public/_headers` para desbloquear `SharedArrayBuffer` y el máximo rendimiento de SQLite Wasm sobre OPFS.
 - **🛡️ Validación de Tipos y Linter:** Paso obligatorio `npm run lint` (`tsc --noEmit`) que previene el despliegue ante inconsistencias tipográficas.
 
-### Pasos de Despliegue:
+### Pasos de Despliegue PWA:
 1. Configura en GitHub Secrets: `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`.
 2. En GitHub ➔ pestaña **Actions** ➔ selecciona **"InkFlow - Compilar WebAssembly (C++, Rust, Kotlin) y Desplegar a Cloudflare Pages"** ➔ pulsa **"Run workflow"**.
 3. Selecciona el entorno (`production` o `preview`) y pulsa **"Run workflow"**.

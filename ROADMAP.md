@@ -313,8 +313,32 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
     3. *Cambio de Color y Grosor No Destructivo:* Modificar el color y el grosor de trazos vectoriales tiempo después de haberlos dibujado.
     4. *Lazo de Selección Vectorial:* Seleccionar conjuntos de trazos para mover facciones (ojos, cejas, pelo, ropa) en bloque.
     5. *Reasignación de Trazos por Capas:* Trasladar trazos específicos a una nueva capa sin tener que redibujar.
-- [x] **71 Pruebas Unitarias Deterministas:**
-  - 64 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, corrutinas, exportación rápida y personalización de temas + 7 tests de almacenamiento SQLite Wasm OPFS y Crash Recovery.
+- [x] **73 Pruebas Unitarias Deterministas:**
+  - 66 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, corrutinas, exportación rápida, personalización de temas y detección de Tauri + 7 tests de almacenamiento SQLite Wasm OPFS y Crash Recovery.
+
+---
+
+## 📱 Fase 4.17: Empaquetado Nativo Android con Tauri v2 & Pipeline de APK Debug en GitHub Actions (Completada ✅)
+
+- [x] **Contenedor Nativo Tauri v2 Mobile (`src-tauri/`):**
+  - Manifiesto de Rust (`Cargo.toml`) y configuración (`tauri.conf.json`) con paquete Android `com.inkflow.studio`.
+  - Empaquetado ligero que corre sobre el **Android System WebView** nativo del sistema operativo (sin incrustar copias pesadas de Chromium como Electron).
+  - Integración nativa de los mismos binarios WebAssembly de **C++23**, **Rust** y **SQLite Wasm sobre OPFS** con 100% de paridad funcional.
+- [x] **Detección Automática de Entorno (`detectIsTauri()`):**
+  - Detección transparente en `src/engine/environmentDetector.ts` (`__TAURI_INTERNALS__`).
+  - Desactivación inteligente del Service Worker dentro del APK: al estar los archivos ya instalados físicamente en la memoria interna del teléfono, no se requiere intercepción de caché de navegador.
+- [x] **Pipeline de Compilación de APK Debug en GitHub Actions (`.github/workflows/build-tauri-apk.yml`):**
+  - **Activación Exclusivamente Manual:** Sin triggers automáticos por push o PRs. Solo se ejecuta al pulsar manualmente "Run workflow" desde el móvil.
+  - **Optimizaciones Nativas en AndroidManifest (`src-tauri/AndroidManifest.xml`):**
+    - `android:largeHeap="true"`: Memoria RAM expandida a 512MB–1GB para evitar crasheos por OOM en lienzos 2K/4K multi-capa.
+    - `android:hardwareAccelerated="true"`: Aceleración GPU pura en el renderizado móvil.
+    - `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"`: Inmunidad ante rotación del teléfono, sin destruir el lienzo ni reiniciar la Activity.
+    - `android:windowSoftInputMode="adjustResize|stateHidden"`: Teclado virtual no invasivo.
+    - **Scoped Storage Seguro:** Guardado en `Pictures/InkFlow Studio` sin permisos peligrosos, compatible con Android 13+ (`READ_MEDIA_IMAGES`), Android 10–12 (`READ_EXTERNAL_STORAGE` acotado) y Android 9 hacia atrás (`WRITE_EXTERNAL_STORAGE` con `requestLegacyExternalStorage="true"`).
+  - **Generación automática de Keystore:** Crea y firma el APK con llave Android Debug Keystore de forma autónoma en el runner.
+  - **Caché opcional configurable:** Interruptor manual `enable_cache` (Rust Cargo, Gradle, npm) para acelerar compilaciones sucesivas o realizar builds limpios desde cero.
+  - **Soporte de Arquitecturas de 32 y 64 bits:** Opciones para `universal` (arm64-v8a + armeabi-v7a), `arm64` o `armv7`.
+  - **Subida de Artefacto y Resumen Ejecutivo:** Publica el archivo `.apk` directamente en la sección Artifacts de GitHub Actions para descarga directa e instalación en el teléfono móvil o distribución en **Uptodown**.
 
 ---
 

@@ -7,7 +7,9 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 ## 🎯 Perfil del Usuario y Entorno
 
 - **Dispositivo del Usuario:** El usuario opera desde un **teléfono móvil** (sin PC de escritorio). Todas las interfaces, diálogos, deslizadores y botones deben tener un área táctil mínima de 48×48 px, ser cómodos para los dedos y no desbordarse horizontalmente en resoluciones de 360–430 px de ancho.
-- **Distribución Exclusiva:** La aplicación es **100% una Progressive Web App (PWA) nativa**. **NO se empaqueta en formato APK ni se distribuye en tiendas de aplicaciones**. Se instala directamente desde el navegador a la pantalla de inicio con soporte standalone (sin barras de URL del navegador).
+- **Distribución Dual (PWA Nativa + APK Nativo con Tauri v2):**
+  - **PWA Nativa:** Se ejecuta e instala directamente desde el navegador móvil a la pantalla de inicio con soporte standalone y funcionamiento 100% offline (desplegable en Cloudflare Pages).
+  - **APK Nativo con Tauri v2:** Empaquetado ligero para Android que corre sobre el Android System WebView nativo (sin Chromium pesado incrustado), ideal para distribución libre en **Uptodown** o descarga directa. Configurado con `android:largeHeap="true"` (512MB-1GB RAM anti-OOM), `android:hardwareAccelerated="true"`, `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"`, `android:windowSoftInputMode="adjustResize|stateHidden"` y Scoped Storage seguro (compatible con Android 9 hacia atrás sin permisos peligrosos). Se compila mediante el workflow de GitHub Actions `.github/workflows/build-tauri-apk.yml` de activación **exclusivamente manual** (cero builds automáticos por push/PRs), generando un APK Debug listo para instalar con soporte para arquitecturas de 64 bits (`arm64-v8a`) y 32 bits (`armeabi-v7a`), con generación automática de Keystore y activación opcional de caché.
 - **Stack Multi-Lenguaje:**
   - **C++23 Moderno:** Alojado en `src/cpp-core/` bajo estándar ISO/IEC 14882:2023 con conceptos, `std::span` y CMakeLists.txt con target WebAssembly y arquitecturas móviles de 32/64 bits (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`). Opera la visión artificial, percentiles de grosor, cierre morfológico de huecos y el **Motor Vectorial Analítico** (Bézier cúbica continua, Catmull-Rom C1 y Douglas-Peucker sin recolección de basura).
   - **Kotlin:** Alojado en `src/kotlin-core/AndroidPlatformBridge.kt`, `CoroutineOrchestrator.kt` y `VectorEngine.kt` para el puente nativo Android de **Guardado REAL en la Galería de Fotos (MediaStore.Images.Media en `Pictures/InkFlow Studio`)** y **WakeLock de Pantalla Encendida (`FLAG_KEEP_SCREEN_ON`)**, orquestación con **`kotlinx.coroutines` (concurrencia estructurada, conflate de eventos táctiles a 240Hz, centinela de auto-guardado no bloqueante y Jobs cancelables)**, serialización comprimida de archivos `.inkflow` y teoría cromática/armonía de color.
@@ -32,9 +34,9 @@ Este archivo establece el contexto de desarrollo, las restricciones de ingenier�
 
 ## 🛑 Reglas Inmutables de Ingeniería
 
-1. **Arquitectura Exclusivamente PWA:**
-   - La aplicación debe funcionar de forma autónoma en el navegador móvil mediante Service Workers y Web App Manifest.
-   - Jamás reintroducir archivos o referencias a APK, Gradle, Android Studio o SDKs dependientes de tiendas de aplicaciones.
+1. **Arquitectura Dual: PWA Nativa y APK Nativo con Tauri v2:**
+   - La aplicación funciona de forma autónoma en el navegador móvil mediante Service Workers y Web App Manifest (despliegue continuo en Cloudflare Pages).
+   - Simultáneamente, se compila a APK Debug para Android mediante Tauri v2 (`src-tauri/` y `.github/workflows/build-tauri-apk.yml`) usando el Android System WebView nativo sin empaquetar Chromium pesado, optimizado para tiendas de terceros como Uptodown o instalación directa.
 2. **Integración de C++23, Rust y Kotlin:**
    - C++23 opera en `src/cpp-core/` para el motor vectorial analítico (Bézier cúbica y Douglas-Peucker sin GC), visión artificial, percentiles de grosor y cierre morfológico de huecos.
    - Kotlin opera en `src/kotlin-core/AndroidPlatformBridge.kt` y `VectorEngine.kt` para el puente nativo Android de Guardado Real en Galería (`AndroidGalleryManager`), WakeLock de Pantalla Encendida (`AndroidScreenWakeLockManager`), serialización `.inkflow` y teoría del color.

@@ -11,7 +11,19 @@ export interface EnvironmentContext {
 }
 
 /**
- * Determina si la aplicación se está ejecutando instalada en modo standalone (PWA nativa).
+ * Determina si la aplicación se ejecuta dentro del contenedor nativo de Tauri (APK Android o Desktop).
+ */
+export function detectIsTauri(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    '__TAURI_INTERNALS__' in window ||
+    '__TAURI__' in window ||
+    Boolean((window as unknown as { isTauri?: boolean }).isTauri)
+  );
+}
+
+/**
+ * Determina si la aplicación se está ejecutando instalada en modo standalone (PWA nativa o APK Tauri).
  * @param displayModeMatchesStandalone Resultado de window.matchMedia('(display-mode: standalone)').matches
  * @param navigatorStandalone Propiedad window.navigator.standalone en dispositivos iOS Safari
  * @param referrer Cadena document.referrer para detección de TWA (Trusted Web Activity)
@@ -23,6 +35,7 @@ export function detectIsStandalone(
   referrer: string = ''
 ): boolean {
   return (
+    detectIsTauri() ||
     displayModeMatchesStandalone ||
     navigatorStandalone === true ||
     referrer.includes('android-app://')

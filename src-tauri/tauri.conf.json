@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "InkFlow Studio",
+  "version": "1.0.0",
+  "identifier": "com.inkflow.studio",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "InkFlow Studio",
+        "width": 800,
+        "height": 1200,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/pwa-192x192.png",
+      "icons/pwa-512x512.png",
+      "icons/icon.png"
+    ],
+    "android": {
+      "minSdkVersion": 24,
+      "targetSdkVersion": 35,
+      "compileSdkVersion": 35
+    }
+  }
+}

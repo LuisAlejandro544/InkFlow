@@ -41,6 +41,18 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 
 export default function App() {
   const isOnline = useOnlineStatus();
+  const [offlineReadyToast, setOfflineReadyToast] = useState(false);
+
+  // Escuchar cuando el Service Worker ha cacheado todos los recursos para modo 100% offline
+  useEffect(() => {
+    const handleOfflineReady = () => {
+      setOfflineReadyToast(true);
+      const timer = setTimeout(() => setOfflineReadyToast(false), 4500);
+      return () => clearTimeout(timer);
+    };
+    window.addEventListener('pwa-offline-ready', handleOfflineReady);
+    return () => window.removeEventListener('pwa-offline-ready', handleOfflineReady);
+  }, []);
 
   // Inicializar tema visual de la app
   useEffect(() => {
@@ -490,6 +502,18 @@ export default function App() {
         >
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
           <span>Modo 100% Offline • Todo se guarda en tu teléfono</span>
+        </aside>
+      )}
+
+      {/* Aviso de confirmación cuando el precaché inicial se completa con éxito */}
+      {isOnline && offlineReadyToast && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#14151e]/95 border border-amber-500/60 text-amber-300 text-[11px] font-bold px-3 py-1.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-1.5 pointer-events-none animate-in fade-in slide-in-from-top-2"
+        >
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+          <span>✨ App descargada localmente • Lista para usar sin internet</span>
         </aside>
       )}
     </div>
