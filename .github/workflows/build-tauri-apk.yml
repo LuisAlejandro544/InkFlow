@@ -177,21 +177,24 @@ jobs:
 
           case "$TARGET_CHOICE" in
             "arm64")
-              TARGET_FLAGS="--target aarch64-linux-android"
+              TARGET_FLAGS="--target aarch64"
               ;;
             "armv7")
-              TARGET_FLAGS="--target armv7-linux-androideabi"
+              TARGET_FLAGS="--target armv7"
               ;;
-            "universal"|"all")
-              TARGET_FLAGS="--target aarch64-linux-android,armv7-linux-androideabi"
+            "universal")
+              TARGET_FLAGS="--target aarch64 armv7"
+              ;;
+            "all")
+              TARGET_FLAGS=""
               ;;
             *)
-              TARGET_FLAGS="--target aarch64-linux-android,armv7-linux-androideabi"
+              TARGET_FLAGS="--target aarch64 armv7"
               ;;
           esac
 
-          echo "Ejecutando: npx tauri android build --debug $TARGET_FLAGS"
-          npx tauri android build --debug $TARGET_FLAGS
+          echo "Ejecutando: npx tauri android build --debug --apk --ci $TARGET_FLAGS"
+          npx tauri android build --debug --apk --ci $TARGET_FLAGS
 
           echo "✅ Compilación de Tauri v2 finalizada"
 
@@ -203,7 +206,7 @@ jobs:
           echo "📦 Buscando archivos APK Debug generados..."
           
           # Buscar todos los .apk dentro de src-tauri
-          find src-tauri -type f -name "*debug*.apk" -o -name "*.apk" | while read -r apk_file; do
+          find src-tauri -type f -name "*.apk" | while read -r apk_file; do
             APK_NAME=$(basename "$apk_file")
             echo "Encontrado: $apk_file -> Copiando a build-artifacts/InkFlow-Studio-${APK_NAME}"
             cp "$apk_file" "build-artifacts/InkFlow-Studio-${APK_NAME}"
