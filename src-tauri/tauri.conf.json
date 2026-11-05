@@ -33,9 +33,7 @@
       "icons/icon.png"
     ],
     "android": {
-      "minSdkVersion": 24,
-      "targetSdkVersion": 35,
-      "compileSdkVersion": 35
+      "minSdkVersion": 24
     }
   }
 }

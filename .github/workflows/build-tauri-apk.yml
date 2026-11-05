@@ -149,25 +149,32 @@ jobs:
           NODE_ENV: production
           CI: true
 
-      # 11. Inicializar contenedor Android de Tauri v2 si no existe
+      # 11. Inicializar contenedor Android de Tauri v2 si no está inicializado
       - name: Inicializar proyecto Android de Tauri
         run: |
-          if [ ! -d "src-tauri/gen/android" ]; then
+          if [ ! -f "src-tauri/gen/android/gradlew" ]; then
             echo "📱 Inicializando estructura Android de Tauri v2..."
-            npx tauri android init
+            npx tauri android init --ci --skip-targets-install
             echo "✅ Estructura Android de Tauri v2 inicializada"
           else
             echo "ℹ️ Estructura Android ya presente en src-tauri/gen/android"
           fi
 
-      # 11.1. Aplicar AndroidManifest nativo optimizado (largeHeap, hardwareAccelerated, configChanges, windowSoftInputMode y Scoped Storage)
-      - name: Aplicar AndroidManifest nativo optimizado
+      # 11.1. Aplicar AndroidManifest nativo optimizado (largeHeap, hardwareAccelerated, configChanges, windowSoftInputMode y Scoped Storage) y SDK 35
+      - name: Aplicar configuraciones nativas de Android (Manifest y SDK 35)
         run: |
           echo "🔧 Aplicando configuraciones nativas de Android en src-tauri/gen/android/app/src/main/AndroidManifest.xml..."
           mkdir -p src-tauri/gen/android/app/src/main
           cp src-tauri/AndroidManifest.xml src-tauri/gen/android/app/src/main/AndroidManifest.xml
-          echo "✅ Atributos nativos verificados:"
+          echo "✅ Atributos nativos verificados en AndroidManifest:"
           grep -E "largeHeap|hardwareAccelerated|configChanges|windowSoftInputMode|READ_MEDIA_IMAGES" src-tauri/gen/android/app/src/main/AndroidManifest.xml
+
+          # Sincronizar targetSdk y compileSdk 35 (Android 15) en Gradle si existen
+          if [ -f "src-tauri/gen/android/app/build.gradle.kts" ]; then
+            sed -i 's/targetSdk = .*/targetSdk = 35/' src-tauri/gen/android/app/build.gradle.kts || true
+            sed -i 's/compileSdk = .*/compileSdk = 35/' src-tauri/gen/android/app/build.gradle.kts || true
+            echo "✅ targetSdk y compileSdk fijados en 35 (build.gradle.kts)"
+          fi
 
       # 12. Compilación del APK Debug según arquitectura seleccionada
       - name: Compilar APK Debug con Tauri v2
