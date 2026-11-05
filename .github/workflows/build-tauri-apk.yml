@@ -62,6 +62,7 @@ jobs:
           fi
           
           echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_ROOT/platform-tools:$ANDROID_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
@@ -205,10 +206,18 @@ jobs:
             }
 
             // 3. Inyectar configChanges y windowSoftInputMode en <activity>
-            manifest = manifest.replace(
-              /android:configChanges="[^"]*"/,
-              `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"`
-            );
+            if (manifest.includes("android:configChanges")) {
+              manifest = manifest.replace(
+                /android:configChanges="[^"]*"/,
+                `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"`
+              );
+            } else {
+              manifest = manifest.replace(
+                /(<activity[^>]*)/,
+                `$1 android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"`
+              );
+            }
+
             if (!manifest.includes("android:windowSoftInputMode")) {
               manifest = manifest.replace(
                 /(<activity[^>]*)/,
@@ -242,15 +251,18 @@ jobs:
               TARGET_FLAGS="--target armv7"
               ;;
             "universal")
-              TARGET_FLAGS="--target aarch64 armv7"
+              TARGET_FLAGS="--target aarch64 --target armv7"
               ;;
             "all")
               TARGET_FLAGS=""
               ;;
             *)
-              TARGET_FLAGS="--target aarch64 armv7"
+              TARGET_FLAGS="--target aarch64 --target armv7"
               ;;
           esac
+
+          echo "Verificando disponibilidad de Tauri CLI..."
+          npm run tauri -- --version
 
           echo "Ejecutando: npx tauri android build --debug --apk --ci --ignore-version-mismatches -v $TARGET_FLAGS"
           npx tauri android build --debug --apk --ci --ignore-version-mismatches -v $TARGET_FLAGS
