@@ -1,6 +1,6 @@
 /**
  * @file ToolPickerModal.tsx
- * @description Selector nativo de herramientas de dibujo y estabilizador S-Form estilo IbisPaint.
+ * @description Selector nativo de herramientas de dibujo y estabilizador S-Form profesional.
  * 
  * Modularizado:
  * - Metadatos de herramientas centralizados en `tools/toolDefinitions.ts`.
@@ -191,7 +191,7 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
               ))}
             </div>
 
-            {/* Acceso a Texturas de Pincel estilo IbisPaint */}
+            {/* Acceso a Texturas de Superficie Artística */}
             {onOpenTextureModal && (
               <div 
                 onClick={() => {
@@ -206,8 +206,8 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
                     <Sparkles size={16} />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-amber-200">Texturas de Pincel (IbisPaint)</div>
-                    <div className="text-[10px] text-gray-400">Papel Acuarela, Lienzo, Trama Manga y Carbón</div>
+                    <div className="text-xs font-bold text-amber-200">Texturas de Superficie Artística</div>
+                    <div className="text-[10px] text-gray-400">Papel Acuarela, Lienzo, Trama Manga, Granulado y Carbón</div>
                   </div>
                 </div>
                 <span className="text-[10px] font-bold bg-amber-500 text-black px-2.5 py-1 rounded-xl shadow-xs shrink-0">

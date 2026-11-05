@@ -23,6 +23,56 @@ export interface ExportDimensions {
 }
 
 export type ExportFormat = 'png' | 'jpeg' | 'webp';
+export type ExportQualityMode = 'standard' | 'hd' | 'ultra_4k';
+
+/**
+ * Filtro de nitidez inteligente (Smart Unsharp Mask)
+ * Realza bordes de contorno, lineart y detalles sin introducir ruido en áreas homogéneas
+ */
+export function applyUnsharpMask(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  amount: number = 0.35
+): void {
+  if (width <= 0 || height <= 0 || amount <= 0) return;
+  try {
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+    const len = data.length;
+    const output = new Uint8ClampedArray(len);
+    output.set(data);
+
+    const stride = width * 4;
+
+    for (let y = 1; y < height - 1; y++) {
+      const rowOffset = y * stride;
+      for (let x = 1; x < width - 1; x++) {
+        const i = rowOffset + (x * 4);
+        const a = data[i + 3];
+        if (a === 0) continue;
+
+        for (let c = 0; c < 3; c++) {
+          const orig = data[i + c];
+          const neighborSum =
+            data[i - stride + c] +
+            data[i + stride + c] +
+            data[i - 4 + c] +
+            data[i + 4 + c];
+          const blur = neighborSum * 0.25;
+          const diff = orig - blur;
+          const sharpened = orig + diff * amount;
+          output[i + c] = Math.max(0, Math.min(255, sharpened));
+        }
+      }
+    }
+
+    imgData.data.set(output);
+    ctx.putImageData(imgData, 0, 0);
+  } catch {
+    // Si la lectura de píxeles no está permitida en entornos de prueba, continuar limpiamente
+  }
+}
 
 /**
  * Calcula las dimensiones finales y la ventana fuente según el modo de recorte y la escala
@@ -55,56 +105,99 @@ export function computeExportDimensions(
 }
 
 /**
- * Genera el elemento canvas fuera de pantalla con todas las capas compuestas
+ * Genera el elemento canvas fuera de pantalla con todas las capas compuestas,
+ * aplicando súper-muestreo inteligente (SSAA), suavizado de curvas vectoriales
+ * y filtro de nitidez de trazos para subir la calidad visual real del dibujo.
  */
 export function generateCompositeExportCanvas(
   layers: Layer[],
   exportDimensions: ExportDimensions,
   transparentBg: boolean,
   format: ExportFormat,
-  scale: number
+  scale: number = 1,
+  qualityMode: ExportQualityMode = 'standard'
 ): HTMLCanvasElement {
   const { w, h, sourceX, sourceY, sourceW, sourceH } = exportDimensions;
 
-  const cvs = document.createElement('canvas');
-  cvs.width = w;
-  cvs.height = h;
-  const ctx = cvs.getContext('2d')!;
+  // En modos HD o Ultra 4K, usamos Súper-Muestreo Interno (SSAA 2x o 2.5x)
+  // para renderizar los trazos vectoriales y capas con resolución sub-pixel,
+  // aplicar el filtro de nitidez y re-proyectar al tamaño deseado con suavizado anti-aliasing perfecto.
+  const internalSample = qualityMode === 'ultra_4k' ? 2.5 : qualityMode === 'hd' ? 2.0 : 1.0;
+
+  const renderW = Math.round(w * internalSample);
+  const renderH = Math.round(h * internalSample);
+  const effectiveScale = scale * internalSample;
+
+  const renderCvs = document.createElement('canvas');
+  renderCvs.width = renderW;
+  renderCvs.height = renderH;
+  const renderCtx = renderCvs.getContext('2d', { willReadFrequently: true })!;
+
+  renderCtx.imageSmoothingEnabled = true;
+  renderCtx.imageSmoothingQuality = 'high';
 
   // Fondo blanco o transparente
   if (!transparentBg || format === 'jpeg') {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, w, h);
+    renderCtx.fillStyle = '#ffffff';
+    renderCtx.fillRect(0, 0, renderW, renderH);
   }
 
   // Dibujar cada capa con su opacidad y modo de fusión
   for (const layer of layers) {
     if (!layer.visible || layer.opacity <= 0) continue;
-    ctx.save();
-    ctx.globalAlpha = layer.opacity;
-    ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation;
+    renderCtx.save();
+    renderCtx.globalAlpha = layer.opacity;
+    renderCtx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation;
 
     // Dibujar sub-región si es modo recorte, o toda la hoja
-    ctx.drawImage(
+    renderCtx.drawImage(
       layer.canvas,
       sourceX, sourceY, sourceW, sourceH,
-      0, 0, w, h
+      0, 0, renderW, renderH
     );
 
-    // Renderizar trazos vectoriales de Kotlin/Wasm para esta capa sin pérdida de resolución
+    // Renderizar trazos vectoriales analíticos con resolución submétrica escalada
     const vectorStrokes = kotlinVectorEngine.getStrokesForLayer(layer.id);
     if (vectorStrokes && vectorStrokes.length > 0) {
-      ctx.save();
-      ctx.scale(scale, scale);
-      ctx.translate(-sourceX, -sourceY);
-      kotlinVectorEngine.renderVectorStrokes(ctx, vectorStrokes, scale);
-      ctx.restore();
+      renderCtx.save();
+      renderCtx.scale(effectiveScale, effectiveScale);
+      renderCtx.translate(-sourceX, -sourceY);
+      kotlinVectorEngine.renderVectorStrokes(renderCtx, vectorStrokes, effectiveScale);
+      renderCtx.restore();
     }
 
-    ctx.restore();
+    renderCtx.restore();
   }
 
-  return cvs;
+  // Aplicar mejora de nitidez en modos HD y Ultra 4K
+  if (qualityMode === 'ultra_4k') {
+    applyUnsharpMask(renderCtx, renderW, renderH, 0.4);
+  } else if (qualityMode === 'hd') {
+    applyUnsharpMask(renderCtx, renderW, renderH, 0.25);
+  }
+
+  // Si no hubo súper-muestreo interno, devolver el canvas directamente
+  if (internalSample <= 1.0) {
+    return renderCvs;
+  }
+
+  // Downsampling SSAA hacia las dimensiones exactas finales (w, h)
+  // logrando líneas lisas y perfectamente antialiasadas
+  const targetCvs = document.createElement('canvas');
+  targetCvs.width = w;
+  targetCvs.height = h;
+  const targetCtx = targetCvs.getContext('2d')!;
+
+  targetCtx.imageSmoothingEnabled = true;
+  targetCtx.imageSmoothingQuality = 'high';
+
+  if (!transparentBg || format === 'jpeg') {
+    targetCtx.fillStyle = '#ffffff';
+    targetCtx.fillRect(0, 0, w, h);
+  }
+
+  targetCtx.drawImage(renderCvs, 0, 0, w, h);
+  return targetCvs;
 }
 
 /**
@@ -146,23 +239,36 @@ export function formatByteSize(bytes: number | null): string {
  *    a la Galería de Fotos (Google Fotos, Galería local), sin desplegar la hoja de compartir del sistema.
  * 3. Fallback de descarga limpio.
  */
+export function formatArtworkFilename(
+  projectName: string,
+  cropMode: 'full' | 'crop',
+  scale: number,
+  format: ExportFormat,
+  qualityMode: ExportQualityMode = 'standard'
+): string {
+  const cleanName = (projectName || 'mi_obra').toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const cropSuffix = cropMode === 'crop' ? '_recortada' : '_completa';
+  const qualitySuffix = qualityMode === 'ultra_4k' ? '_ultra4k' : qualityMode === 'hd' ? '_hd' : '';
+  const scaleSuffix = scale > 1 ? `_${scale}x` : '';
+  return `${cleanName}${cropSuffix}${qualitySuffix}${scaleSuffix}.${format}`;
+}
+
 export async function saveArtworkToUserGallery(
   cvs: HTMLCanvasElement,
   projectName: string,
   cropMode: 'full' | 'crop',
   scale: number,
-  format: ExportFormat
+  format: ExportFormat,
+  qualityMode: ExportQualityMode = 'standard'
 ): Promise<{ success: boolean; method: 'kotlin_mediastore' | 'download_direct' | 'native_gallery_share' | 'download_fallback'; message: string }> {
   const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
-  const cleanName = (projectName || 'mi_obra').toLowerCase().replace(/[^a-z0-9]/g, '_');
-  const cropSuffix = cropMode === 'crop' ? '_recortada' : '_completa';
-  const scaleSuffix = scale === 1 ? '1x' : scale === 2 ? '2x_FHD' : '3x_4K';
-  const finalFilename = `${cleanName}${cropSuffix}_${scaleSuffix}.${format}`;
+  const finalFilename = formatArtworkFilename(projectName, cropMode, scale, format, qualityMode);
+  const encoderQuality = qualityMode === 'ultra_4k' ? 1.0 : qualityMode === 'hd' ? 0.98 : 0.92;
 
   // 1. Intentar primero con el puente nativo de Kotlin si está disponible (Android MediaStore)
   if (typeof window !== 'undefined' && window.InkFlowNativeBridge?.saveImageToGallery) {
     try {
-      const dataUrl = cvs.toDataURL(mimeType, 0.95);
+      const dataUrl = cvs.toDataURL(mimeType, encoderQuality);
       const rawResult = window.InkFlowNativeBridge.saveImageToGallery(dataUrl, finalFilename, mimeType);
       const parsed = JSON.parse(rawResult || '{}');
       if (parsed.success) {
@@ -182,7 +288,7 @@ export async function saveArtworkToUserGallery(
   // de forma inmediata en la Galería de Fotos del dispositivo, sin abrir la ventana emergente
   // de "Compartir imagen" con WhatsApp/Drive.
   try {
-    downloadArtworkFile(cvs, projectName, cropMode, scale, format);
+    downloadArtworkFile(cvs, projectName, cropMode, scale, format, qualityMode);
     return {
       success: true,
       method: 'download_direct',
@@ -205,17 +311,16 @@ export function downloadArtworkFile(
   projectName: string,
   cropMode: 'full' | 'crop',
   scale: number,
-  format: ExportFormat
+  format: ExportFormat,
+  qualityMode: ExportQualityMode = 'standard'
 ): void {
   const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
-  const dataUrl = cvs.toDataURL(mimeType, 0.95);
+  const encoderQuality = qualityMode === 'ultra_4k' ? 1.0 : qualityMode === 'hd' ? 0.98 : 0.92;
+  const dataUrl = cvs.toDataURL(mimeType, encoderQuality);
 
   const a = document.createElement('a');
   a.href = dataUrl;
-  const cleanName = (projectName || 'mi_obra').toLowerCase().replace(/[^a-z0-9]/g, '_');
-  const cropSuffix = cropMode === 'crop' ? '_recortada' : '_completa';
-  const scaleSuffix = scale === 1 ? '1x' : scale === 2 ? '2x_FHD' : '3x_4K';
-  a.download = `${cleanName}${cropSuffix}_${scaleSuffix}.${format}`;
+  a.download = formatArtworkFilename(projectName, cropMode, scale, format, qualityMode);
   document.body.appendChild(a);
   a.click();
   if (a.parentNode) {

@@ -113,7 +113,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </h2>
 
           <p className="text-sm sm:text-base text-gray-300 max-w-xl leading-relaxed">
-            InkFlow Studio combina un <strong>Lápiz Vectorial en C++23/Wasm</strong> (con cero píxeles al hacer zoom), shaders acelerados por <strong>WebGPU</strong>, análisis de grosor por <strong>visión artificial</strong>, puente <strong>Kotlin de Guardado en Galería Real y WakeLock</strong> y gestos multitáctiles con tus propios dedos.
+            Dibuja, entinta y colorea con total libertad en tu teléfono: <strong>trazos ultra suaves que no se pixelan al hacer zoom</strong>, modo calco para aprender con tus fotos favoritas, <strong>guardado directo en tu galería</strong> y herramientas profesionales pensadas para tus dedos.
           </p>
 
           {/* BOTONES PRINCIPALES HERO */}
@@ -154,7 +154,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         <div className="bg-[#13141e] border border-[#222434] rounded-3xl p-5 sm:p-6 shadow-xl">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
             <Maximize2 size={16} className="text-amber-400" />
-            <span>¿Por qué instalar InkFlow Studio como PWA?</span>
+            <span>¿Por qué instalar InkFlow Studio como app en tu teléfono?</span>
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -167,15 +167,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               <ul className="text-xs text-gray-400 space-y-2">
                 <li className="flex items-start gap-2">
                   <span className="text-red-400 font-bold shrink-0">✕</span>
-                  <span>La barra superior de URL roba espacio útil de dibujo.</span>
+                  <span>La barra superior del navegador te quita espacio para dibujar.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-red-400 font-bold shrink-0">✕</span>
-                  <span>Riesgo de recargar la página por gestos accidentales del navegador.</span>
+                  <span>Riesgo de refrescar o salir de la página por un gesto accidental.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-red-400 font-bold shrink-0">✕</span>
-                  <span>Sin icono directo en tu pantalla de aplicaciones.</span>
+                  <span>Tienes que buscar el enlace cada vez que quieras dibujar.</span>
                 </li>
               </ul>
             </div>
@@ -184,24 +184,24 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col gap-2.5">
               <div className="flex items-center gap-2 text-amber-400">
                 <Smartphone size={16} />
-                <h4 className="text-xs font-bold text-amber-300">Como PWA Nativa Instalada</h4>
+                <h4 className="text-xs font-bold text-amber-300">Como App Instalada (PWA)</h4>
               </div>
               <ul className="text-xs text-gray-300 space-y-2">
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-400 font-bold shrink-0">✓</span>
-                  <span><strong>100% Pantalla Completa:</strong> Toda la pantalla se convierte en lienzo de dibujo.</span>
+                  <span><strong>100% Pantalla Completa:</strong> Toda la pantalla de tu móvil se convierte en tu lienzo.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-400 font-bold shrink-0">✓</span>
-                  <span><strong>Botones siempre visibles:</strong> Dock de herramientas inferior al alcance del pulgar.</span>
+                  <span><strong>Botones cómodos:</strong> Barra de herramientas inferior fácil de tocar con el pulgar.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-400 font-bold shrink-0">✓</span>
-                  <span><strong>Acceso Directo:</strong> Icono nativo en tu pantalla de inicio y launcher.</span>
+                  <span><strong>Icono en tu Inicio:</strong> Ábrela en un segundo como cualquier aplicación.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-400 font-bold shrink-0">✓</span>
-                  <span><strong>100% Offline:</strong> Abre y dibuja en cualquier lugar sin internet.</span>
+                  <span><strong>Funciona Sin Internet:</strong> Dibuja en cualquier lugar sin gastar tus datos móviles.</span>
                 </li>
               </ul>
             </div>
@@ -212,106 +212,106 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-extrabold text-white tracking-wide">
-              Todo lo que ofrece InkFlow Studio
+              Todo lo que puedes hacer en InkFlow Studio
             </h3>
-            <span className="text-xs text-amber-400 font-mono font-bold">7 Pilares Pro</span>
+            <span className="text-xs text-amber-400 font-mono font-bold">7 Ventajas Clave</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             
-            {/* 1. Lápiz Vectorial C++23/Wasm */}
+            {/* 1. Lápiz Vectorial (Cero Píxeles) */}
             <div className="bg-[#151622] border border-[#252738] rounded-2xl p-4 flex flex-col gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
                   <Zap size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">Lápiz Vectorial Analítico (C++23/Wasm)</h4>
-                  <span className="text-[10px] text-amber-300/80 font-mono">Cero píxeles al hacer zoom</span>
+                  <h4 className="text-sm font-bold text-white">Lápiz Vectorial (Cero Píxeles)</h4>
+                  <span className="text-[10px] text-amber-300/80 font-mono">Nitidez infinita al hacer zoom</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Trazos matemáticos analíticos basados en curvas Bézier cúbicas con continuidad C1 y algoritmo Douglas-Peucker en C++23 WebAssembly. Al acercar el zoom al 200%, 400% o 600%, la línea se reevalúa en Wasm sin pixelación alguna.
+                Tus líneas se mantienen completamente nítidas sin importar cuánto zoom hagas. Dibuja los detalles más pequeños en ojos, pestañas y accesorios sin que las líneas se vean borrosas o pixeladas.
               </p>
             </div>
 
-            {/* 2. Asistente Real de Grosor de Trazo (C++23) */}
+            {/* 2. Asistente Inteligente de Grosor de Trazo */}
             <div className="bg-[#151622] border border-[#252738] rounded-2xl p-4 flex flex-col gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
                   <Cpu size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">Asistente Real de Grosor (C++23)</h4>
-                  <span className="text-[10px] text-amber-300/80 font-mono">Calibrado por Visión Artificial</span>
+                  <h4 className="text-sm font-bold text-white">Asistente Inteligente de Grosor</h4>
+                  <span className="text-[10px] text-amber-300/80 font-mono">Aprende el grosor ideal de tu foto</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Mide automáticamente la distribución real de líneas en la foto de calco mediante percentiles: Silueta (P92), Estructura (P68), Detalles (P38) y Tramas (P12). Adopta grosores ideales en 1 toque.
+                Analiza tu imagen de referencia y te sugiere al instante los grosores ideales para siluetas, líneas principales, detalles finos y sombras, para que tu dibujo quede equilibrado y proporcionado.
               </p>
             </div>
 
-            {/* 3. Modo Calco Ergonómico */}
+            {/* 3. Modo Calco Cómodo y Despejado */}
             <div className="bg-[#151622] border border-[#252738] rounded-2xl p-4 flex flex-col gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
                   <Camera size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">Modo Calco con Filtros Wasm</h4>
-                  <span className="text-[10px] text-amber-300/80 font-mono">Panel minimizable y extracción Sobel</span>
+                  <h4 className="text-sm font-bold text-white">Modo Calco Cómodo y Despejado</h4>
+                  <span className="text-[10px] text-amber-300/80 font-mono">Tu foto de referencia siempre a la vista</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Importa fotos de la galería para calcar. El panel se minimiza a una micro-píldora para despejar el 100% del lienzo, con botón directo <code className="text-amber-300 font-mono">[👁️]</code> para comparar tus líneas limpias.
+                Carga cualquier foto o dibujo para calcarlo y practicar. El menú se minimiza a una pequeña burbuja para que nada te estorbe, y puedes ocultar o mostrar la foto con un solo toque para ver tu avance.
               </p>
             </div>
 
-            {/* 4. Gestos Multitáctiles con Dedos */}
+            {/* 4. Dibuja y Muévete con tus Propios Dedos */}
             <div className="bg-[#151622] border border-[#252738] rounded-2xl p-4 flex flex-col gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
                   <Move size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">Gestos Multitáctiles con tus Dedos</h4>
-                  <span className="text-[10px] text-amber-300/80 font-mono">Pinch, Paneo y Rotación Magnética</span>
+                  <h4 className="text-sm font-bold text-white">Dibuja y Muévete con tus Propios Dedos</h4>
+                  <span className="text-[10px] text-amber-300/80 font-mono">Pellizca, rota y navega con total libertad</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Pellizca con 2 dedos para zoom focal, rota libremente la hoja con snapping a 0°, 90°, 180° y 270°, y alterna en 1 toque entre Modo Dibujo y Modo Mover con 1 dedo.
+                Gira y amplía la hoja libremente con 2 dedos como si estuvieras dibujando en una hoja de papel real. Cambia en 1 toque al modo mover para desplazarte cómodamente sin rayar la pantalla por descuido.
               </p>
             </div>
 
-            {/* 5. Pipeline WebGPU y Shaders WGSL */}
+            {/* 5. Pinceles Suaves y Capas Profesionales */}
             <div className="bg-[#151622] border border-[#252738] rounded-2xl p-4 flex flex-col gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
                   <Sparkles size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">WebGPU & Estabilizador S-Form</h4>
-                  <span className="text-[10px] text-amber-300/80 font-mono">Shaders de sellos y anti-temblor</span>
+                  <h4 className="text-sm font-bold text-white">Pinceles Suaves y Capas Profesionales</h4>
+                  <span className="text-[10px] text-amber-300/80 font-mono">Texturas reales y anti-temblor de mano</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Shaders acelerados por GPU para dinámicas de presión y modos de fusión de capas (Multiplicar, Pantalla, Superponer, Añadir), complementados con estabilizador exponencial S-Form (niveles 0 a 10).
+                Pinceles con texturas de acuarela, lienzo y papel manga. Incluye estabilizador de pulso para que tus trazos nunca salgan temblorosos, y capas con modos de mezcla para sombras y brillos.
               </p>
             </div>
 
-            {/* 6. Guardado Real en Galería y WakeLock */}
+            {/* 6. Guarda Directo en tu Galería de Fotos */}
             <div className="bg-[#151622] border border-[#252738] rounded-2xl p-4 flex flex-col gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
                   <Layers size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">Guardado en Galería Real y WakeLock (Kotlin/PWA)</h4>
-                  <span className="text-[10px] text-amber-300/80 font-mono">Sin descargas web molestas</span>
+                  <h4 className="text-sm font-bold text-white">Guarda Directo en tu Galería de Fotos</h4>
+                  <span className="text-[10px] text-amber-300/80 font-mono">Tus dibujos en tu teléfono y pantalla siempre activa</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Guarda tus obras maestras directamente en la Galería de Fotos del teléfono a través del puente nativo Kotlin (MediaStore) y Web Share API, manteniendo la pantalla siempre encendida mientras dibujas sin apagones inoportunos.
+                Guarda tus obras maestras en la app de Fotos de tu móvil en PNG o JPG de alta calidad. Además, la pantalla se mantiene encendida mientras dibujas para que no se apague en pleno trazo.
               </p>
             </div>
 
@@ -323,11 +323,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-white">100% Offline, Seguro y Privado</h4>
-                  <span className="text-[10px] text-emerald-300/80 font-mono">Cero anuncios • Cero suscripciones • Sin servidores externos</span>
+                  <span className="text-[10px] text-emerald-300/80 font-mono">Cero anuncios • Cero suscripciones • Sin perder tus dibujos</span>
                 </div>
               </div>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Tus dibujos se almacenan localmente en el almacenamiento del dispositivo. La app no envía tus obras a ningún servidor externo, no contiene rastreadores ni suscripciones mensuales abusivas.
+                Tus dibujos e imágenes de calco se guardan de forma segura en la memoria interna de tu dispositivo. Nunca compartimos tus creaciones con servidores externos y puedes dibujar sin internet cuando quieras.
               </p>
             </div>
 

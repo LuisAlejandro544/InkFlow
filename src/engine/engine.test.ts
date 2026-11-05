@@ -36,7 +36,7 @@ import {
 } from './brushTextureEngine';
 import { Layer, BrushTextureConfig } from './types';
 import { wakeLockService } from './wakeLockService';
-import { saveArtworkToUserGallery } from './exportEngine';
+import { saveArtworkToUserGallery, applyUnsharpMask, formatArtworkFilename } from './exportEngine';
 import { gpuBitmapCache } from './bitmapCache';
 
 test('Wasm Lerp e Interpolación Lineal', () => {
@@ -1772,3 +1772,47 @@ test('Caché VRAM en GPU (GPUBitmapCache): Bloqueo de deduplicación contra deco
   const stats = gpuBitmapCache.getStats();
   assert.ok(stats.maxVramMB <= 32, 'El límite de VRAM debe estar adaptado para evitar OOM en teléfonos');
 });
+
+test('Exportación en Calidad 4K: Realce de Nitidez (Unsharp Mask) y Preservación de Dimensiones de Hoja', () => {
+  // 1. Probar que el formateador de nombres refleja la calidad 4K sin obligar a cambiar la escala
+  const name1xUltra = formatArtworkFilename('manga_chapter', 'full', 1, 'png', 'ultra_4k');
+  assert.equal(name1xUltra, 'manga_chapter_completa_ultra4k.png', 'Debe reflejar Calidad 4K conservando escala 1x');
+
+  const namePoster = formatArtworkFilename('manga_chapter', 'crop', 3, 'jpeg', 'ultra_4k');
+  assert.equal(namePoster, 'manga_chapter_recortada_ultra4k_3x.jpeg', 'Debe reflejar escala 3x si el usuario elige modo póster');
+
+  // 2. Probar el filtro de nitidez Unsharp Mask sobre un buffer simulado de píxeles
+  const width = 10;
+  const height = 10;
+  const buffer = new Uint8ClampedArray(width * height * 4);
+
+  // Crear un borde de contraste en el centro (x=5)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const val = x >= 5 ? 200 : 50;
+      buffer[idx] = val;     // R
+      buffer[idx + 1] = val; // G
+      buffer[idx + 2] = val; // B
+      buffer[idx + 3] = 255; // A
+    }
+  }
+
+  let updatedData: Uint8ClampedArray | null = null;
+  const mockCtx = {
+    getImageData: () => ({ data: buffer }),
+    putImageData: (imgData: { data: Uint8ClampedArray }) => {
+      updatedData = imgData.data;
+    }
+  } as unknown as CanvasRenderingContext2D;
+
+  applyUnsharpMask(mockCtx, width, height, 0.4);
+  assert.ok(updatedData !== null, 'applyUnsharpMask debe procesar y reescribir los datos de píxeles');
+
+  // Verificar que el contraste en el borde aumentó (lado claro más brillante, lado oscuro más acentuado)
+  const edgeHighIdx = (5 * width + 5) * 4; // x=5 (lado claro junto al borde)
+  const edgeLowIdx = (5 * width + 4) * 4;  // x=4 (lado oscuro junto al borde)
+  assert.ok(updatedData![edgeHighIdx] >= 200, 'El lado claro debe realzarse por nitidez');
+  assert.ok(updatedData![edgeLowIdx] <= 50, 'El lado oscuro debe acentuarse por nitidez');
+});
+

@@ -13,12 +13,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   X, Download, Share2, Check, Image as ImageIcon, 
-  Crop, Maximize2, HardDrive 
+  Crop, Maximize2, HardDrive, Sparkles 
 } from 'lucide-react';
 import { Layer } from '../../engine/types';
 import { calculateArtworkBoundingBox, BoundingBoxResult } from '../../engine/transformMath';
 import { 
   ExportFormat, 
+  ExportQualityMode,
   computeExportDimensions, 
   generateCompositeExportCanvas, 
   estimateArtworkFileSize, 
@@ -44,12 +45,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onClose,
 }) => {
   const [format, setFormat] = useState<ExportFormat>('png');
-  const [scale, setScale] = useState<number>(1);
+  const [qualityMode, setQualityMode] = useState<ExportQualityMode>('ultra_4k');
+  const [isPosterScale, setIsPosterScale] = useState<boolean>(false);
   const [cropMode, setCropMode] = useState<'full' | 'crop'>('full');
   const [transparentBg, setTransparentBg] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [fileSizeBytes, setFileSizeBytes] = useState<number | null>(null);
+
+  const scale = isPosterScale ? 3 : 1;
 
   const triggerHaptic = (ms = 10) => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -82,17 +86,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
   }, [layers, width, height]);
 
-  // Dimensiones finales según el modo elegido y la escala
+  // Dimensiones finales según el modo de recorte y si el usuario eligió póster expandido
   const exportDimensions = useMemo(() => {
     return computeExportDimensions(width, height, boundingBox, cropMode, scale);
   }, [cropMode, boundingBox, scale, width, height]);
 
   /**
-   * Genera el canvas final listo para exportar
+   * Genera el canvas final listo para exportar con calidad mejorada (SSAA y filtro de nitidez)
    */
   const generateExportCanvas = useCallback((): HTMLCanvasElement => {
-    return generateCompositeExportCanvas(layers, exportDimensions, transparentBg, format, scale);
-  }, [layers, exportDimensions, transparentBg, format, scale]);
+    return generateCompositeExportCanvas(layers, exportDimensions, transparentBg, format, scale, qualityMode);
+  }, [layers, exportDimensions, transparentBg, format, scale, qualityMode]);
 
   /**
    * Calcula el peso exacto del archivo en tiempo real
@@ -102,7 +106,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     const calcWeight = async () => {
       try {
         const cvs = generateExportCanvas();
-        const bytes = await estimateArtworkFileSize(cvs, format);
+        const encoderQuality = qualityMode === 'ultra_4k' ? 1.0 : qualityMode === 'hd' ? 0.98 : 0.92;
+        const bytes = await estimateArtworkFileSize(cvs, format, encoderQuality);
         if (!isCancelled) {
           setFileSizeBytes(bytes);
         }
@@ -115,7 +120,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [generateExportCanvas, format, scale, cropMode, transparentBg]);
+  }, [generateExportCanvas, format, scale, cropMode, transparentBg, qualityMode]);
 
   const formattedFileSize = useMemo(() => {
     return formatByteSize(fileSizeBytes);
@@ -129,7 +134,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setIsExporting(true);
     try {
       const cvs = generateExportCanvas();
-      const result = await saveArtworkToUserGallery(cvs, projectName, cropMode, scale, format);
+      const result = await saveArtworkToUserGallery(cvs, projectName, cropMode, scale, format, qualityMode);
       if (result.success) {
         setSuccessMessage(result.message);
         setTimeout(() => setSuccessMessage(''), 3500);
@@ -217,8 +222,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
           <div className="text-right shrink-0">
             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Dimensiones</span>
-            <span className="text-xs font-mono font-bold text-gray-200">
+            <span className="text-xs font-mono font-bold text-gray-200 block">
               {exportDimensions.w} × {exportDimensions.h} px
+            </span>
+            <span className="text-[9px] font-bold text-amber-400 block">
+              {qualityMode === 'ultra_4k' ? '✨ Ultra 4K SSAA' : qualityMode === 'hd' ? '🌟 HD Antialias' : 'Estándar'}
             </span>
           </div>
         </div>
@@ -303,31 +311,111 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         </div>
 
-        {/* 3. Multiplicador de Calidad / Resolución */}
+        {/* 3. Calidad Visual del Dibujo (Anti-aliasing, SSAA y Nitidez Real) */}
         <div>
-          <label className="text-xs text-gray-300 block mb-1.5 font-bold">Calidad y Escala de Exportación</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs text-gray-200 font-bold flex items-center gap-1.5">
+              <Sparkles size={14} className="text-amber-400" />
+              <span>Calidad del Dibujo:</span>
+            </label>
+            <span className="text-[10px] text-amber-400 font-mono font-bold">
+              {qualityMode === 'ultra_4k' ? 'SSAA 2.5x + Nitidez' : qualityMode === 'hd' ? 'SSAA 2x' : 'Directo'}
+            </span>
+          </div>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { val: 1, label: '1x Estándar', desc: 'Rápido y ligero' },
-              { val: 2, label: '2x FHD', desc: 'Alta nitidez' },
-              { val: 3, label: '3x Ultra', desc: 'Máxima resolución' },
-            ].map((sc) => (
+              { 
+                id: 'standard' as ExportQualityMode, 
+                label: 'Estándar', 
+                desc: 'Fiel al lienzo',
+                badge: 'Rápido' 
+              },
+              { 
+                id: 'hd' as ExportQualityMode, 
+                label: 'HD Mejorado', 
+                desc: 'Suavizado de bordes',
+                badge: 'Antialias' 
+              },
+              { 
+                id: 'ultra_4k' as ExportQualityMode, 
+                label: 'Ultra 4K', 
+                desc: 'Máxima nitidez de líneas',
+                badge: 'Remaster' 
+              },
+            ].map((qm) => (
               <button
-                key={sc.val}
+                key={qm.id}
                 onClick={() => {
                   triggerHaptic(8);
-                  setScale(sc.val);
+                  setQualityMode(qm.id);
                 }}
-                className={`py-1.5 px-2 rounded-xl border text-left transition-all active:scale-95 ${
-                  scale === sc.val
-                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50'
+                className={`py-2 px-2 rounded-xl border text-left transition-all active:scale-95 flex flex-col justify-between ${
+                  qualityMode === qm.id
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-sm'
                     : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
                 }`}
               >
-                <span className="text-xs font-bold block">{sc.label}</span>
-                <span className="text-[9px] text-gray-400 block">{sc.desc}</span>
+                <div>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-xs font-bold block">{qm.label}</span>
+                    {qualityMode === qm.id && <Check size={12} className="text-amber-400 shrink-0" />}
+                  </div>
+                  <span className="text-[9px] text-gray-400 block leading-tight">{qm.desc}</span>
+                </div>
+                <span className="text-[8px] font-mono uppercase tracking-wider text-amber-300/80 mt-1 block">
+                  {qm.badge}
+                </span>
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* 4. Dimensiones del Lienzo: Conservar tamaño real vs Resolución Expandida */}
+        <div>
+          <label className="text-xs text-gray-300 block mb-1.5 font-bold flex items-center gap-1.5">
+            <Maximize2 size={13} className="text-amber-400" />
+            <span>Dimensiones del Lienzo:</span>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                triggerHaptic(8);
+                setIsPosterScale(false);
+              }}
+              className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-0.5 active:scale-95 ${
+                !isPosterScale
+                  ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-sm'
+                  : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold">Conservar Tamaño</span>
+                {!isPosterScale && <Check size={14} className="text-amber-400" />}
+              </div>
+              <span className="text-[10px] text-gray-400 leading-tight">
+                Mantiene tus {width} × {height}px originales y sube la calidad del trazo.
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                triggerHaptic(8);
+                setIsPosterScale(true);
+              }}
+              className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-0.5 active:scale-95 ${
+                isPosterScale
+                  ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-sm'
+                  : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold">Póster 3x Gigante</span>
+                {isPosterScale && <Check size={14} className="text-amber-400" />}
+              </div>
+              <span className="text-[10px] text-gray-400 leading-tight">
+                Expande a {width * 3} × {height * 3}px para imprimir en pared.
+              </span>
+            </button>
           </div>
         </div>
 
@@ -358,8 +446,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         )}
 
         {/* Nota explicativa de guardado vs compartir */}
-        <p className="text-[10px] text-gray-400 bg-[#101117] p-2 rounded-xl border border-[#212330] leading-snug">
-          <strong className="text-amber-400">💡 Tip:</strong> <span className="text-gray-300 font-medium">Guardar en mi Galería</span> descarga la imagen directamente en tu teléfono y se añade a tu galería de fotos. Usa <span className="text-gray-300 font-medium">Compartir</span> para enviarla a WhatsApp, Drive o Instagram.
+        <p className="text-[10px] text-gray-400 bg-[#101117] p-2.5 rounded-xl border border-[#212330] leading-snug">
+          <strong className="text-amber-400">💡 Calidad 4K Remaster:</strong> <span className="text-gray-300 font-medium">Sube la nitidez de las líneas y suaviza bordes pixelados con súper-muestreo, manteniendo las proporciones exactas de tu hoja de dibujo sin inflar el lienzo.</span>
         </p>
 
         {/* Botones de acción principales */}

@@ -169,7 +169,7 @@ export const EngineInfoScreen: React.FC<EngineInfoScreenProps> = ({ onReturnToSt
                   </div>
                   <div>
                     <h2 className="text-base font-bold text-white">Módulo WebAssembly (Wasm)</h2>
-                    <p className="text-xs text-gray-400">Matemática de curvas, estabilizador IbisPaint y presión táctil</p>
+                    <p className="text-xs text-gray-400">Matemática de curvas, estabilizador S-Form y presión táctil</p>
                   </div>
                 </div>
                 <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-green-950/60 text-green-400 border border-green-500/40">
@@ -390,7 +390,7 @@ class KotlinVectorEngine(var tension: Double = 0.5) {
 
             <div className="bg-[#121316] p-3.5 rounded-xl border border-[#262832] font-mono text-xs text-gray-300 overflow-x-auto">
               <pre className="text-amber-300">
-{`// Estabilizador IbisPaint implementado en Rust para WebAssembly:
+{`// Estabilizador S-Form anti-temblor implementado en Rust para WebAssembly:
 pub fn stabilize(&mut self, raw: StrokePoint) -> StrokePoint {
     let alpha = 1.0 - (self.stabilizer_level as f32 / 10.0) * 0.82;
     StrokePoint {
