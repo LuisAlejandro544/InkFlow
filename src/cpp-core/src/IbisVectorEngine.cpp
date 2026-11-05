@@ -7,8 +7,6 @@
  * 2. Ajuste Catmull-Rom a Bézier cúbica con continuidad C1 y gradiente de presión.
  * 3. Envoltura de grosor variable por velocidad y presión de entrada.
  * 4. Exportaciones C-ABI para enlace directo en WebAssembly (Wasm) y Android NDK.
- * 
- * Licencia: MIT / Apache-2.0
  */
 
 #include "../include/IbisVectorEngine.hpp"

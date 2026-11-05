@@ -52,9 +52,43 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm,webmanifest}'],
-          maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MB para soportar SQLite Wasm y futuros binarios
-          navigateFallback: 'index.html',
+          maximumFileSizeToCacheInBytes: 15 * 1024 * 1024, // 15 MB para soportar SQLite Wasm y binarios
+          navigateFallback: '/index.html',
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
           runtimeCaching: [
+            {
+              // Estrategia para navegación: NetworkFirst con fallback a index.html cacheado para 0% internet
+              urlPattern: ({ request }) => request.mode === 'navigate',
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'pages-cache',
+                networkTimeoutSeconds: 3,
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              // Scripts, estilos y workers
+              urlPattern: ({ request }) => 
+                request.destination === 'script' || 
+                request.destination === 'style' || 
+                request.destination === 'worker',
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'static-resources',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 30 * 24 * 60 * 60,
+                },
+              },
+            },
             {
               urlPattern: ({ request }) => request.destination === 'image',
               handler: 'CacheFirst',
@@ -63,6 +97,9 @@ export default defineConfig(() => {
                 expiration: {
                   maxEntries: 100,
                   maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
                 },
               },
             },
@@ -75,12 +112,17 @@ export default defineConfig(() => {
                   maxEntries: 30,
                   maxAgeSeconds: 365 * 24 * 60 * 60, // 1 año
                 },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
               },
             },
           ],
         },
         devOptions: {
-          enabled: false,
+          enabled: true,
+          type: 'module',
+          navigateFallback: '/index.html',
         },
       }),
     ],

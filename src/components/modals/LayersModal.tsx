@@ -17,6 +17,7 @@ import {
   Camera, Sliders, Sparkles, Check
 } from 'lucide-react';
 import { Layer, BlendMode, TracingReference } from '../../engine/types';
+import { useAppTheme } from '../../engine/themeEngine';
 
 interface LayersModalProps {
   layers: Layer[];
@@ -110,6 +111,7 @@ export const LayersModal: React.FC<LayersModalProps> = ({
   onRemoveTracing,
   onClose,
 }) => {
+  const theme = useAppTheme();
   const activeLayer = layers.find(l => l.id === activeLayerId) || layers[0];
   const activeIndex = layers.findIndex(l => l.id === activeLayerId);
 
@@ -137,12 +139,18 @@ export const LayersModal: React.FC<LayersModalProps> = ({
         {/* 1. CABECERA NATIVA COMPACTA */}
         <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <div 
+              className="w-8 h-8 rounded-xl border flex items-center justify-center shrink-0"
+              style={{ backgroundColor: theme.accentSoft, borderColor: theme.accentBorder, color: theme.accentColor }}
+            >
               <LayersIcon size={17} />
             </div>
             <div className="flex items-center gap-1.5 min-w-0">
               <h2 className="text-sm font-black text-white tracking-wide">Capas</h2>
-              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-white/10 text-amber-300 font-bold shrink-0">
+              <span 
+                className="text-[11px] font-mono px-1.5 py-0.2 rounded-md font-bold shrink-0"
+                style={{ backgroundColor: theme.accentSoft, color: theme.accentTextHex }}
+              >
                 {layers.length}
               </span>
             </div>
@@ -158,10 +166,11 @@ export const LayersModal: React.FC<LayersModalProps> = ({
                   onTriggerImportPhoto();
                   onClose();
                 }}
-                className="h-8 px-2.5 rounded-xl bg-[#1c1e2a] hover:bg-[#25283a] border border-amber-500/40 text-amber-300 font-bold text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-xs"
+                className="h-8 px-2.5 rounded-xl border font-bold text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-xs"
+                style={{ backgroundColor: theme.accentSoft, borderColor: theme.accentBorder, color: theme.accentTextHex }}
                 title="Importar foto de calco desde galería"
               >
-                <Camera size={13} className="text-amber-400" />
+                <Camera size={13} style={{ color: theme.accentColor }} />
                 <span>Calco</span>
               </button>
             )}
@@ -201,7 +210,8 @@ export const LayersModal: React.FC<LayersModalProps> = ({
               triggerHaptic(10);
               onAddLayer();
             }}
-            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 text-[11px] font-bold gap-1 active:scale-95 transition-all shadow-xs"
+            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl text-[11px] font-bold gap-1 active:scale-95 transition-all shadow-xs"
+            style={{ backgroundColor: theme.accentSoft, color: theme.accentTextHex }}
             title="Añadir nueva capa vacía"
           >
             <Plus size={16} className="stroke-[2.5]" />
@@ -362,9 +372,14 @@ export const LayersModal: React.FC<LayersModalProps> = ({
                 }}
                 className={`flex items-center gap-2.5 p-2 rounded-2xl border transition-all cursor-pointer ${
                   isSelected
-                    ? 'bg-gradient-to-r from-amber-500/15 via-[#1c1d28] to-[#14151e] border-amber-500/80 ring-1 ring-amber-500/40 shadow-md shadow-amber-500/10'
+                    ? 'border-white/20 shadow-md'
                     : 'bg-[#151620] border-white/5 hover:border-white/10'
                 }`}
+                style={isSelected ? {
+                  backgroundColor: theme.accentSoft,
+                  borderColor: theme.accentColor,
+                  boxShadow: `0 0 15px ${theme.accentSoft}`
+                } : undefined}
               >
                 {/* Botón Visibilidad (Ojo con área táctil cómoda) */}
                 <button
@@ -378,7 +393,7 @@ export const LayersModal: React.FC<LayersModalProps> = ({
                   className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 active:scale-90 transition-all text-gray-300"
                 >
                   {layer.visible ? (
-                    <Eye size={18} className="text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                    <Eye size={18} style={{ color: theme.accentColor }} />
                   ) : (
                     <EyeOff size={18} className="text-gray-600" />
                   )}
@@ -394,7 +409,7 @@ export const LayersModal: React.FC<LayersModalProps> = ({
                       {layer.name}
                     </p>
                     {isSelected && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: theme.accentColor }} />
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5">
@@ -445,7 +460,7 @@ export const LayersModal: React.FC<LayersModalProps> = ({
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-400 font-medium">Opacidad de capa activa:</span>
-                <span className="font-mono font-black text-amber-400 text-xs">
+                <span className="font-mono font-black text-xs" style={{ color: theme.accentTextHex }}>
                   {Math.round(activeLayer.opacity * 100)}%
                 </span>
               </div>
@@ -455,7 +470,8 @@ export const LayersModal: React.FC<LayersModalProps> = ({
                 max="100"
                 value={Math.round(activeLayer.opacity * 100)}
                 onChange={(e) => onChangeOpacity(activeLayer.id, Number(e.target.value) / 100)}
-                className="w-full accent-amber-500 h-2 bg-[#1f202b] rounded-lg cursor-pointer"
+                style={{ accentColor: theme.accentColor }}
+                className="w-full h-2 bg-[#1f202b] rounded-lg cursor-pointer"
                 title="Ajustar opacidad de la capa activa"
               />
             </div>
@@ -476,9 +492,13 @@ export const LayersModal: React.FC<LayersModalProps> = ({
                       }}
                       className={`h-8 px-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition-all active:scale-95 shrink-0 ${
                         isCurrent
-                          ? 'bg-amber-500 text-black shadow-md shadow-amber-500/30 ring-1 ring-amber-400 font-black'
+                          ? 'text-black shadow-md font-black'
                           : 'bg-[#181923] text-gray-300 hover:text-white border border-white/5 hover:border-white/10'
                       }`}
+                      style={isCurrent ? {
+                        backgroundColor: theme.accentColor,
+                        color: '#000000',
+                      } : undefined}
                     >
                       <span className="text-xs">{b.icon}</span>
                       <span>{b.label}</span>
@@ -502,7 +522,7 @@ export const LayersModal: React.FC<LayersModalProps> = ({
           }}
           className="w-full py-3 bg-[#1c1e28] hover:bg-[#252838] text-white font-bold text-xs tracking-wider rounded-2xl transition-all border border-white/10 active:scale-98 shadow-md flex items-center justify-center gap-1.5"
         >
-          <Check size={16} className="text-amber-400 stroke-[2.5]" />
+          <Check size={16} className="stroke-[2.5]" style={{ color: theme.accentColor }} />
           <span>Listo</span>
         </button>
       </div>

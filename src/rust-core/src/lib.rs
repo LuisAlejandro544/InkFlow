@@ -6,8 +6,6 @@
  * Arquitecturas soportadas:
  * - 32-bit: wasm32, armeabi-v7a, x86
  * - 64-bit: wasm64, arm64-v8a, x86_64
- * 
- * Licencia: MIT / Apache-2.0 (Permisiva sin restricciones de código abierto obligatorio ni copyleft)
  */
 
 #[derive(Clone, Copy, Debug, PartialEq)]

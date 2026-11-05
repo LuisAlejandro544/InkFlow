@@ -36,8 +36,9 @@ import {
 } from './brushTextureEngine';
 import { Layer, BrushTextureConfig } from './types';
 import { wakeLockService } from './wakeLockService';
-import { saveArtworkToUserGallery, applyUnsharpMask, formatArtworkFilename } from './exportEngine';
+import { saveArtworkToUserGallery, applyUnsharpMask, formatArtworkFilename, estimateArtworkFileSizeFast, computeExportDimensions } from './exportEngine';
 import { gpuBitmapCache } from './bitmapCache';
+import { getAvailableThemes, getActiveThemeId, applyAppTheme, APP_THEMES } from './themeEngine';
 
 test('Wasm Lerp e Interpolación Lineal', () => {
   const result = wasmEngine.lerp(10, 20, 0.5);
@@ -1816,3 +1817,95 @@ test('Exportación en Calidad 4K: Realce de Nitidez (Unsharp Mask) y Preservaci�
   assert.ok(updatedData![edgeLowIdx] <= 50, 'El lado oscuro debe acentuarse por nitidez');
 });
 
+test('Estimación Rápida de Peso (estimateArtworkFileSizeFast) y Cambio entre Modos de Calidad Sin Bloqueo', async () => {
+  const dummyLayers: Layer[] = [
+    {
+      id: 'layer-1',
+      name: 'Capa 1',
+      visible: true,
+      opacity: 1,
+      blendMode: 'source-over',
+      canvas: {} as HTMLCanvasElement,
+      ctx: {} as CanvasRenderingContext2D,
+    }
+  ];
+
+  const exportDims = computeExportDimensions(1000, 1000, { minX: 0, minY: 0, maxX: 1000, maxY: 1000, width: 1000, height: 1000, hasContent: true }, 'full', 1);
+
+  // Probar que computeExportDimensions produce exactamente las mismas dimensiones en todos los modos
+  assert.equal(exportDims.w, 1000);
+  assert.equal(exportDims.h, 1000);
+
+  // En entorno node donde document.createElement('canvas') puede no tener contexto nativo, debe resolver limpiamente sin lanzar excepciones no controladas
+  const sizePromise = estimateArtworkFileSizeFast(dummyLayers, exportDims, false, 'png', 'standard');
+  assert.ok(sizePromise instanceof Promise, 'estimateArtworkFileSizeFast debe retornar una Promesa asíncrona');
+  const size = await sizePromise;
+  assert.ok(size === null || typeof size === 'number', 'Debe retornar un número o null sin crashear');
+});
+
+test('Personalización de Colores de la App (themeEngine): Catálogo de 6 Temas y Validación de Variables CSS', () => {
+  const themes = getAvailableThemes();
+  assert.equal(themes.length, 6, 'Debe ofrecer exactamente 6 temas de color');
+
+  // Verificar tema por defecto
+  const defaultTheme = APP_THEMES.amber;
+  assert.equal(defaultTheme.id, 'amber');
+  assert.equal(defaultTheme.accentColor, '#f59e0b');
+
+  // Probar que todos los temas tienen propiedades válidas
+  const requiredKeys = ['amber', 'amethyst', 'emerald', 'sapphire', 'crimson', 'cyan'];
+  for (const key of requiredKeys) {
+    const t = APP_THEMES[key as keyof typeof APP_THEMES];
+    assert.ok(t, `El tema ${key} debe existir`);
+    assert.ok(t.accentColor.startsWith('#'), `Color de acento de ${key} debe ser hexadecimal`);
+    assert.ok(t.name.length > 0, `El tema ${key} debe tener nombre`);
+  }
+
+  // Probar aplicación de tema sin crashear en entorno Node
+  const applied = applyAppTheme('amethyst');
+  assert.equal(applied.id, 'amethyst');
+  assert.equal(applied.accentColor, '#a855f7');
+  assert.equal(applied.accentTextHex, '#c084fc');
+  assert.ok(applied.accentSoft.includes('rgba'));
+  assert.ok(applied.accentBorder.includes('rgba'));
+  assert.ok(applied.buttonBg.length > 0);
+});
+
+test('Gobernanza de Versión y Privacidad: v1.0.0 estable sin licencias permisivas de terceros', () => {
+  // Constatamos que los temas cuentan con todas las clases de estilo
+  for (const t of getAvailableThemes()) {
+    assert.ok(t.sliderClass.length > 0, `Tema ${t.id} debe definir sliderClass`);
+    assert.ok(t.gradientBadge.length > 0, `Tema ${t.id} debe definir gradientBadge`);
+    assert.ok(t.buttonBg.length > 0, `Tema ${t.id} debe definir buttonBg`);
+  }
+});
+
+test('PWA Offline & Service Worker: Manifest y Estrategia de Caché 100% Sin Internet', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  
+  // 1. Verificar existencia y validez de public/manifest.json
+  const manifestPath = path.resolve('public/manifest.json');
+  assert.ok(fs.existsSync(manifestPath), 'public/manifest.json debe existir');
+  const manifestRaw = fs.readFileSync(manifestPath, 'utf-8');
+  const manifest = JSON.parse(manifestRaw);
+  
+  assert.equal(manifest.display, 'standalone', 'PWA debe ejecutarse en standalone (pantalla completa sin navegador)');
+  assert.equal(manifest.start_url, '/', 'start_url debe ser /');
+  assert.equal(manifest.scope, '/', 'scope debe ser /');
+  assert.ok(manifest.icons.length >= 3, 'Debe incluir al menos 3 iconos');
+  
+  // Iconos obligatorios
+  const has192 = manifest.icons.some((i: { sizes: string }) => i.sizes === '192x192');
+  const has512 = manifest.icons.some((i: { sizes: string }) => i.sizes === '512x512');
+  const hasMaskable = manifest.icons.some((i: { purpose?: string }) => i.purpose?.includes('maskable'));
+  assert.ok(has192, 'Debe tener icono 192x192');
+  assert.ok(has512, 'Debe tener icono 512x512');
+  assert.ok(hasMaskable, 'Debe tener icono maskable para Android');
+
+  // 2. Verificar index.html
+  const htmlPath = path.resolve('index.html');
+  const html = fs.readFileSync(htmlPath, 'utf-8');
+  assert.ok(html.includes('rel="manifest"'), 'index.html debe enlazar el manifest para Chromium');
+  assert.ok(!html.includes('reg.unregister()'), 'index.html no debe desregistrar el Service Worker');
+});

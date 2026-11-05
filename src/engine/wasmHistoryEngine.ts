@@ -12,8 +12,6 @@
  *    (Out-Of-Memory) ni pausas por Garbage Collector en navegadores móviles.
  * 4. Descompresión instantánea sin pérdidas (100% bit-for-bit exacto) sobre `ImageData`.
  * 5. Arquitecturas compatibles: 32-bit y 64-bit (WebAssembly wasm32, arm64-v8a, armeabi-v7a, x86_64).
- * 
- * Licencia: MIT / Apache-2.0
  */
 
 export interface WasmHistorySnapshot {

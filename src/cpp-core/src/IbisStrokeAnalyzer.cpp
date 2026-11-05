@@ -11,8 +11,6 @@
  *    - Detalles (P40)
  *    - Tramas (P10)
  * 4. Soporte para arquitecturas de 32 bits (wasm32, armeabi-v7a) y 64 bits (wasm64, arm64-v8a).
- * 
- * Licencia: MIT / Apache-2.0
  */
 
 #include "../include/IbisStrokeAnalyzer.hpp"

@@ -51,6 +51,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   ├── floodFillEngine.ts    # Scanline Flood Fill con dilatación 0-3px y Cierre de Huecos 0-10px (Gap Closing)
 │   │   ├── exportEngine.ts       # [MODULAR] Motor de guardado real en Galería (MediaStore / Web Share API) y composición
 │   │   ├── wakeLockService.ts    # [WAKELOCK] Servicio para mantener la pantalla encendida de forma continua (PWA y Android)
+│   │   ├── themeEngine.ts        # [TEMAS] Motor de personalización visual (6 paletas de acento y persistencia local)
 │   │   ├── brushTextureEngine.ts # Motor matemático de 9 texturas estilo IbisPaint y proyección en espacio de lienzo
 │   │   ├── tracingEngine.ts      # Motor de calco y stickers: Sobel Lineart, contraste, monocromo y paletas Wasm
 │   │   ├── strokeAssistant.ts    # Asistente REAL de Grosor: Visión artificial, percentiles y muestreo local
@@ -62,7 +63,7 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   │   └── brushShader.wgsl.ts # Shaders WGSL para sellos radiales y gradientes de atenuación
 │   │   ├── renderers/            # [MODULAR] Renderizadores gráficos especializados
 │   │   │   └── canvas2dRenderer.ts # Renderizado acelerado 2D de trazos, patrones continuos y composición de capas
-│   │   └── engine.test.ts        # Suite de 51 pruebas unitarias deterministas de motor, Wasm, historial, C++23 vectores y texturas
+│   │   └── engine.test.ts        # Suite de 54 pruebas unitarias deterministas de motor, Wasm, historial, C++23 vectores y texturas
 │   ├── storage/                  # Motor de Persistencia Masiva SQLite Wasm & OPFS en Web Worker
 │   │   ├── sqliteTypes.ts        # Tipos y contratos IPC de serialización relacional
 │   │   ├── sqliteStorage.worker.ts # Web Worker dedicado ejecutando @sqlite.org/sqlite-wasm sobre OPFS
@@ -89,7 +90,10 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   │   ├── StudioScreen.tsx  # Mesa de dibujo táctil orquestada a 60-120 FPS
 │   │   │   ├── GalleryScreen.tsx # Pantalla de galería y creación de nuevos lienzos
 │   │   │   ├── WelcomeScreen.tsx # Pantalla de bienvenida, catálogo de funciones pro y descarga PWA en navegador
-│   │   │   └── EngineInfoScreen.tsx # Diagnóstico técnico de WebGPU, Kotlin/Wasm, Rust, C++23 y PWA
+│   │   │   ├── EngineInfoScreen.tsx # Diagnóstico técnico de WebGPU, Kotlin/Wasm, Rust, C++23 y PWA
+│   │   │   ├── SettingsInfoScreen.tsx # Ajustes de la app e información de sistemas
+│   │   │   ├── ThemeCustomizationScreen.tsx # Sub-pantalla dedicada para cambiar colores del tema
+│   │   │   └── AppRoadmapScreen.tsx # Pantalla de planes futuros (mover trazos de vectores y herramientas)
 │   │   ├── modals/               # [MODALES] Diálogos modales y paneles táctiles desacoplados
 │   │   │   ├── LayersModal.tsx   # Gestor de capas estilo IbisPaint con importador de calco y accesorios
 │   │   │   ├── ColorPickerModal.tsx # Rueda HSV, sliders RGB y muestras de color de la foto

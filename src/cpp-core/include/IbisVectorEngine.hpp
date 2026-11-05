@@ -12,8 +12,6 @@
  * Arquitecturas soportadas:
  * - WebAssembly (wasm32 / wasm64) con SIMD128.
  * - Android NDK nativo (arm64-v8a, armeabi-v7a, x86_64, x86).
- * 
- * Licencia: MIT / Apache-2.0 (Permisiva sin restricciones copyleft).
  */
 
 #pragma once

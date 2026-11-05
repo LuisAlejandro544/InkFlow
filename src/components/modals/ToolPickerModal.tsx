@@ -15,6 +15,7 @@ import { ToolType } from '../../engine/types';
 import { TOOLS } from '../tools/toolDefinitions';
 import { BucketSettingsCard } from '../tools/BucketSettingsCard';
 import { StabilizerScratchpad } from '../tools/StabilizerScratchpad';
+import { useAppTheme } from '../../engine/themeEngine';
 
 export interface ToolPickerModalProps {
   activeTool: ToolType;
@@ -55,6 +56,7 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
   onOpenTextureModal,
   onClose,
 }) => {
+  const theme = useAppTheme();
   const [activeTab, setActiveTab] = useState<MainTab>('tools');
   const [selectedCategory, setSelectedCategory] = useState<ToolCategory>('all');
 
@@ -111,7 +113,7 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
               <X size={18} />
             </button>
             <div className="flex items-center gap-1.5">
-              <Sliders size={17} className="text-amber-400" />
+              <Sliders size={17} style={{ color: theme.accentColor }} />
               <h2 className="text-sm sm:text-base font-bold text-gray-100 tracking-tight">Estudio de Herramientas</h2>
             </div>
           </div>
@@ -123,7 +125,8 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
               onClose();
             }}
             aria-label="Listo"
-            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-sm"
+            className="px-3.5 py-1.5 rounded-xl text-black text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-sm"
+            style={{ backgroundColor: theme.accentColor }}
           >
             <Check size={14} />
             <span>Listo</span>
@@ -141,11 +144,12 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
               }}
               className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 activeTab === 'tools'
-                  ? 'bg-[#1e202b] text-amber-300 shadow-md border border-[#2d3040]'
+                  ? 'bg-[#1e202b] shadow-md border border-[#2d3040]'
                   : 'text-gray-400 hover:text-white'
               }`}
+              style={activeTab === 'tools' ? { color: theme.accentTextHex } : undefined}
             >
-              <Paintbrush size={14} className={activeTab === 'tools' ? 'text-amber-400' : 'text-gray-500'} />
+              <Paintbrush size={14} style={{ color: activeTab === 'tools' ? theme.accentColor : '#6b7280' }} />
               <span>Herramientas ({TOOLS.length})</span>
             </button>
 
@@ -157,11 +161,12 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
               }}
               className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 activeTab === 'stabilizer'
-                  ? 'bg-[#1e202b] text-amber-300 shadow-md border border-[#2d3040]'
+                  ? 'bg-[#1e202b] shadow-md border border-[#2d3040]'
                   : 'text-gray-400 hover:text-white'
               }`}
+              style={activeTab === 'stabilizer' ? { color: theme.accentTextHex } : undefined}
             >
-              <Sparkles size={14} className={activeTab === 'stabilizer' ? 'text-amber-400' : 'text-gray-500'} />
+              <Sparkles size={14} style={{ color: activeTab === 'stabilizer' ? theme.accentColor : '#6b7280' }} />
               <span>Estabilizador (Nvl {stabilizerLevel})</span>
             </button>
           </div>
@@ -182,9 +187,10 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
                   }}
                   className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all shrink-0 ${
                     selectedCategory === cat.id
-                      ? 'bg-amber-500 text-black font-bold shadow-sm'
+                      ? 'text-black font-bold shadow-sm'
                       : 'bg-[#161720] text-gray-400 hover:text-white border border-[#232532]'
                   }`}
+                  style={selectedCategory === cat.id ? { backgroundColor: theme.accentColor, color: '#000000' } : undefined}
                 >
                   {cat.label}
                 </button>
@@ -199,18 +205,28 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
                   onClose();
                   onOpenTextureModal();
                 }}
-                className="p-2.5 my-1.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-[#181a25] to-[#14151e] border border-amber-500/35 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all shadow-sm"
+                className="p-2.5 my-1.5 rounded-2xl border flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all shadow-sm"
+                style={{ 
+                  backgroundColor: theme.accentSoft,
+                  borderColor: theme.accentBorder 
+                }}
               >
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 shrink-0">
+                  <div 
+                    className="w-8 h-8 rounded-xl border flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: theme.accentSoft, borderColor: theme.accentBorder, color: theme.accentColor }}
+                  >
                     <Sparkles size={16} />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-amber-200">Texturas de Superficie Artística</div>
+                    <div className="text-xs font-bold" style={{ color: theme.accentTextHex }}>Texturas de Superficie Artística</div>
                     <div className="text-[10px] text-gray-400">Papel Acuarela, Lienzo, Trama Manga, Granulado y Carbón</div>
                   </div>
                 </div>
-                <span className="text-[10px] font-bold bg-amber-500 text-black px-2.5 py-1 rounded-xl shadow-xs shrink-0">
+                <span 
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-xl shadow-xs shrink-0 text-black"
+                  style={{ backgroundColor: theme.accentColor }}
+                >
                   Ver Texturas →
                 </span>
               </div>
@@ -231,9 +247,14 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
                     }}
                     className={`w-full p-3 rounded-2xl border text-left transition-all flex items-center gap-3.5 active:scale-[0.98] ${
                       isSelected
-                        ? 'bg-amber-500/15 border-amber-400 text-white shadow-lg ring-1 ring-amber-400/50'
+                        ? 'text-white shadow-lg'
                         : 'bg-[#161720] border-[#232532] hover:border-gray-700 text-gray-200'
                     }`}
+                    style={isSelected ? {
+                      backgroundColor: theme.accentSoft,
+                      borderColor: theme.accentColor,
+                      boxShadow: `0 0 15px ${theme.accentSoft}`
+                    } : undefined}
                   >
                     <div className={`p-2.5 rounded-xl shrink-0 ${tool.iconBg} ${tool.iconColor}`}>
                       {tool.icon}
@@ -254,7 +275,10 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
                     </div>
 
                     {isSelected && (
-                      <div className="p-1 rounded-full bg-amber-500 text-black shrink-0 shadow-md">
+                      <div 
+                        className="p-1 rounded-full text-black shrink-0 shadow-md"
+                        style={{ backgroundColor: theme.accentColor }}
+                      >
                         <Check size={14} />
                       </div>
                     )}

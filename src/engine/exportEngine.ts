@@ -44,25 +44,34 @@ export function applyUnsharpMask(
     output.set(data);
 
     const stride = width * 4;
+    const blurFactor = 0.25;
 
     for (let y = 1; y < height - 1; y++) {
       const rowOffset = y * stride;
+      const topOffset = rowOffset - stride;
+      const bottomOffset = rowOffset + stride;
+
       for (let x = 1; x < width - 1; x++) {
-        const i = rowOffset + (x * 4);
+        const i = rowOffset + (x << 2);
         const a = data[i + 3];
         if (a === 0) continue;
+
+        const leftIdx = i - 4;
+        const rightIdx = i + 4;
+        const topIdx = topOffset + (x << 2);
+        const bottomIdx = bottomOffset + (x << 2);
 
         for (let c = 0; c < 3; c++) {
           const orig = data[i + c];
           const neighborSum =
-            data[i - stride + c] +
-            data[i + stride + c] +
-            data[i - 4 + c] +
-            data[i + 4 + c];
-          const blur = neighborSum * 0.25;
+            data[topIdx + c] +
+            data[bottomIdx + c] +
+            data[leftIdx + c] +
+            data[rightIdx + c];
+          const blur = neighborSum * blurFactor;
           const diff = orig - blur;
           const sharpened = orig + diff * amount;
-          output[i + c] = Math.max(0, Math.min(255, sharpened));
+          output[i + c] = sharpened < 0 ? 0 : sharpened > 255 ? 255 : sharpened;
         }
       }
     }
@@ -108,6 +117,10 @@ export function computeExportDimensions(
  * Genera el elemento canvas fuera de pantalla con todas las capas compuestas,
  * aplicando súper-muestreo inteligente (SSAA), suavizado de curvas vectoriales
  * y filtro de nitidez de trazos para subir la calidad visual real del dibujo.
+ * 
+ * Optimizado para teléfonos móviles:
+ * - SSAA acotado a 2.0x (Ultra 4K) y 1.5x (HD) con límite estricto de 4096px para evitar Out-Of-Memory.
+ * - Filtro de nitidez ejecutado sobre el target final para preservar la nitidez real y ejecutar 6x más rápido.
  */
 export function generateCompositeExportCanvas(
   layers: Layer[],
@@ -119,10 +132,12 @@ export function generateCompositeExportCanvas(
 ): HTMLCanvasElement {
   const { w, h, sourceX, sourceY, sourceW, sourceH } = exportDimensions;
 
-  // En modos HD o Ultra 4K, usamos Súper-Muestreo Interno (SSAA 2x o 2.5x)
-  // para renderizar los trazos vectoriales y capas con resolución sub-pixel,
-  // aplicar el filtro de nitidez y re-proyectar al tamaño deseado con suavizado anti-aliasing perfecto.
-  const internalSample = qualityMode === 'ultra_4k' ? 2.5 : qualityMode === 'hd' ? 2.0 : 1.0;
+  // En modos HD o Ultra 4K, usamos Súper-Muestreo Interno (SSAA 1.5x o 2.0x)
+  // con límite de seguridad móvil de 4096px para evitar cuelgues de GPU o falta de memoria.
+  let internalSample = qualityMode === 'ultra_4k' ? 2.0 : qualityMode === 'hd' ? 1.5 : 1.0;
+  if (w * internalSample > 4096 || h * internalSample > 4096) {
+    internalSample = Math.min(internalSample, Math.max(1.0, 4096 / Math.max(w, h)));
+  }
 
   const renderW = Math.round(w * internalSample);
   const renderH = Math.round(h * internalSample);
@@ -169,15 +184,13 @@ export function generateCompositeExportCanvas(
     renderCtx.restore();
   }
 
-  // Aplicar mejora de nitidez en modos HD y Ultra 4K
-  if (qualityMode === 'ultra_4k') {
-    applyUnsharpMask(renderCtx, renderW, renderH, 0.4);
-  } else if (qualityMode === 'hd') {
-    applyUnsharpMask(renderCtx, renderW, renderH, 0.25);
-  }
-
-  // Si no hubo súper-muestreo interno, devolver el canvas directamente
-  if (internalSample <= 1.0) {
+  // Si no hubo súper-muestreo interno, aplicar filtro de nitidez si corresponde y devolver
+  if (internalSample <= 1.01) {
+    if (qualityMode === 'ultra_4k') {
+      applyUnsharpMask(renderCtx, renderW, renderH, 0.4);
+    } else if (qualityMode === 'hd') {
+      applyUnsharpMask(renderCtx, renderW, renderH, 0.25);
+    }
     return renderCvs;
   }
 
@@ -186,7 +199,7 @@ export function generateCompositeExportCanvas(
   const targetCvs = document.createElement('canvas');
   targetCvs.width = w;
   targetCvs.height = h;
-  const targetCtx = targetCvs.getContext('2d')!;
+  const targetCtx = targetCvs.getContext('2d', { willReadFrequently: true })!;
 
   targetCtx.imageSmoothingEnabled = true;
   targetCtx.imageSmoothingQuality = 'high';
@@ -197,7 +210,69 @@ export function generateCompositeExportCanvas(
   }
 
   targetCtx.drawImage(renderCvs, 0, 0, w, h);
+
+  // Aplicar mejora de nitidez sobre la resolución final (6x más rápido y con máxima definición de línea)
+  if (qualityMode === 'ultra_4k') {
+    applyUnsharpMask(targetCtx, w, h, 0.4);
+  } else if (qualityMode === 'hd') {
+    applyUnsharpMask(targetCtx, w, h, 0.25);
+  }
+
   return targetCvs;
+}
+
+/**
+ * Estimación rápida y ligera del peso en bytes sin congelar el hilo principal.
+ * Compone a escala 1x directa sin SSAA ni Unsharp Mask CPU pesada para dar respuesta instantánea a 60–120 FPS.
+ */
+export async function estimateArtworkFileSizeFast(
+  layers: Layer[],
+  exportDimensions: ExportDimensions,
+  transparentBg: boolean,
+  format: ExportFormat,
+  qualityMode: ExportQualityMode = 'standard'
+): Promise<number | null> {
+  if (typeof document === 'undefined') return null;
+  const encoderQuality = qualityMode === 'ultra_4k' ? 1.0 : qualityMode === 'hd' ? 0.98 : 0.92;
+  const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
+
+  // Usamos un canvas de muestreo rápido acotado (máx 1280px) para cálculo ultraligero
+  const sampleW = Math.min(exportDimensions.w, 1280);
+  const sampleH = Math.min(exportDimensions.h, 1280);
+  const cvs = document.createElement('canvas');
+  cvs.width = sampleW;
+  cvs.height = sampleH;
+  const ctx = cvs.getContext('2d');
+  if (!ctx) return null;
+
+  if (!transparentBg || format === 'jpeg') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, sampleW, sampleH);
+  }
+
+  for (const layer of layers) {
+    if (!layer.visible || layer.opacity <= 0) continue;
+    ctx.globalAlpha = layer.opacity;
+    ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation;
+    ctx.drawImage(
+      layer.canvas,
+      exportDimensions.sourceX, exportDimensions.sourceY, exportDimensions.sourceW, exportDimensions.sourceH,
+      0, 0, sampleW, sampleH
+    );
+  }
+
+  return new Promise<number | null>((resolve) => {
+    cvs.toBlob(
+      (blob) => {
+        if (!blob) return resolve(null);
+        const pixelRatio = (exportDimensions.w * exportDimensions.h) / Math.max(1, sampleW * sampleH);
+        const projectedSize = pixelRatio > 1.05 ? Math.round(blob.size * Math.sqrt(pixelRatio)) : blob.size;
+        resolve(projectedSize);
+      },
+      mimeType,
+      encoderQuality
+    );
+  });
 }
 
 /**

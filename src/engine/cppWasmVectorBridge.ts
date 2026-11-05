@@ -9,8 +9,6 @@
  * 4. Renderizado vectorial dinámico e independiente de la resolución:
  *    A diferencia de los pinceles basados en mapa de bits (raster), el Lápiz Vectorial se calcula
  *    en tiempo real analíticamente, garantizando CERO PIXELACIÓN al hacer zoom en teléfonos móviles.
- * 
- * Licencia: MIT / Apache-2.0
  */
 
 import { Point, BezierSegment, VectorStroke } from './types';

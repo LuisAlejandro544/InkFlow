@@ -17,6 +17,7 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <style>
       html, body {
         background-color: #121316;
@@ -58,18 +59,6 @@
         <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
       </div>
     </div>
-    <script>
-      // Desregistrar cualquier service worker obsoleto de desarrollo previo que pueda congelar la app en caché
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for (var reg of registrations) {
-            if (reg.active && reg.active.scriptURL && reg.active.scriptURL.includes('dev-dist')) {
-              reg.unregister();
-            }
-          }
-        }).catch(function() {});
-      }
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

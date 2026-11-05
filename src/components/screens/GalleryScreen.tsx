@@ -9,9 +9,11 @@
 import React, { useState } from 'react';
 import { 
   Plus, Palette, ArrowLeft, Trash2, Copy, 
-  ExternalLink, Calendar, Layers as LayersIcon, Smartphone, Square, Monitor 
+  ExternalLink, Calendar, Layers as LayersIcon, Smartphone, Square, Monitor,
+  Settings, Rocket
 } from 'lucide-react';
 import { ProjectData } from '../../engine/types';
+import { useAppTheme } from '../../engine/themeEngine';
 
 interface GalleryScreenProps {
   projects: ProjectData[];
@@ -22,6 +24,8 @@ interface GalleryScreenProps {
   onDeleteProject: (id: string) => void;
   onReturnToStudio: () => void;
   onGoToWelcome?: () => void;
+  onGoToSettings?: () => void;
+  onGoToRoadmap?: () => void;
 }
 
 const CANVAS_PRESETS = [
@@ -40,7 +44,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onDeleteProject,
   onReturnToStudio,
   onGoToWelcome,
+  onGoToSettings,
+  onGoToRoadmap,
 }) => {
+  const theme = useAppTheme();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [projectName, setProjectName] = useState('Nueva Ilustración');
   const [selectedWidth, setSelectedWidth] = useState(1080);
@@ -72,13 +79,42 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="py-2.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg active:scale-95 transition-all"
-        >
-          <Plus size={18} />
-          <span>Nuevo Lienzo</span>
-        </button>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {onGoToRoadmap && (
+            <button
+              onClick={onGoToRoadmap}
+              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-[#23252d] hover:bg-[#2c2f3a] border border-[#313440] transition-colors flex items-center gap-1.5 text-xs font-semibold active:scale-95"
+              style={{ color: theme.accentTextHex }}
+              title="Planes para la app y hoja de ruta"
+            >
+              <Rocket size={16} style={{ color: theme.accentColor }} />
+              <span className="hidden sm:inline">Planes</span>
+            </button>
+          )}
+
+          {onGoToSettings && (
+            <button
+              onClick={onGoToSettings}
+              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-[#23252d] hover:bg-[#2c2f3a] text-gray-300 hover:text-white border border-[#313440] transition-colors flex items-center gap-1.5 text-xs font-semibold active:scale-95"
+              title="Ajustes de la app e información"
+            >
+              <Settings size={16} style={{ color: theme.accentColor }} />
+              <span className="hidden sm:inline">Ajustes</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="py-2 sm:py-2.5 px-3 sm:px-4 text-black rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-lg active:scale-95 transition-all"
+            style={{ 
+              backgroundColor: theme.accentColor,
+              boxShadow: `0 4px 14px ${theme.accentSoft25}` 
+            }}
+          >
+            <Plus size={16} />
+            <span>Nuevo Lienzo</span>
+          </button>
+        </div>
       </header>
 
       {/* Contenido de la Galería */}
@@ -87,7 +123,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           <h2 className="text-base font-semibold text-gray-200">
             Ilustraciones ({projects.length})
           </h2>
-          <span className="text-xs text-amber-400 font-mono">
+          <span className="text-xs font-mono" style={{ color: theme.accentColor }}>
             Acelerado con WebGPU & Wasm
           </span>
         </div>
@@ -101,7 +137,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             </p>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="py-2.5 px-5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl text-sm inline-flex items-center gap-2 shadow-md"
+              className="py-2.5 px-5 text-black font-bold rounded-xl text-sm inline-flex items-center gap-2 shadow-md"
+              style={{ backgroundColor: theme.accentColor }}
             >
               <Plus size={18} />
               <span>Crear Lienzo</span>
@@ -115,8 +152,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 <div
                   key={proj.id}
                   className={`bg-[#18191f] border rounded-2xl overflow-hidden transition-all flex flex-col justify-between ${
-                    isCurrent ? 'border-amber-500/80 shadow-lg shadow-amber-500/10' : 'border-[#292b34] hover:border-gray-600'
+                    isCurrent ? 'shadow-lg' : 'border-[#292b34] hover:border-gray-600'
                   }`}
+                  style={isCurrent ? {
+                    borderColor: theme.accentColor,
+                    boxShadow: `0 0 15px ${theme.accentSoft}`
+                  } : undefined}
                 >
                   {/* Vista previa / Miniatura */}
                   <div 
@@ -131,12 +172,15 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       />
                     ) : (
                       <div className="text-center p-4">
-                        <Palette size={32} className="mx-auto text-amber-400/60 mb-2 group-hover:scale-110 transition-transform" />
+                        <Palette size={32} className="mx-auto mb-2 group-hover:scale-110 transition-transform" style={{ color: theme.accentColor }} />
                         <span className="text-xs text-gray-400">Toca para abrir en el estudio</span>
                       </div>
                     )}
                     {isCurrent && (
-                      <span className="absolute top-2 left-2 text-[10px] bg-amber-500 text-black font-bold px-2 py-0.5 rounded-full shadow-md">
+                      <span 
+                        className="absolute top-2 left-2 text-[10px] text-black font-bold px-2 py-0.5 rounded-full shadow-md"
+                        style={{ backgroundColor: theme.accentColor }}
+                      >
                         En edición
                       </span>
                     )}
@@ -153,7 +197,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
                     <div className="flex items-center gap-3 text-xs text-gray-400">
                       <span className="flex items-center gap-1">
-                        <LayersIcon size={13} className="text-amber-400" />
+                        <LayersIcon size={13} style={{ color: theme.accentColor }} />
                         {proj.layerCount || 1} capas
                       </span>
                       <span className="flex items-center gap-1">
@@ -166,7 +210,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                     <div className="flex items-center gap-2 pt-2 border-t border-[#292b34]">
                       <button
                         onClick={() => onOpenProject(proj)}
-                        className="flex-1 py-1.5 px-3 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                        className="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                        style={{ 
+                          backgroundColor: theme.accentSoft,
+                          color: theme.accentTextHex 
+                        }}
                       >
                         <ExternalLink size={14} />
                         <span>Abrir</span>
@@ -215,7 +263,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 type="text"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
-                className="w-full bg-[#121316] border border-[#313440] rounded-xl px-3 py-2 text-sm text-white focus:outline-hidden focus:border-amber-500"
+                style={{ accentColor: theme.accentColor }}
+                className="w-full bg-[#121316] border border-[#313440] rounded-xl px-3 py-2 text-sm text-white focus:outline-hidden"
                 placeholder="Ej: Ilustración Manga..."
               />
             </div>
@@ -234,17 +283,24 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       }}
                       className={`flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${
                         isSelected
-                          ? 'bg-amber-500/15 border-amber-500 ring-1 ring-amber-500/40'
+                          ? 'border-white/20'
                           : 'bg-[#121316] border-[#262832] hover:border-[#383a48]'
                       }`}
+                      style={isSelected ? {
+                        backgroundColor: theme.accentSoft,
+                        borderColor: theme.accentColor,
+                      } : undefined}
                     >
-                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-amber-500 text-black' : 'bg-[#23252d] text-gray-300'}`}>
+                      <div 
+                        className={`p-2 rounded-lg ${isSelected ? 'text-black' : 'bg-[#23252d] text-gray-300'}`}
+                        style={isSelected ? { backgroundColor: theme.accentColor } : undefined}
+                      >
                         {preset.icon}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-bold text-gray-200">{preset.name}</p>
-                          <span className="text-[10px] font-mono text-amber-400">{preset.width} × {preset.height}</span>
+                          <span className="text-[10px] font-mono" style={{ color: theme.accentColor }}>{preset.width} × {preset.height}</span>
                         </div>
                         <p className="text-[11px] text-gray-400">{preset.desc}</p>
                       </div>
@@ -263,7 +319,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               </button>
               <button
                 onClick={handleCreate}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-sm shadow-md transition-all active:scale-95"
+                className="flex-1 py-2.5 rounded-xl text-black font-bold text-sm shadow-md transition-all active:scale-95"
+                style={{ backgroundColor: theme.accentColor }}
               >
                 Crear y Abrir
               </button>

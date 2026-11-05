@@ -14,8 +14,6 @@
  *    - Gestión automática del ciclo de vida (pausa al minimizar para proteger la batería).
  * 3. Enlace Javascript (@JavascriptInterface) bidireccional con la PWA móvil:
  *    - Permite a la PWA invocar estas capacidades nativas en 1 milisegundo.
- * 
- * Licencia: Apache-2.0 / MIT (Permisiva)
  */
 
 package com.inkflow.studio.platform

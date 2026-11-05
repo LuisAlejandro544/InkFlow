@@ -8,6 +8,9 @@ export * from './screens/StudioScreen';
 export * from './screens/GalleryScreen';
 export * from './screens/WelcomeScreen';
 export * from './screens/EngineInfoScreen';
+export * from './screens/SettingsInfoScreen';
+export * from './screens/ThemeCustomizationScreen';
+export * from './screens/AppRoadmapScreen';
 
 // Diálogos modales
 export * from './modals/LayersModal';

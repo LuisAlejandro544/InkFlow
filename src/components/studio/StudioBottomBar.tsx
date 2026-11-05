@@ -4,9 +4,9 @@
  * 
  * Contiene:
  * - Asistente inteligente de grosor de trazo (StrokeGuideAssistant) si está activo.
- * - Deslizadores táctiles amplios de Grosor (1-100px) y Opacidad (1-100%) para el pulgar.
+ * - Deslizadores táctiles amplios de Grosor (1-100px) y Opacidad (1-100%) para el pulgar con color adaptativo al tema.
  * - Dock táctil de 5 columnas balanceadas (cero truncamiento):
- *   1. Alternador Pincel / Vector / Goma
+ *   1. Alternador Pincel / Vector / Goma con acento reactivo
  *   2. Catálogo de Pinceles
  *   3. Modo Mover Lienzo (Hand)
  *   4. Indicador y Selector de Color
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Layer, ToolType, TracingReference, BrushTextureConfig } from '../../engine/types';
 import { StrokeGuideAssistant } from '../StrokeGuideAssistant';
+import { useAppTheme, AppThemeConfig } from '../../engine/themeEngine';
 
 export interface StudioBottomBarProps {
   activeTool: ToolType;
@@ -48,22 +49,29 @@ export interface StudioBottomBarProps {
 }
 
 /**
- * Retorna el icono, etiqueta legible y estilos temáticos para cada herramienta de dibujo.
+ * Retorna el icono, etiqueta legible y estilos temáticos para cada herramienta de dibujo,
+ * adaptándose al tema activo seleccionado por el usuario.
  */
-function getToolVisualInfo(tool: ToolType) {
+function getToolVisualInfo(tool: ToolType, theme: AppThemeConfig) {
   switch (tool) {
     case 'vector_pencil':
       return {
         name: 'Vector',
-        icon: <PenTool size={18} className="text-amber-300" />,
-        colorClass: 'bg-amber-500/15 border-amber-400/70 text-amber-300',
-        activeColor: 'text-amber-300',
+        icon: <PenTool size={18} style={{ color: theme.accentTextHex }} />,
+        colorClass: '',
+        customStyle: { 
+          backgroundColor: theme.accentSoft, 
+          borderColor: theme.accentBorder, 
+          color: theme.accentTextHex 
+        },
+        activeColor: theme.accentTextHex,
       };
     case 'eraser':
       return {
         name: 'Goma',
         icon: <Eraser size={18} className="text-red-300" />,
         colorClass: 'bg-red-950/40 border-red-500/60 text-red-300',
+        customStyle: undefined,
         activeColor: 'text-red-300',
       };
     case 'bucket':
@@ -71,6 +79,7 @@ function getToolVisualInfo(tool: ToolType) {
         name: 'Bote',
         icon: <PaintBucket size={18} className="text-indigo-300" />,
         colorClass: 'bg-indigo-500/20 border-indigo-400/70 text-indigo-300',
+        customStyle: undefined,
         activeColor: 'text-indigo-300',
       };
     case 'eyedropper':
@@ -78,6 +87,7 @@ function getToolVisualInfo(tool: ToolType) {
         name: 'Gotero',
         icon: <Pipette size={18} className="text-cyan-300" />,
         colorClass: 'bg-cyan-500/20 border-cyan-400/70 text-cyan-300',
+        customStyle: undefined,
         activeColor: 'text-cyan-300',
       };
     case 'airbrush':
@@ -85,6 +95,7 @@ function getToolVisualInfo(tool: ToolType) {
         name: 'Spray',
         icon: <SprayCan size={18} className="text-purple-300" />,
         colorClass: 'bg-purple-500/20 border-purple-400/70 text-purple-300',
+        customStyle: undefined,
         activeColor: 'text-purple-300',
       };
     case 'pencil':
@@ -92,6 +103,7 @@ function getToolVisualInfo(tool: ToolType) {
         name: 'Lápiz',
         icon: <Feather size={18} className="text-slate-300" />,
         colorClass: 'bg-slate-500/20 border-slate-400/70 text-slate-300',
+        customStyle: undefined,
         activeColor: 'text-slate-300',
       };
     case 'marker':
@@ -99,15 +111,21 @@ function getToolVisualInfo(tool: ToolType) {
         name: 'Marcador',
         icon: <Highlighter size={18} className="text-emerald-300" />,
         colorClass: 'bg-emerald-500/20 border-emerald-400/70 text-emerald-300',
+        customStyle: undefined,
         activeColor: 'text-emerald-300',
       };
     case 'brush':
     default:
       return {
         name: 'Pincel',
-        icon: <Paintbrush size={18} className="text-amber-400" />,
-        colorClass: 'bg-amber-500/10 border-amber-500/40 text-amber-400',
-        activeColor: 'text-amber-400',
+        icon: <Paintbrush size={18} style={{ color: theme.accentColor }} />,
+        colorClass: '',
+        customStyle: { 
+          backgroundColor: theme.accentSoft, 
+          borderColor: theme.accentBorder, 
+          color: theme.accentTextHex 
+        },
+        activeColor: theme.accentTextHex,
       };
   }
 }
@@ -136,36 +154,41 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
   setShowOpacityPreview,
   triggerHaptic,
 }) => {
+  const theme = useAppTheme();
+
   // Herramienta visual a representar en el Botón 1:
   // Si estamos en modo 'hand' (Moviendo), mostramos la herramienta previa para saber exactamente qué reanudará
   const displayTool: ToolType = activeTool === 'hand'
     ? (lastDrawingTool && lastDrawingTool !== 'hand' ? lastDrawingTool : 'brush')
     : activeTool;
 
-  const toolVisual = getToolVisualInfo(displayTool);
+  const toolVisual = getToolVisualInfo(displayTool, theme);
 
   return (
-    <footer className="bg-[#13141a] border-t border-[#22242e] flex flex-col z-30 shrink-0 shadow-2xl pb-[max(0.35rem,env(safe-area-inset-bottom))]">
-      {/* Asistente Inteligente de Grosor de Trazo (Opcional y Calibrado por Imagen) */}
+    <footer 
+      role="contentinfo" 
+      aria-label="Barra de herramientas inferior" 
+      className="fixed bottom-0 left-0 right-0 z-30 bg-[#12131b]/95 backdrop-blur-md border-t border-[#222432] pb-[env(safe-area-inset-bottom)] select-none transition-colors"
+    >
+      {/* Asistente Inteligente de Grosor de Trazo (Si está activo) */}
       {showStrokeGuide && (
         <StrokeGuideAssistant
           currentBrushSize={brushSize}
           hasTracingPhoto={!!tracingRef}
-          imageAnalysis={tracingRef?.strokeAnalysis}
-          onSelectSize={(size) => {
-            triggerHaptic(8);
-            onChangeBrushSize(size);
-          }}
+          onSelectSize={onChangeBrushSize}
           onClose={onCloseStrokeGuide}
         />
       )}
 
-      {/* Nivel Superior: Deslizadores Ergonómicos de Grosor y Opacidad */}
+      {/* Nivel Superior: Deslizadores Ergonómicos de Grosor y Opacidad (100% Adaptados al Tema) */}
       <div className="px-3 py-2 border-b border-[#1c1d28] bg-[#0d0e14]/95 flex flex-col gap-2 max-w-lg mx-auto w-full">
         {/* Fila 1: Grosor de Trazo */}
         <div className="flex items-center gap-2.5 w-full">
           <div className="flex items-center gap-1.5 w-16 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 shadow-xs" />
+            <span 
+              className="w-2 h-2 rounded-full shrink-0 shadow-xs" 
+              style={{ backgroundColor: theme.accentColor }}
+            />
             <span className="text-[10px] text-gray-300 font-bold tracking-wider uppercase">Grosor</span>
           </div>
           <input
@@ -178,9 +201,13 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             onTouchStart={() => setShowSizePreview(true)}
             onTouchEnd={() => setShowSizePreview(false)}
             onChange={(e) => onChangeBrushSize(Number(e.target.value))}
-            className="flex-1 accent-amber-500 h-2 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
+            style={{ accentColor: theme.accentColor }}
+            className="flex-1 h-2 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
           />
-          <span className="text-[11px] font-mono font-bold text-amber-300 bg-[#161722] border border-[#262836] px-2 py-0.5 rounded-md min-w-[44px] text-center shrink-0">
+          <span 
+            className="text-[11px] font-mono font-bold bg-[#161722] border border-[#262836] px-2 py-0.5 rounded-md min-w-[44px] text-center shrink-0"
+            style={{ color: theme.accentTextHex }}
+          >
             {brushSize}px
           </span>
         </div>
@@ -188,7 +215,10 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
         {/* Fila 2: Opacidad de Trazo */}
         <div className="flex items-center gap-2.5 w-full">
           <div className="flex items-center gap-1.5 w-16 shrink-0">
-            <span className="w-2 h-2 rounded-full border border-amber-400/80 shrink-0" />
+            <span 
+              className="w-2 h-2 rounded-full border shrink-0" 
+              style={{ borderColor: theme.accentColor }}
+            />
             <span className="text-[10px] text-gray-300 font-bold tracking-wider uppercase">Opacidad</span>
           </div>
           <input
@@ -201,9 +231,13 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             onTouchStart={() => setShowOpacityPreview(true)}
             onTouchEnd={() => setShowOpacityPreview(false)}
             onChange={(e) => onChangeBrushOpacity(Number(e.target.value) / 100)}
-            className="flex-1 accent-amber-500 h-2 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
+            style={{ accentColor: theme.accentColor }}
+            className="flex-1 h-2 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
           />
-          <span className="text-[11px] font-mono font-bold text-amber-300 bg-[#161722] border border-[#262836] px-2 py-0.5 rounded-md min-w-[44px] text-center shrink-0">
+          <span 
+            className="text-[11px] font-mono font-bold bg-[#161722] border border-[#262836] px-2 py-0.5 rounded-md min-w-[44px] text-center shrink-0"
+            style={{ color: theme.accentTextHex }}
+          >
             {Math.round(brushOpacity * 100)}%
           </span>
         </div>
@@ -213,11 +247,18 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
           <div className="flex items-center justify-between pt-1 border-t border-[#1a1c26] w-full">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Textura:</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border truncate ${
-                brushTexture && brushTexture.id !== 'none'
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  : 'bg-[#161722] text-gray-400 border-[#262836]'
-              }`}>
+              <span 
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-md border truncate ${
+                  brushTexture && brushTexture.id !== 'none'
+                    ? ''
+                    : 'bg-[#161722] text-gray-400 border-[#262836]'
+                }`}
+                style={brushTexture && brushTexture.id !== 'none' ? {
+                  backgroundColor: theme.accentSoft,
+                  color: theme.accentTextHex,
+                  borderColor: theme.accentBorder,
+                } : undefined}
+              >
                 {brushTexture?.name || 'Lisa'}
               </span>
             </div>
@@ -231,7 +272,7 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
               className="px-2.5 py-1 rounded-lg bg-[#181924] hover:bg-[#222434] border border-[#27293a] text-gray-200 text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
               title="Abrir catálogo de texturas de pincel"
             >
-              <Sparkles size={11} className="text-amber-400" />
+              <Sparkles size={11} style={{ color: theme.accentColor }} />
               <span>Texturas</span>
             </button>
           </div>
@@ -240,13 +281,12 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
 
       {/* Nivel Inferior: Dock de Herramientas Estilo Nativo IbisPaint */}
       <div className="h-14 px-2 grid grid-cols-5 gap-1.5 max-w-lg mx-auto w-full items-center">
-        {/* 1. Herramienta Principal de Trazo / Borrador (Muestra siempre el icono y nombre real de la herramienta activa) */}
+        {/* 1. Herramienta Principal de Trazo / Borrador */}
         <button
           type="button"
           onClick={() => {
             triggerHaptic(10);
             if (activeTool === 'hand') {
-              // Si estaba en modo mover, volver directamente a la herramienta activa previa
               const target = lastDrawingTool && lastDrawingTool !== 'hand' ? lastDrawingTool : 'brush';
               onSelectTool(target);
             } else {
@@ -259,6 +299,7 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
               ? 'bg-[#171821] border-[#2c2e3e] text-gray-400 opacity-90'
               : toolVisual.colorClass
           }`}
+          style={activeTool !== 'hand' && toolVisual.customStyle ? toolVisual.customStyle : undefined}
           title={activeTool === 'hand' ? `Reanudar ${toolVisual.name}` : `Alternar ${toolVisual.name} / Goma`}
         >
           {toolVisual.icon}
@@ -299,9 +340,14 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
           aria-label="Alternar modo mover lienzo"
           className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             activeTool === 'hand'
-              ? 'bg-amber-500/25 border-amber-400 text-amber-300 shadow-sm'
+              ? 'shadow-sm'
               : 'bg-[#171821] border-[#242634] text-gray-300 hover:text-white'
           }`}
+          style={activeTool === 'hand' ? {
+            backgroundColor: theme.accentSoft25,
+            borderColor: theme.accentColor,
+            color: theme.accentTextHex,
+          } : undefined}
           title="Mover con 1 dedo"
         >
           {activeTool === 'hand' ? <Hand size={18} /> : <Move size={18} />}
@@ -342,8 +388,11 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
           title="Capas del Lienzo"
         >
           <div className="relative">
-            <LayersIcon size={18} className="text-amber-400" />
-            <span className="absolute -top-1 -right-2 text-[8px] font-bold font-mono bg-amber-500 text-black px-1 rounded-full">
+            <LayersIcon size={18} style={{ color: theme.accentColor }} />
+            <span 
+              className="absolute -top-1 -right-2 text-[8px] font-bold font-mono px-1 rounded-full text-black shadow-xs"
+              style={{ backgroundColor: theme.accentColor }}
+            >
               {layers.length}
             </span>
           </div>

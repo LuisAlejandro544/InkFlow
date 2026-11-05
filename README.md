@@ -1,8 +1,8 @@
-# InkFlow Studio (PWA Nativa con C++23, Rust & Kotlin/Android)
+# InkFlow Studio v1.0.0 estable (PWA Nativa con C++23, Rust & Kotlin/Android)
 
 Aplicación de dibujo e ilustración digital profesional para dispositivos móviles. Diseñada y construida **exclusivamente como una Aplicación Web Progresiva (PWA Nativa)**, con renderizado acelerado por **WebGPU (WGSL)**, motor vectorial analítico en **C++23 (WebAssembly)**, núcleo de bajo nivel en **Rust (Wasm)**, persistencia masiva en **SQLite Wasm (OPFS)** y arquitectura móvil extensible con **Kotlin**.
 
-> ⚠️ **Nota de Arquitectura:** Esta aplicación es **100% PWA**. No requiere empaquetado en APK ni descargas desde tiendas de aplicaciones. Se instala directamente desde cualquier navegador móvil moderno a la pantalla de inicio del teléfono, ejecutándose en modo *standalone* a pantalla completa con soporte offline. Desplegable como sitio estático sin costes de backend en **Cloudflare Pages** mediante **GitHub Actions** manual.
+> ⚠️ **Nota de Arquitectura:** Esta aplicación es **100% PWA** y versión `v1.0.0 estable`. No requiere empaquetado en APK ni descargas desde tiendas de aplicaciones. Se instala directamente desde cualquier navegador móvil moderno a la pantalla de inicio del teléfono, ejecutándose en modo *standalone* a pantalla completa con soporte offline. Desplegable como sitio estático sin costes de backend en **Cloudflare Pages** mediante **GitHub Actions** manual.
 
 ---
 
@@ -12,7 +12,6 @@ Aplicación de dibujo e ilustración digital profesional para dispositivos móvi
   - Ubicado en `src/cpp-core/` (`IbisVectorEngine.hpp/cpp` e `IbisStrokeAnalyzer.hpp/cpp`) con especificación C++23 estricta, conceptos (`std::concepts`), vistas contiguas `std::span` y compatibilidad nativa y WebAssembly (`wasm32` con SIMD128, y arquitecturas móviles de 32 y 64 bits: `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`).
   - **Lápiz Vectorial sin Garbage Collector:** Algoritmo Douglas-Peucker en memoria continua y ajuste continuo Catmull-Rom a Bézier cúbica con continuidad C1.
   - **Cero píxeles al hacer zoom:** A diferencia de los pinceles de mapa de bits (raster), el trazo vectorial se evalúa analíticamente a cualquier escala (100%, 200%, 400%, etc.), manteniendo bordes nítidos y vectoriales sin pixelación ni pausas de recolección de basura.
-  - Licencia permisiva MIT / Apache-2.0 sin restricciones copyleft ni requerimientos de código abierto forzoso.
 - **🤖 Kotlin: Puente Nativo Android (Galería Real MediaStore & WakeLock) y Orquestación con `kotlinx.coroutines`:**
   - Código fuente en `src/kotlin-core/AndroidPlatformBridge.kt`, `src/kotlin-core/CoroutineOrchestrator.kt` y `src/engine/coroutinesBridge.ts`:
     1. **Concurrencia Estructurada con `kotlinx.coroutines` (`InkFlowCoroutineOrchestrator` & `StudioTaskScope`):** Orquestación reactiva de tareas de fondo en `Dispatchers.Default` / `Dispatchers.IO` / Wasm `Dispatchers.Main` con SupervisorJob para aislar errores.
@@ -126,6 +125,23 @@ Aplicación de dibujo e ilustración digital profesional para dispositivos móvi
   - **Indicador de Peso Exacto:** Muestra el peso proyectado del archivo resultante en B, KB o MB según el formato, escala y recorte seleccionado.
   - Formatos PNG (con canal alfa transparente o fondo blanco), JPEG y WebP en escalas 1x, 2x (HD) y 3x (Ultra).
   - Guardado directo en la galería del teléfono mediante la *Web Share API* nativa o descarga directa.
+- **⚙️ Apartado "Ajustes de la App e Información" (`SettingsInfoScreen`):**
+  - Pantalla dedicada para configuración de preferencias hápticas, WakeLock de pantalla siempre encendida, diagnóstico de motores y especificaciones de versión.
+- **🎨 Sub-Pantalla Dedicada para Cambiar el Color de la App (`ThemeCustomizationScreen`):**
+  - Sección independiente accesible desde los Ajustes para alternar entre 6 paletas de acento visual:
+    1. **Ámbar Estudio (Por Defecto):** Dorado clásico de estudio `#f59e0b`.
+    2. **Amatista Creativo:** Púrpura conceptual `#a855f7`.
+    3. **Esmeralda Manga:** Verde ilustrador `#10b981`.
+    4. **Zafiro Digital:** Azul noche de alta tecnología `#3b82f6`.
+    5. **Carmesí Dinámico:** Rojo rubí intenso `#ef4444`.
+    6. **Cian Neón Cyber:** Cian brillante `#06b6d4`.
+  - Preview en vivo de botones y acentos con persistencia en `localStorage`.
+- **🚀 Apartado "Planes para la App" (`AppRoadmapScreen`):**
+  - Hoja de ruta oficial que detalla la próxima evolución de la **Herramienta de Vectores (Lápiz Vectorial Analítico)**:
+    - *Mover y transformar trazos individuales:* Mover cualquier línea dibujada con el dedo, rotarla o cambiar su escala sin pixelación.
+    - *Edición de nodos y tiradores Bézier:* Visualización y ajuste interactivo de puntos de anclaje de curvas en C++23.
+    - *Cambio de color y grosor no destructivo:* Modificar el color o calibre de una línea tiempo después de dibujarla.
+    - *Lazo de selección vectorial y reubicación de capas:* Reubicar facciones enteras (ojos, cejas, pelo) en bloque.
 
 ---
 
@@ -163,9 +179,9 @@ Abre `http://localhost:3000` en tu teléfono móvil y pulsa el botón **"Instala
 
 ## 🧪 Pruebas Unitarias de Lógica
 
-El proyecto cuenta con **59 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
+El proyecto cuenta con **71 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
 
-### Suite 1: Motor Gráfico, C++23 Vectores, Calco, Wasm, Historial, Caché GPU, Expansión, Huecos, Accesorios, Texturas, Corrutinas & Kotlin / PWA (54 tests)
+### Suite 1: Motor Gráfico, C++23 Vectores, Calco, Wasm, Historial, Caché GPU, Expansión, Huecos, Accesorios, Texturas, Corrutinas, Temas & Kotlin / PWA (64 tests)
 1. Interpolación lineal y cálculo euclidiano Wasm.
 2. Estabilizador exponencial anti-temblor S-Form.
 3. Simulación de curva de presión táctil por velocidad.
@@ -220,16 +236,28 @@ El proyecto cuenta con **59 pruebas unitarias automatizadas deterministas** con 
 52. Kotlin / PWA Integración: Guardado Real en Galería (MediaStore) y WakeLock de Pantalla Encendida.
 53. `kotlinx.coroutines`: Centinela de Auto-Guardado no bloqueante y cancelación estructurada con `Job.cancel()`.
 54. `kotlinx.coroutines`: Conflación de eventos táctiles (`Channel.CONFLATED`) a 240Hz y gestión en `StudioTaskScope`.
+55. Rotación de Calco y Accesorios: Continuidad Angular y Prevención de Reseteo a 0°.
+56. Bote de Pintura: Relleno exclusivo de un trazo sin desbordarse al lienzo vacío.
+57. Bote de Pintura: Contención de trazo abierto en colisión con otro trazo.
+58. Caché VRAM en GPU: Bloqueo de deduplicación contra decodificaciones paralelas y límites móviles.
+59. Exportación en Calidad 4K: Realce de nitidez (Unsharp Mask) y preservación de dimensiones.
+60. Estimación Rápida de Peso (`estimateArtworkFileSizeFast`) y cambio de modos sin bloqueo.
+61. Catálogo de 6 Temas de Color de la App (`themeEngine`) y persistencia local.
+62. Invarianza cromática y validación de variables CSS de acento.
+63. Integridad de esquemas de tema y claves hexadecimales válidas.
+64. Desacoplamiento de sub-pantallas de Ajustes, Personalización y Planes futuros.
 
-### Suite 2: Persistencia Masiva SQLite Wasm sobre OPFS (5 tests)
-55. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
-56. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
-57. Transacción ACID completa de proyectos con capas y orden z.
-58. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
-59. Eliminación limpia en cascada sin fugas de almacenamiento.
+### Suite 2: Persistencia Masiva SQLite Wasm sobre OPFS (7 tests)
+65. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
+66. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
+67. Transacción ACID completa de proyectos con capas y orden z.
+68. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
+69. Eliminación limpia en cascada sin fugas de almacenamiento.
+70. Persistencia y recuperación exacta de la foto de calco con su rotación angular y escala.
+71. Crash Recovery de calco: Rescate y restauración de rotación angular tras fallo del navegador.
 
 ```bash
-# Ejecutar todas las pruebas deterministas (59 tests)
+# Ejecutar todas las pruebas deterministas (71 tests)
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 ```
 
@@ -254,6 +282,7 @@ El repositorio incluye un workflow en `.github/workflows/deploy.yml` configurado
 
 ---
 
-## 📄 Licencia
+## 📌 Versión y Propiedad
 
-MIT / Apache-2.0. Permisiva y apta para uso comercial y personal sin restricciones de copyleft ni código abierto obligatorio.
+**Versión:** `v1.0.0 estable`  
+**Código del proyecto:** Software privado y propietario del autor. Diseñado y optimizado exclusivamente para uso personal y móvil sin dependencias que fuercen la apertura obligatoria del código fuente.

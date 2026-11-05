@@ -17,6 +17,9 @@ import { ToolType, BrushTextureConfig, DEFAULT_BRUSH_TEXTURE } from './engine/ty
 import { StudioScreen } from './components/screens/StudioScreen';
 import { GalleryScreen } from './components/screens/GalleryScreen';
 import { EngineInfoScreen } from './components/screens/EngineInfoScreen';
+import { SettingsInfoScreen } from './components/screens/SettingsInfoScreen';
+import { ThemeCustomizationScreen } from './components/screens/ThemeCustomizationScreen';
+import { AppRoadmapScreen } from './components/screens/AppRoadmapScreen';
 import { LayersModal } from './components/modals/LayersModal';
 import { ColorPickerModal } from './components/modals/ColorPickerModal';
 import { ToolPickerModal } from './components/modals/ToolPickerModal';
@@ -25,6 +28,7 @@ import { ExportModal } from './components/modals/ExportModal';
 import { CanvasResizeModal } from './components/modals/CanvasResizeModal';
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { detectIsStandalone, detectIsDevOrPreview, shouldShowWelcomeScreen } from './engine/environmentDetector';
+import { initializeAppTheme } from './engine/themeEngine';
 import { useLayerManager } from './hooks/useLayerManager';
 import { useDrawingHistory } from './hooks/useDrawingHistory';
 import { useTracingManager } from './hooks/useTracingManager';
@@ -33,10 +37,18 @@ import { useCanvasResizeHandler } from './hooks/useCanvasResizeHandler';
 import { useAccessoryStamper } from './hooks/useAccessoryStamper';
 import { useStudioModals } from './hooks/useStudioModals';
 import { sqliteStorageService } from './storage/sqliteStorageService';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 
 export default function App() {
-  // Pantalla activa: 'welcome' | 'studio' | 'gallery' | 'engine'
-  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'studio' | 'gallery' | 'engine'>(() => {
+  const isOnline = useOnlineStatus();
+
+  // Inicializar tema visual de la app
+  useEffect(() => {
+    initializeAppTheme();
+  }, []);
+
+  // Pantalla activa: 'welcome' | 'studio' | 'gallery' | 'engine' | 'settings' | 'theme' | 'roadmap'
+  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'studio' | 'gallery' | 'engine' | 'settings' | 'theme' | 'roadmap'>(() => {
     if (typeof window === 'undefined') return 'studio';
 
     // 1. Detectar si corre en modo standalone (PWA instalada en pantalla de inicio del teléfono)
@@ -320,6 +332,8 @@ export default function App() {
           onOpenTextureModal={() => setIsTextureModalOpen(true)}
           onOpenExportModal={() => setIsExportModalOpen(true)}
           onOpenCanvasResizeModal={() => setIsCanvasResizeModalOpen(true)}
+          onOpenSettings={() => setCurrentScreen('settings')}
+          onOpenRoadmap={() => setCurrentScreen('roadmap')}
           onGoToGallery={() => setCurrentScreen('gallery')}
           onGoToEngine={() => setCurrentScreen('engine')}
           onUpdateProjectThumbnail={(thumb) => handleUpdateProjectThumbnail(thumb, layers)}
@@ -345,6 +359,8 @@ export default function App() {
           onDuplicateProject={handleDuplicateProject}
           onDeleteProject={handleDeleteProject}
           onReturnToStudio={() => setCurrentScreen('studio')}
+          onGoToSettings={() => setCurrentScreen('settings')}
+          onGoToRoadmap={() => setCurrentScreen('roadmap')}
         />
       )}
 
@@ -352,6 +368,32 @@ export default function App() {
       {currentScreen === 'engine' && (
         <EngineInfoScreen
           onReturnToStudio={() => setCurrentScreen('studio')}
+        />
+      )}
+
+      {/* Pantalla 4: Ajustes de la App e Información */}
+      {currentScreen === 'settings' && (
+        <SettingsInfoScreen
+          onReturnToStudio={() => setCurrentScreen('studio')}
+          onGoToThemeCustomization={() => setCurrentScreen('theme')}
+          onGoToRoadmap={() => setCurrentScreen('roadmap')}
+          onGoToEngine={() => setCurrentScreen('engine')}
+          onGoToGallery={() => setCurrentScreen('gallery')}
+        />
+      )}
+
+      {/* Pantalla 5: Personalización de Color y Estilo */}
+      {currentScreen === 'theme' && (
+        <ThemeCustomizationScreen
+          onReturnToSettings={() => setCurrentScreen('settings')}
+        />
+      )}
+
+      {/* Pantalla 6: Planes para la App (Hoja de Ruta y Mover Trazos de Vectores) */}
+      {currentScreen === 'roadmap' && (
+        <AppRoadmapScreen
+          onReturnToPrevious={() => setCurrentScreen('settings')}
+          onGoToStudio={() => setCurrentScreen('studio')}
         />
       )}
 
@@ -437,6 +479,18 @@ export default function App() {
           onApplyResize={handleApplyCanvasResize}
           onClose={() => setIsCanvasResizeModalOpen(false)}
         />
+      )}
+
+      {/* Indicador Ergonómico de Estado Offline: Garantiza al usuario que su app funciona 100% sin internet */}
+      {!isOnline && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#14151e]/95 border border-emerald-500/60 text-emerald-300 text-[11px] font-bold px-3 py-1.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-1.5 pointer-events-none animate-in fade-in slide-in-from-top-2"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span>Modo 100% Offline • Todo se guarda en tu teléfono</span>
+        </aside>
       )}
     </div>
   );

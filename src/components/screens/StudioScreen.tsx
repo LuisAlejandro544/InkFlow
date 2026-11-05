@@ -85,6 +85,8 @@ interface StudioScreenProps {
   onChangeBucketGapClosing?: (gap: number) => void;
   brushTexture?: BrushTextureConfig;
   onOpenTextureModal?: () => void;
+  onOpenSettings?: () => void;
+  onOpenRoadmap?: () => void;
 }
 
 export const StudioScreen: React.FC<StudioScreenProps> = ({
@@ -140,6 +142,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onTriggerImportPhoto,
   onTriggerImportAccessory,
   onStampAccessory,
+  onOpenSettings,
+  onOpenRoadmap,
 }) => {
   const tracingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const displayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -423,8 +427,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         tracingRef={tracingRef}
         stabilizerLevel={stabilizerLevel}
         showStrokeGuide={showStrokeGuide}
-        crashRecovery={crashRecovery}
-        onGoToGallery={onGoToGallery}
+        crashRecovery={crashRecovery ?? null}
+        onReturnToGallery={onGoToGallery}
         onUndo={onUndo}
         onRedo={onRedo}
         onToggleFitOr100={toggleFitOr100}
@@ -436,8 +440,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         onToggleStrokeGuide={() => setShowStrokeGuide(!showStrokeGuide)}
         onResetRotation={resetRotation}
         onOpenCanvasResizeModal={onOpenCanvasResizeModal}
-        onGoToEngine={onGoToEngine}
-        onGoToWelcome={onGoToWelcome}
+        onOpenSettings={onOpenSettings}
+        onOpenRoadmap={onOpenRoadmap}
         onOpenExportModal={onOpenExportModal}
         onRestoreCrash={onRestoreCrash}
         onDismissCrash={onDismissCrash}

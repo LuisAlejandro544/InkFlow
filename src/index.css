@@ -1,1 +1,59 @@
 @import "tailwindcss";
+
+:root {
+  --color-app-accent: #f59e0b;
+  --color-app-accent-hover: #d97706;
+  --color-app-accent-soft: rgba(245, 158, 11, 0.15);
+  --color-app-accent-soft25: rgba(245, 158, 11, 0.25);
+  --color-app-accent-border: rgba(245, 158, 11, 0.50);
+  --color-app-accent-text: #fbbf24;
+  --app-accent: #f59e0b;
+  --app-accent-hover: #d97706;
+  --app-accent-soft: rgba(245, 158, 11, 0.15);
+  --app-accent-soft25: rgba(245, 158, 11, 0.25);
+  --app-accent-border: rgba(245, 158, 11, 0.50);
+  --app-accent-text: #fbbf24;
+}
+
+/* Clases utilitarias globales de tema reactivo para toda la aplicación */
+.theme-accent-bg {
+  background-color: var(--app-accent) !important;
+}
+
+.theme-accent-text {
+  color: var(--app-accent-text) !important;
+}
+
+.theme-accent-color {
+  color: var(--app-accent) !important;
+}
+
+.theme-accent-border {
+  border-color: var(--app-accent) !important;
+}
+
+.theme-accent-border-soft {
+  border-color: var(--app-accent-border) !important;
+}
+
+.theme-accent-soft-bg {
+  background-color: var(--app-accent-soft) !important;
+}
+
+.theme-accent-soft25-bg {
+  background-color: var(--app-accent-soft25) !important;
+}
+
+.theme-accent-slider {
+  accent-color: var(--app-accent) !important;
+}
+
+/* Ocultar barra de scroll para barras de herramientas deslizables con el dedo */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}

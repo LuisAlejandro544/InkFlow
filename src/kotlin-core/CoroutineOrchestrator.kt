@@ -14,8 +14,6 @@
  *      del lápiz táctil a 120Hz-240Hz, reteniendo siempre la última muestra sin saturar la cola.
  * 4. Trabajador de Exportación Cancelable (`CancellableExportWorker`):
  *    - Despacha codificación de imágenes y serialización `.inkflow` en un `Job` cancelable en 1ms.
- * 
- * Licencia: Apache-2.0 / MIT (Permisiva)
  */
 
 package com.inkflow.studio.concurrency

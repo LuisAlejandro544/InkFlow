@@ -9,8 +9,6 @@
  * 1. Comunicación con el puente nativo de Kotlin (`window.InkFlowNativeBridge?.setScreenKeepAlive`).
  * 2. Soporte nativo PWA mediante `navigator.wakeLock.request('screen')`.
  * 3. Auto-reactivación al volver a la app tras un cambio de visibilidad (`visibilitychange`).
- * 
- * Licencia: MIT / Apache-2.0
  */
 
 declare global {

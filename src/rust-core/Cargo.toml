@@ -3,7 +3,6 @@ name = "inkflow_rust_core"
 version = "1.0.0"
 edition = "2021"
 description = "Motor de bajo nivel en Rust compilable a WebAssembly para InkFlow Studio"
-license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

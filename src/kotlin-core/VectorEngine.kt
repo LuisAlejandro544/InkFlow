@@ -13,7 +13,6 @@
  * 
  * Arquitectura de compilación PWA:
  * Target: wasmJs (WebAssembly with Wasm-GC)
- * Licencia: Apache-2.0 / MIT (Permisiva)
  */
 
 package com.ibispaint.webgpu.vector

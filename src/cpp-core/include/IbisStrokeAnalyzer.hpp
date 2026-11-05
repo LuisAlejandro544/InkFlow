@@ -10,8 +10,6 @@
  * 1. Análisis de distribución de grosor de trazo en imágenes de referencia (Line Thickness Profiling).
  * 2. Transformada de Distancia Euclidiana (EDT) para muestreo submétrico de contornos.
  * 3. Detección automática de los 4 roles de peso de línea (Silueta, Estructura, Detalles, Tramas).
- * 
- * Licencia: MIT / Apache-2.0 (Permisiva sin restricciones copyleft).
  */
 
 #pragma once

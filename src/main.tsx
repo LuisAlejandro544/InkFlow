@@ -1,7 +1,24 @@
 import { createRoot } from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import './index.css';
+
+// Registrar Service Worker para funcionamiento 100% Offline de la PWA
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      console.log('[PWA] Nueva versión disponible.');
+    },
+    onOfflineReady() {
+      console.log('[PWA] Aplicación cacheada y lista para funcionar 100% offline sin internet.');
+    },
+    onRegisterError(error) {
+      console.warn('[PWA Error de registro]', error);
+    },
+  });
+}
 
 window.addEventListener('error', (event) => {
   console.error('[App Runtime Error]', event.error || event.message);

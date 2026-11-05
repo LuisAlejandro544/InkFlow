@@ -48,5 +48,6 @@ cmake --build build-native
 
 ---
 
-## 📄 Licencia
-MIT / Apache-2.0 (Permisiva y comercialmente libre).
+## 📌 Versión y Propiedad
+- **Versión:** `v1.0.0 estable`
+- **Código:** Módulo central propietario de InkFlow Studio.

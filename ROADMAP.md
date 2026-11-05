@@ -287,6 +287,37 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
 
 ---
 
+## 🎨 Fase 4.16: Ajustes de la App, Personalización de Temas & Planes Futuros (Completada ✅)
+
+- [x] **Apartado "Ajustes de la App e Información" (`SettingsInfoScreen.tsx`):**
+  - Pantalla dedicada accesible desde el menú Pro `[⋯]` de la barra superior y desde la galería de proyectos.
+  - Bloque de personalización visual con indicador del tema activo y acceso directo a la sub-pantalla de temas.
+  - Bloque de acceso directo a la pantalla "Planes para la app" (Hoja de ruta).
+  - Bloque de preferencias táctiles (Micro-vibración háptica, WakeLock de pantalla siempre encendida y SQLite Wasm OPFS).
+  - Enlace al diagnóstico de bajo nivel del motor gráfico y especificaciones de la versión (v1.0.0 estable).
+- [x] **Sub-Pantalla Dedicada "Personalizar Color y Tema" (`ThemeCustomizationScreen.tsx`):**
+  - Pantalla independiente para evitar amontonar interfaces en una sola pantalla.
+  - Catálogo de 6 temas con acentos cromáticos y preview en tiempo real:
+    1. `Ámbar Estudio (Por Defecto)`: Dorado cálido `#f59e0b`.
+    2. `Amatista Creativo`: Púrpura conceptual `#a855f7`.
+    3. `Esmeralda Manga`: Verde ilustrador `#10b981`.
+    4. `Zafiro Digital`: Azul noche `#3b82f6`.
+    5. `Carmesí Dinámico`: Rojo rubí intenso `#ef4444`.
+    6. `Cian Neón Cyber`: Cian brillante `#06b6d4`.
+  - Inyección de variables CSS en tiempo real y persistencia local (`localStorage`).
+- [x] **Apartado "Planes para la App" (`AppRoadmapScreen.tsx`):**
+  - Pantalla detallada e ilustrada con la hoja de ruta oficial y prioridades técnicas.
+  - **Superpoderes en Camino para la Herramienta de Vectores:**
+    1. *Mover y Transformar Trazos Individuales:* Tocar cualquier trazo vectorial ya dibujado para moverlo libremente con el dedo, rotarlo o escalarlo sin alterar los trazos vecinos.
+    2. *Edición de Nodos y Tiradores Bézier:* Control interactivo de puntos Catmull-Rom/Bézier C1 en C++23 para corregir líneas y afinar curvaturas milimétricas.
+    3. *Cambio de Color y Grosor No Destructivo:* Modificar el color y el grosor de trazos vectoriales tiempo después de haberlos dibujado.
+    4. *Lazo de Selección Vectorial:* Seleccionar conjuntos de trazos para mover facciones (ojos, cejas, pelo, ropa) en bloque.
+    5. *Reasignación de Trazos por Capas:* Trasladar trazos específicos a una nueva capa sin tener que redibujar.
+- [x] **71 Pruebas Unitarias Deterministas:**
+  - 64 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, corrutinas, exportación rápida y personalización de temas + 7 tests de almacenamiento SQLite Wasm OPFS y Crash Recovery.
+
+---
+
 ## 🎨 Fase 5: Pipeline WebGPU Avanzado & Herramientas de Ilustración
 
 - [ ] Soporte para mapas de bits como puntas de pincel personalizadas (*Brush Dabs*).
@@ -306,4 +337,4 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
   - Módulo de persistencia masiva desacoplado con SQLite Wasm sobre OPFS y centinela de rescate ante crash en Web Worker dedicado.
   - API pública limpia orientada a eventos (`pointerDown`, `pointerMove`, `pointerUp`, `floodFill`, `setStabilizer`, `setGapClosing`, `resizeCanvas`, `exportImage`).
   - Definiciones de TypeScript estrictas (`.d.ts`) con tipado exhaustivo y autocompletado en cualquier editor.
-  - Publicación oficial en **npm** bajo licencia permisiva **Apache 2.0** con guía de inicio rápido para desarrolladores de apps de dibujo, notas con stylus, plataformas de IA inpainting y pizarras interactivas.
+  - Empaquetado modular con guía de integración para desarrolladores de apps de dibujo, notas con stylus, plataformas de IA inpainting y pizarras interactivas.

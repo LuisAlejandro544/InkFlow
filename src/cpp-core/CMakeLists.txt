@@ -1,6 +1,5 @@
 # CMakeLists.txt - Módulo Central C++23 para InkFlow Studio
 # Estándar C++23 (ISO/IEC 14882:2023)
-# Licencia: MIT / Apache-2.0
 
 cmake_minimum_required(VERSION 3.25)
 project(inkflow_cpp_core LANGUAGES CXX VERSION 1.0.0)

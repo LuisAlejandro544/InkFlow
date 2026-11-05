@@ -23,11 +23,13 @@ import {
   computeExportDimensions, 
   generateCompositeExportCanvas, 
   estimateArtworkFileSize, 
+  estimateArtworkFileSizeFast,
   formatByteSize, 
   downloadArtworkFile, 
   shareArtworkFile,
   saveArtworkToUserGallery
 } from '../../engine/exportEngine';
+import { useAppTheme } from '../../engine/themeEngine';
 
 interface ExportModalProps {
   layers: Layer[];
@@ -44,8 +46,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   projectName,
   onClose,
 }) => {
+  const theme = useAppTheme();
   const [format, setFormat] = useState<ExportFormat>('png');
-  const [qualityMode, setQualityMode] = useState<ExportQualityMode>('ultra_4k');
+  const [qualityMode, setQualityMode] = useState<ExportQualityMode>('standard');
   const [isPosterScale, setIsPosterScale] = useState<boolean>(false);
   const [cropMode, setCropMode] = useState<'full' | 'crop'>('full');
   const [transparentBg, setTransparentBg] = useState<boolean>(false);
@@ -62,28 +65,46 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   /**
-   * Calcula el Bounding Box del contenido útil de todas las capas visibles
+   * Bounding Box por defecto (hoja completa) para montaje instantáneo sin retrasos
    */
-  const boundingBox = useMemo<BoundingBoxResult>(() => {
-    try {
-      const datas: Uint8ClampedArray[] = [];
-      for (const layer of layers) {
-        if (!layer.visible || layer.opacity <= 0) continue;
-        const imgData = layer.ctx.getImageData(0, 0, width, height);
-        datas.push(imgData.data);
+  const defaultBoundingBox = useMemo<BoundingBoxResult>(() => ({
+    minX: 0,
+    minY: 0,
+    maxX: width,
+    maxY: height,
+    width,
+    height,
+    hasContent: true,
+  }), [width, height]);
+
+  const [boundingBox, setBoundingBox] = useState<BoundingBoxResult>(defaultBoundingBox);
+
+  /**
+   * Cálculo diferido no bloqueante del Bounding Box para que el modal aparezca al instante (0ms de latencia)
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      try {
+        const datas: Uint8ClampedArray[] = [];
+        for (const layer of layers) {
+          if (!layer.visible || layer.opacity <= 0) continue;
+          const imgData = layer.ctx.getImageData(0, 0, width, height);
+          datas.push(imgData.data);
+        }
+        const result = calculateArtworkBoundingBox(datas, width, height, 24);
+        if (!cancelled) {
+          setBoundingBox(result);
+        }
+      } catch {
+        // En caso de mock o fallo de lectura, preserva el default limpio
       }
-      return calculateArtworkBoundingBox(datas, width, height, 24);
-    } catch {
-      return {
-        minX: 0,
-        minY: 0,
-        maxX: width,
-        maxY: height,
-        width,
-        height,
-        hasContent: true,
-      };
-    }
+    }, 40);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [layers, width, height]);
 
   // Dimensiones finales según el modo de recorte y si el usuario eligió póster expandido
@@ -99,28 +120,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   }, [layers, exportDimensions, transparentBg, format, scale, qualityMode]);
 
   /**
-   * Calcula el peso exacto del archivo en tiempo real
+   * Calcula el peso estimado en tiempo real de forma ultraligera y debounced
+   * Erradica por completo el lag al alternar entre Estándar, HD y Ultra 4K
    */
   useEffect(() => {
     let isCancelled = false;
-    const calcWeight = async () => {
+    const timer = setTimeout(async () => {
       try {
-        const cvs = generateExportCanvas();
-        const encoderQuality = qualityMode === 'ultra_4k' ? 1.0 : qualityMode === 'hd' ? 0.98 : 0.92;
-        const bytes = await estimateArtworkFileSize(cvs, format, encoderQuality);
+        const bytes = await estimateArtworkFileSizeFast(layers, exportDimensions, transparentBg, format, qualityMode);
         if (!isCancelled) {
           setFileSizeBytes(bytes);
         }
       } catch {
         if (!isCancelled) setFileSizeBytes(null);
       }
-    };
+    }, 120);
 
-    calcWeight();
     return () => {
       isCancelled = true;
+      clearTimeout(timer);
     };
-  }, [generateExportCanvas, format, scale, cropMode, transparentBg, qualityMode]);
+  }, [layers, exportDimensions, format, transparentBg, qualityMode]);
 
   const formattedFileSize = useMemo(() => {
     return formatByteSize(fileSizeBytes);
@@ -132,6 +152,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const handleDownload = async () => {
     triggerHaptic(12);
     setIsExporting(true);
+    // Ceder el hilo de UI brevemente para renderizar de inmediato el estado de guardado
+    await new Promise((r) => setTimeout(r, 25));
     try {
       const cvs = generateExportCanvas();
       const result = await saveArtworkToUserGallery(cvs, projectName, cropMode, scale, format, qualityMode);
@@ -150,6 +172,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const handleShare = async () => {
     triggerHaptic(12);
     setIsExporting(true);
+    await new Promise((r) => setTimeout(r, 25));
     try {
       const cvs = generateExportCanvas();
       const shared = await shareArtworkFile(cvs, projectName, format);
@@ -191,7 +214,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         {/* Cabecera */}
         <div className="flex items-center justify-between border-b border-[#222430] pb-2.5">
           <div className="flex items-center gap-2">
-            <ImageIcon size={20} className="text-amber-400" />
+            <ImageIcon size={20} style={{ color: theme.accentColor }} />
             <h2 className="text-base sm:text-lg font-bold text-gray-100">Guardar Obra Maestra</h2>
           </div>
           <button
@@ -209,12 +232,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         {/* Tarjeta del Peso de la Obra y Resolución */}
         <div className="bg-[#0e0f14] p-3 rounded-2xl border border-[#242634] flex items-center justify-between gap-2 shadow-inner">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <div 
+              className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0"
+              style={{ backgroundColor: theme.accentSoft, borderColor: theme.accentBorder, color: theme.accentColor }}
+            >
               <HardDrive size={18} />
             </div>
             <div className="min-w-0">
               <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Peso de tu Obra</span>
-              <span className="text-base font-mono font-bold text-amber-300 truncate block">
+              <span className="text-base font-mono font-bold truncate block" style={{ color: theme.accentTextHex }}>
                 {formattedFileSize}
               </span>
             </div>
@@ -225,7 +251,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <span className="text-xs font-mono font-bold text-gray-200 block">
               {exportDimensions.w} × {exportDimensions.h} px
             </span>
-            <span className="text-[9px] font-bold text-amber-400 block">
+            <span className="text-[9px] font-bold block" style={{ color: theme.accentColor }}>
               {qualityMode === 'ultra_4k' ? '✨ Ultra 4K SSAA' : qualityMode === 'hd' ? '🌟 HD Antialias' : 'Estándar'}
             </span>
           </div>
@@ -234,7 +260,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         {/* 1. Selector de Recorte: Toda la Hoja vs Recortar al Dibujo */}
         <div>
           <label className="text-xs text-gray-300 block mb-1.5 font-bold flex items-center gap-1.5">
-            <Crop size={14} className="text-amber-400" />
+            <Crop size={14} style={{ color: theme.accentColor }} />
             <span>Encuadre de Guardado:</span>
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -245,16 +271,21 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               }}
               className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-0.5 active:scale-95 ${
                 cropMode === 'full'
-                  ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-sm'
+                  ? 'shadow-sm'
                   : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
               }`}
+              style={cropMode === 'full' ? {
+                backgroundColor: theme.accentSoft,
+                borderColor: theme.accentColor,
+                color: theme.accentTextHex,
+              } : undefined}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold flex items-center gap-1">
                   <Maximize2 size={13} />
                   <span>Hoja Completa</span>
                 </span>
-                {cropMode === 'full' && <Check size={14} className="text-amber-400" />}
+                {cropMode === 'full' && <Check size={14} style={{ color: theme.accentColor }} />}
               </div>
               <span className="text-[10px] text-gray-400 leading-tight">
                 Incluye todo el lienzo original ({width} × {height}px).
@@ -268,16 +299,21 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               }}
               className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-0.5 active:scale-95 ${
                 cropMode === 'crop'
-                  ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-sm'
+                  ? 'shadow-sm'
                   : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
               }`}
+              style={cropMode === 'crop' ? {
+                backgroundColor: theme.accentSoft,
+                borderColor: theme.accentColor,
+                color: theme.accentTextHex,
+              } : undefined}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold flex items-center gap-1">
                   <Crop size={13} />
                   <span>Recortar al Dibujo</span>
                 </span>
-                {cropMode === 'crop' && <Check size={14} className="text-amber-400" />}
+                {cropMode === 'crop' && <Check size={14} style={{ color: theme.accentColor }} />}
               </div>
               <span className="text-[10px] text-gray-400 leading-tight">
                 {boundingBox.hasContent 
@@ -301,9 +337,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 }}
                 className={`py-2 px-3 rounded-xl border text-xs font-bold uppercase transition-all active:scale-95 ${
                   format === fmt
-                    ? 'bg-amber-500 text-black font-bold border-amber-400 shadow-md'
+                    ? 'text-black font-bold shadow-md'
                     : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
                 }`}
+                style={format === fmt ? {
+                  backgroundColor: theme.accentColor,
+                  borderColor: theme.accentColor,
+                  color: '#000000',
+                } : undefined}
               >
                 {fmt === 'jpeg' ? 'JPG (Estándar)' : fmt.toUpperCase()}
               </button>
@@ -315,13 +356,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs text-gray-200 font-bold flex items-center gap-1.5">
-              <Sparkles size={14} className="text-amber-400" />
+              <Sparkles size={14} style={{ color: theme.accentColor }} />
               <span>Calidad del Dibujo:</span>
             </label>
-            <span className="text-[10px] text-amber-400 font-mono font-bold">
+            <span className="text-[10px] font-mono font-bold" style={{ color: theme.accentColor }}>
               {qualityMode === 'ultra_4k' ? 'SSAA 2.5x + Nitidez' : qualityMode === 'hd' ? 'SSAA 2x' : 'Directo'}
             </span>
           </div>
+
           <div className="grid grid-cols-3 gap-2">
             {[
               { 
@@ -351,18 +393,23 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 }}
                 className={`py-2 px-2 rounded-xl border text-left transition-all active:scale-95 flex flex-col justify-between ${
                   qualityMode === qm.id
-                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-sm'
+                    ? 'shadow-sm'
                     : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
                 }`}
+                style={qualityMode === qm.id ? {
+                  backgroundColor: theme.accentSoft,
+                  borderColor: theme.accentColor,
+                  color: theme.accentTextHex,
+                } : undefined}
               >
                 <div>
                   <div className="flex items-center justify-between mb-0.5">
                     <span className="text-xs font-bold block">{qm.label}</span>
-                    {qualityMode === qm.id && <Check size={12} className="text-amber-400 shrink-0" />}
+                    {qualityMode === qm.id && <Check size={12} style={{ color: theme.accentColor }} className="shrink-0" />}
                   </div>
                   <span className="text-[9px] text-gray-400 block leading-tight">{qm.desc}</span>
                 </div>
-                <span className="text-[8px] font-mono uppercase tracking-wider text-amber-300/80 mt-1 block">
+                <span className="text-[8px] font-mono uppercase tracking-wider mt-1 block" style={{ color: theme.accentColor }}>
                   {qm.badge}
                 </span>
               </button>
@@ -373,7 +420,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         {/* 4. Dimensiones del Lienzo: Conservar tamaño real vs Resolución Expandida */}
         <div>
           <label className="text-xs text-gray-300 block mb-1.5 font-bold flex items-center gap-1.5">
-            <Maximize2 size={13} className="text-amber-400" />
+            <Maximize2 size={13} style={{ color: theme.accentColor }} />
             <span>Dimensiones del Lienzo:</span>
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -384,13 +431,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               }}
               className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-0.5 active:scale-95 ${
                 !isPosterScale
-                  ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-sm'
+                  ? 'shadow-sm'
                   : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
               }`}
+              style={!isPosterScale ? {
+                backgroundColor: theme.accentSoft,
+                borderColor: theme.accentColor,
+                color: theme.accentTextHex,
+              } : undefined}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold">Conservar Tamaño</span>
-                {!isPosterScale && <Check size={14} className="text-amber-400" />}
+                {!isPosterScale && <Check size={14} style={{ color: theme.accentColor }} />}
               </div>
               <span className="text-[10px] text-gray-400 leading-tight">
                 Mantiene tus {width} × {height}px originales y sube la calidad del trazo.
@@ -404,13 +456,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               }}
               className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-0.5 active:scale-95 ${
                 isPosterScale
-                  ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-sm'
+                  ? 'shadow-sm'
                   : 'bg-[#181922] border-[#262837] text-gray-300 hover:border-gray-600'
               }`}
+              style={isPosterScale ? {
+                backgroundColor: theme.accentSoft,
+                borderColor: theme.accentColor,
+                color: theme.accentTextHex,
+              } : undefined}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold">Póster 3x Gigante</span>
-                {isPosterScale && <Check size={14} className="text-amber-400" />}
+                {isPosterScale && <Check size={14} style={{ color: theme.accentColor }} />}
               </div>
               <span className="text-[10px] text-gray-400 leading-tight">
                 Expande a {width * 3} × {height * 3}px para imprimir en pared.
@@ -429,7 +486,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 triggerHaptic(6);
                 setTransparentBg(e.target.checked);
               }}
-              className="w-4 h-4 rounded text-amber-500 bg-gray-900 border-gray-700 focus:ring-amber-500 accent-amber-500"
+              style={{ accentColor: theme.accentColor }}
+              className="w-4 h-4 rounded bg-gray-900 border-gray-700"
             />
             <span className="text-xs text-gray-200 font-medium">
               Fondo transparente (PNG con canal alfa sin fondo blanco)
@@ -447,7 +505,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         {/* Nota explicativa de guardado vs compartir */}
         <p className="text-[10px] text-gray-400 bg-[#101117] p-2.5 rounded-xl border border-[#212330] leading-snug">
-          <strong className="text-amber-400">💡 Calidad 4K Remaster:</strong> <span className="text-gray-300 font-medium">Sube la nitidez de las líneas y suaviza bordes pixelados con súper-muestreo, manteniendo las proporciones exactas de tu hoja de dibujo sin inflar el lienzo.</span>
+          <strong style={{ color: theme.accentColor }}>💡 Calidad 4K Remaster:</strong> <span className="text-gray-300 font-medium">Sube la nitidez de las líneas y suaviza bordes pixelados con súper-muestreo, manteniendo las proporciones exactas de tu hoja de dibujo sin inflar el lienzo.</span>
         </p>
 
         {/* Botones de acción principales */}
@@ -455,7 +513,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           <button
             onClick={handleDownload}
             disabled={isExporting}
-            className="flex-1 py-3 px-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 text-xs sm:text-sm"
+            className="flex-1 py-3 px-3 text-black font-bold rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 text-xs sm:text-sm"
+            style={{ 
+              backgroundColor: theme.accentColor,
+              boxShadow: `0 4px 14px ${theme.accentSoft25}` 
+            }}
           >
             <Download size={17} />
             <span>Guardar en mi Galería</span>
@@ -467,7 +529,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             className="py-3 px-4 bg-[#20222d] hover:bg-[#282a38] text-gray-200 font-semibold rounded-xl transition-all border border-[#2e3140] flex items-center justify-center gap-1.5 text-xs sm:text-sm active:scale-95"
             title="Compartir en WhatsApp, Instagram, Fotos, etc."
           >
-            <Share2 size={16} className="text-amber-400" />
+            <Share2 size={16} style={{ color: theme.accentColor }} />
             <span>Compartir</span>
           </button>
         </div>

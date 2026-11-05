@@ -14,6 +14,7 @@ import {
   Share, X, Globe, Eye, Maximize2, Zap
 } from 'lucide-react';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { useAppTheme } from '../../engine/themeEngine';
 
 interface WelcomeScreenProps {
   onEnterStudio: () => void;
@@ -24,6 +25,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onEnterStudio,
   onGoToGallery,
 }) => {
+  const theme = useAppTheme();
   const { isInstallable, isInstalled, isIOS, isDevOrPreview, install } = usePWAInstall();
   const [showIOSModal, setShowIOSModal] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
@@ -54,13 +56,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <img
             src="/icon.svg"
             alt="InkFlow Studio"
-            className="w-8 h-8 rounded-xl shadow-md shadow-amber-500/20 object-contain"
+            className="w-8 h-8 rounded-xl shadow-md object-contain"
           />
           <div>
             <h1 className="text-sm font-bold text-white tracking-wide flex items-center gap-1.5">
               <span>InkFlow Studio</span>
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                PWA
+              <span 
+                className="text-[10px] font-mono px-1.5 py-0.2 rounded border"
+                style={{ backgroundColor: theme.accentSoft, color: theme.accentTextHex, borderColor: theme.accentBorder }}
+              >
+                v1.0.0 estable
               </span>
             </h1>
           </div>
@@ -69,7 +74,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         {/* Botón rápido para entrar al estudio */}
         <button
           onClick={onEnterStudio}
-          className="h-9 px-3.5 rounded-xl bg-[#1c1d27] hover:bg-[#252735] text-amber-400 border border-[#2c2f42] text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+          className="h-9 px-3.5 rounded-xl bg-[#1c1d27] hover:bg-[#252735] border border-[#2c2f42] text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+          style={{ color: theme.accentTextHex }}
         >
           <span>Entrar al Estudio</span>
           <ArrowRight size={14} />
@@ -82,7 +88,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         {/* BANNER DE BIENVENIDA A LA WEB */}
         <div className="rounded-2xl p-4 bg-[#141520] border border-[#27293a] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+            <div 
+              className="p-2.5 rounded-xl border shrink-0"
+              style={{ backgroundColor: theme.accentSoft, borderColor: theme.accentBorder, color: theme.accentColor }}
+            >
               <Globe size={20} />
             </div>
             <div>
@@ -90,7 +99,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 <span className="text-xs font-bold text-white uppercase tracking-wider">
                   ¡Te damos la bienvenida a la web!
                 </span>
-                <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                <span 
+                  className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border"
+                  style={{ backgroundColor: theme.accentSoft, color: theme.accentTextHex, borderColor: theme.accentBorder }}
+                >
                   Navegador
                 </span>
               </div>
@@ -103,8 +115,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
         {/* HERO SECTION DE PRESENTACIÓN */}
         <div className="text-center flex flex-col items-center gap-4 pt-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium">
-            <Sparkles size={14} className="text-amber-400" />
+          <div 
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium"
+            style={{ backgroundColor: theme.accentSoft, color: theme.accentTextHex, borderColor: theme.accentBorder }}
+          >
+            <Sparkles size={14} style={{ color: theme.accentColor }} />
             <span>Suite de Ilustración Digital de Alto Rendimiento</span>
           </div>
 
@@ -124,8 +139,12 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               className={`w-full sm:w-auto px-6 py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2.5 shadow-xl transition-all active:scale-95 ${
                 isInstalled || installSuccess
                   ? 'bg-emerald-600 text-white cursor-default'
-                  : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-black shadow-amber-500/20'
+                  : 'text-black'
               }`}
+              style={!isInstalled && !installSuccess ? {
+                backgroundColor: theme.accentColor,
+                boxShadow: `0 4px 14px ${theme.accentSoft25}`
+              } : undefined}
             >
               {isInstalled || installSuccess ? (
                 <>
@@ -144,7 +163,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               onClick={onEnterStudio}
               className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-[#191b26] hover:bg-[#232534] text-white border border-[#2e3146] font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md"
             >
-              <PenTool size={16} className="text-amber-400" />
+              <PenTool size={16} style={{ color: theme.accentColor }} />
               <span>Usar Estudio en la Web</span>
             </button>
           </div>
