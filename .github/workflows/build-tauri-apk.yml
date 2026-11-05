@@ -48,9 +48,12 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_ROOT" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_ROOT" >> $GITHUB_ENV
           
-          # Detectar el NDK más reciente preinstalado en el runner de GitHub
+          # Detectar el NDK preinstalado en el runner de GitHub (preferir NDK 26/27 LTS)
           if [ -d "$ANDROID_ROOT/ndk" ]; then
-            NDK_PATH=$(find "$ANDROID_ROOT/ndk" -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
+            NDK_PATH=$(find "$ANDROID_ROOT/ndk" -maxdepth 1 \( -name "26.*" -o -name "27.*" \) | sort -V | tail -n 1)
+            if [ -z "$NDK_PATH" ]; then
+              NDK_PATH=$(find "$ANDROID_ROOT/ndk" -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
+            fi
             echo "✅ NDK preinstalado encontrado en: $NDK_PATH"
           else
             echo "⚠️ Instalando NDK mediante sdkmanager..."
@@ -153,7 +156,8 @@ jobs:
       - name: Inicializar proyecto Android de Tauri
         run: |
           if [ ! -f "src-tauri/gen/android/gradlew" ]; then
-            echo "📱 Inicializando estructura Android de Tauri v2..."
+            echo "📱 Inicializando estructura Android de Tauri v2 desde cero..."
+            rm -rf src-tauri/gen/android
             npx tauri android init --ci --skip-targets-install
             echo "✅ Estructura Android de Tauri v2 inicializada"
           else
