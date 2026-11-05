@@ -41,25 +41,26 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3. Configurar Android SDK y NDK
-      - name: Configurar Android SDK & NDK
-        uses: android-actions/setup-android@v3
-
-      # 4. Detectar y exportar ruta exacta del NDK
-      - name: Detectar NDK instalado
+      # 3. Configurar Android SDK y NDK preinstalados en GitHub Actions
+      - name: Configurar Android SDK y NDK
         run: |
-          echo "Buscando NDK en $ANDROID_HOME..."
-          if [ -d "$ANDROID_HOME/ndk" ]; then
-            NDK_PATH=$(find "$ANDROID_HOME/ndk" -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
-            echo "NDK encontrado en: $NDK_PATH"
-            echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
-            echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
+          ANDROID_ROOT="/usr/local/lib/android/sdk"
+          echo "ANDROID_HOME=$ANDROID_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_ROOT" >> $GITHUB_ENV
+          
+          # Detectar el NDK más reciente preinstalado en el runner de GitHub
+          if [ -d "$ANDROID_ROOT/ndk" ]; then
+            NDK_PATH=$(find "$ANDROID_ROOT/ndk" -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
+            echo "✅ NDK preinstalado encontrado en: $NDK_PATH"
           else
-            echo "Instalando NDK r26b mediante sdkmanager..."
-            yes | sdkmanager --install "ndk;26.1.10909125"
-            echo "NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
-            echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+            echo "⚠️ Instalando NDK mediante sdkmanager..."
+            yes | "$ANDROID_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.1.10909125"
+            NDK_PATH="$ANDROID_ROOT/ndk/26.1.10909125"
           fi
+          
+          echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_ROOT/platform-tools:$ANDROID_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
       # 5. Configurar Toolchain de Rust para arquitecturas móviles Android (32 y 64 bits)
       - name: Configurar Rust Toolchain para Android
