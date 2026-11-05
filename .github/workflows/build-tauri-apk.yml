@@ -65,6 +65,9 @@ jobs:
           echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
           echo "PATH=$PATH:$ANDROID_ROOT/platform-tools:$ANDROID_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
+          echo "📋 Aceptando licencias de Android SDK..."
+          yes | "$ANDROID_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
       # 5. Configurar Toolchain de Rust para arquitecturas móviles Android (32 y 64 bits)
       - name: Configurar Rust Toolchain para Android
         uses: dtolnay/rust-toolchain@stable
@@ -164,21 +167,66 @@ jobs:
             echo "ℹ️ Estructura Android ya presente en src-tauri/gen/android"
           fi
 
-      # 11.1. Aplicar AndroidManifest nativo optimizado (largeHeap, hardwareAccelerated, configChanges, windowSoftInputMode y Scoped Storage) y SDK 35
-      - name: Aplicar configuraciones nativas de Android (Manifest y SDK 35)
+      # 11.1. Aplicar configuraciones nativas en AndroidManifest de forma quirúrgica (largeHeap, hardwareAccelerated, configChanges, windowSoftInputMode y Scoped Storage)
+      - name: Aplicar configuraciones nativas en AndroidManifest
         run: |
-          echo "🔧 Aplicando configuraciones nativas de Android en src-tauri/gen/android/app/src/main/AndroidManifest.xml..."
-          mkdir -p src-tauri/gen/android/app/src/main
-          cp src-tauri/AndroidManifest.xml src-tauri/gen/android/app/src/main/AndroidManifest.xml
-          echo "✅ Atributos nativos verificados en AndroidManifest:"
-          grep -E "largeHeap|hardwareAccelerated|configChanges|windowSoftInputMode|READ_MEDIA_IMAGES" src-tauri/gen/android/app/src/main/AndroidManifest.xml
+          echo "🔧 Inyectando configuraciones nativas y permisos en el AndroidManifest generado por Tauri..."
+          node -e '
+            const fs = require("fs");
+            const path = "src-tauri/gen/android/app/src/main/AndroidManifest.xml";
+            if (!fs.existsSync(path)) {
+              console.error("❌ AndroidManifest.xml no encontrado en:", path);
+              process.exit(1);
+            }
+            let manifest = fs.readFileSync(path, "utf8");
 
-          # Sincronizar targetSdk y compileSdk 35 (Android 15) en Gradle si existen
-          if [ -f "src-tauri/gen/android/app/build.gradle.kts" ]; then
-            sed -i 's/targetSdk = .*/targetSdk = 35/' src-tauri/gen/android/app/build.gradle.kts || true
-            sed -i 's/compileSdk = .*/compileSdk = 35/' src-tauri/gen/android/app/build.gradle.kts || true
-            echo "✅ targetSdk y compileSdk fijados en 35 (build.gradle.kts)"
-          fi
+            // 1. Inyectar permisos de Scoped Storage y rendimiento dentro de <manifest>
+            const permissions = [
+              "<uses-permission android:name=\"android.permission.INTERNET\" />",
+              "<uses-permission android:name=\"android.permission.VIBRATE\" />",
+              "<uses-permission android:name=\"android.permission.WAKE_LOCK\" />",
+              "<uses-permission android:name=\"android.permission.READ_MEDIA_IMAGES\" />",
+              "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />",
+              "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"28\" />"
+            ];
+            for (const perm of permissions) {
+              const permName = perm.match(/android:name="([^"]+)"/)[1];
+              if (!manifest.includes(permName)) {
+                manifest = manifest.replace(/(<manifest[^>]*>)/, `$1\n    ${perm}`);
+              }
+            }
+
+            // 2. Inyectar largeHeap, hardwareAccelerated y requestLegacyExternalStorage en <application>
+            if (!manifest.includes("android:largeHeap")) {
+              manifest = manifest.replace(
+                /(<application)/,
+                `$1 android:largeHeap="true" android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true"`
+              );
+            }
+
+            // 3. Inyectar configChanges y windowSoftInputMode en <activity>
+            manifest = manifest.replace(
+              /android:configChanges="[^"]*"/,
+              `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"`
+            );
+            if (!manifest.includes("android:windowSoftInputMode")) {
+              manifest = manifest.replace(
+                /(<activity[^>]*)/,
+                `$1 android:windowSoftInputMode="adjustResize|stateHidden"`
+              );
+            } else {
+              manifest = manifest.replace(
+                /android:windowSoftInputMode="[^"]*"/,
+                `android:windowSoftInputMode="adjustResize|stateHidden"`
+              );
+            }
+
+            fs.writeFileSync(path, manifest, "utf8");
+            console.log("✅ AndroidManifest.xml parcheado con éxito");
+          '
+
+          echo "✅ Verificación de atributos nativos en AndroidManifest:"
+          grep -E "largeHeap|hardwareAccelerated|configChanges|windowSoftInputMode|READ_MEDIA_IMAGES" src-tauri/gen/android/app/src/main/AndroidManifest.xml
 
       # 12. Compilación del APK Debug según arquitectura seleccionada
       - name: Compilar APK Debug con Tauri v2
@@ -204,8 +252,8 @@ jobs:
               ;;
           esac
 
-          echo "Ejecutando: npx tauri android build --debug --apk --ci --ignore-version-mismatches $TARGET_FLAGS"
-          npx tauri android build --debug --apk --ci --ignore-version-mismatches $TARGET_FLAGS
+          echo "Ejecutando: npx tauri android build --debug --apk --ci --ignore-version-mismatches $TARGET_FLAGS -- --stacktrace --info"
+          npx tauri android build --debug --apk --ci --ignore-version-mismatches $TARGET_FLAGS -- --stacktrace --info
 
           echo "✅ Compilación de Tauri v2 finalizada"
 

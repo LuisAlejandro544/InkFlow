@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.inkflow.studio">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Conectividad local del WebView -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -27,7 +26,6 @@
     <application
         android:label="InkFlow Studio"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:largeHeap="true"
         android:hardwareAccelerated="true"
         android:requestLegacyExternalStorage="true"
