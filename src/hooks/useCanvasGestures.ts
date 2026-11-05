@@ -98,14 +98,19 @@ export function useCanvasGestures({
   const fitToScreen = useCallback((withHaptic = false) => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    const padding = 24;
-    const availW = container.clientWidth - padding * 2;
-    const availH = container.clientHeight - padding * 2;
+    const padding = 20;
+    // Espacio reservado para las barras superior e inferior móviles
+    const topBarHeight = 68;
+    const bottomBarHeight = 150;
+    const availW = Math.max(100, container.clientWidth - padding * 2);
+    const availH = Math.max(100, container.clientHeight - (topBarHeight + bottomBarHeight + padding));
 
     const scaleW = availW / projectWidth;
     const scaleH = availH / projectHeight;
     const newScale = Number(Math.min(scaleW, scaleH, 1.0).toFixed(2));
-    const newPan = { x: 0, y: 0 };
+    // Centrar el lienzo en el espacio visible entre la barra superior y la barra inferior
+    const verticalShift = Math.round((topBarHeight - bottomBarHeight) / 2);
+    const newPan = { x: 0, y: verticalShift };
 
     setScale(newScale);
     setPan(newPan);

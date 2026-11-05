@@ -181,15 +181,15 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
       )}
 
       {/* Nivel Superior: Deslizadores Ergonómicos de Grosor y Opacidad (100% Adaptados al Tema) */}
-      <div className="px-3 py-2 border-b border-[#1c1d28] bg-[#0d0e14]/95 flex flex-col gap-2 max-w-lg mx-auto w-full">
+      <div className="px-3.5 py-2.5 border-b border-[#1c1d28] bg-[#0d0e14]/95 flex flex-col gap-2.5 max-w-lg mx-auto w-full">
         {/* Fila 1: Grosor de Trazo */}
-        <div className="flex items-center gap-2.5 w-full">
-          <div className="flex items-center gap-1.5 w-16 shrink-0">
+        <div className="flex items-center gap-3 w-full">
+          <div className="flex items-center gap-2 w-20 shrink-0">
             <span 
-              className="w-2 h-2 rounded-full shrink-0 shadow-xs" 
+              className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs" 
               style={{ backgroundColor: theme.accentColor }}
             />
-            <span className="text-[10px] text-gray-300 font-bold tracking-wider uppercase">Grosor</span>
+            <span className="text-xs text-gray-200 font-bold tracking-wider uppercase">Grosor</span>
           </div>
           <input
             type="range"
@@ -202,10 +202,10 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             onTouchEnd={() => setShowSizePreview(false)}
             onChange={(e) => onChangeBrushSize(Number(e.target.value))}
             style={{ accentColor: theme.accentColor }}
-            className="flex-1 h-2 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
+            className="flex-1 h-2.5 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
           />
           <span 
-            className="text-[11px] font-mono font-bold bg-[#161722] border border-[#262836] px-2 py-0.5 rounded-md min-w-[44px] text-center shrink-0"
+            className="text-xs font-mono font-bold bg-[#161722] border border-[#262836] px-2.5 py-1 rounded-md min-w-[52px] text-center shrink-0 shadow-xs"
             style={{ color: theme.accentTextHex }}
           >
             {brushSize}px
@@ -213,13 +213,13 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
         </div>
 
         {/* Fila 2: Opacidad de Trazo */}
-        <div className="flex items-center gap-2.5 w-full">
-          <div className="flex items-center gap-1.5 w-16 shrink-0">
+        <div className="flex items-center gap-3 w-full">
+          <div className="flex items-center gap-2 w-20 shrink-0">
             <span 
-              className="w-2 h-2 rounded-full border shrink-0" 
+              className="w-2.5 h-2.5 rounded-full border shrink-0" 
               style={{ borderColor: theme.accentColor }}
             />
-            <span className="text-[10px] text-gray-300 font-bold tracking-wider uppercase">Opacidad</span>
+            <span className="text-xs text-gray-200 font-bold tracking-wider uppercase">Opacidad</span>
           </div>
           <input
             type="range"
@@ -232,10 +232,10 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             onTouchEnd={() => setShowOpacityPreview(false)}
             onChange={(e) => onChangeBrushOpacity(Number(e.target.value) / 100)}
             style={{ accentColor: theme.accentColor }}
-            className="flex-1 h-2 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
+            className="flex-1 h-2.5 bg-[#1f212c] rounded-lg cursor-pointer touch-pan-x"
           />
           <span 
-            className="text-[11px] font-mono font-bold bg-[#161722] border border-[#262836] px-2 py-0.5 rounded-md min-w-[44px] text-center shrink-0"
+            className="text-xs font-mono font-bold bg-[#161722] border border-[#262836] px-2.5 py-1 rounded-md min-w-[52px] text-center shrink-0 shadow-xs"
             style={{ color: theme.accentTextHex }}
           >
             {Math.round(brushOpacity * 100)}%
@@ -244,14 +244,14 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
 
         {/* Fila 3: Textura de Superficie Activa */}
         {onOpenTextureModal && (
-          <div className="flex items-center justify-between pt-1 border-t border-[#1a1c26] w-full">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Textura:</span>
+          <div className="flex items-center justify-between pt-1.5 border-t border-[#1a1c26] w-full">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs text-gray-300 font-bold uppercase tracking-wider">Textura:</span>
               <span 
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-md border truncate ${
+                className={`text-xs font-bold px-2.5 py-0.5 rounded-md border truncate ${
                   brushTexture && brushTexture.id !== 'none'
                     ? ''
-                    : 'bg-[#161722] text-gray-400 border-[#262836]'
+                    : 'bg-[#161722] text-gray-300 border-[#262836]'
                 }`}
                 style={brushTexture && brushTexture.id !== 'none' ? {
                   backgroundColor: theme.accentSoft,
@@ -269,10 +269,10 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
                 triggerHaptic(8);
                 onOpenTextureModal();
               }}
-              className="px-2.5 py-1 rounded-lg bg-[#181924] hover:bg-[#222434] border border-[#27293a] text-gray-200 text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
+              className="px-3 py-1 rounded-lg bg-[#181924] hover:bg-[#222434] border border-[#27293a] text-gray-100 text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shrink-0 shadow-xs"
               title="Abrir catálogo de texturas de pincel"
             >
-              <Sparkles size={11} style={{ color: theme.accentColor }} />
+              <Sparkles size={13} style={{ color: theme.accentColor }} />
               <span>Texturas</span>
             </button>
           </div>
@@ -280,7 +280,7 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
       </div>
 
       {/* Nivel Inferior: Dock de Herramientas Estilo Nativo IbisPaint */}
-      <div className="h-14 px-2 grid grid-cols-5 gap-1.5 max-w-lg mx-auto w-full items-center">
+      <div className="h-16 px-2.5 grid grid-cols-5 gap-1.5 sm:gap-2 max-w-lg mx-auto w-full items-center">
         {/* 1. Herramienta Principal de Trazo / Borrador */}
         <button
           type="button"
@@ -294,7 +294,7 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             }
           }}
           aria-label={`Herramienta activa: ${toolVisual.name}`}
-          className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+          className={`h-13 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-xs ${
             activeTool === 'hand'
               ? 'bg-[#171821] border-[#2c2e3e] text-gray-400 opacity-90'
               : toolVisual.colorClass
@@ -303,7 +303,7 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
           title={activeTool === 'hand' ? `Reanudar ${toolVisual.name}` : `Alternar ${toolVisual.name} / Goma`}
         >
           {toolVisual.icon}
-          <span className="text-[9px] font-bold uppercase tracking-wider">
+          <span className="text-[11px] font-bold uppercase tracking-wider">
             {toolVisual.name}
           </span>
         </button>
@@ -316,11 +316,11 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             onOpenToolPicker();
           }}
           aria-label="Abrir panel de herramientas"
-          className="h-11 rounded-xl bg-[#171821] hover:bg-[#20222d] text-gray-300 border border-[#242634] transition-all flex flex-col items-center justify-center gap-0.5 active:scale-95"
+          className="h-13 rounded-2xl bg-[#171821] hover:bg-[#20222d] text-gray-200 border border-[#242634] transition-all flex flex-col items-center justify-center gap-1 active:scale-95 shadow-xs"
           title="Herramientas y Pinceles"
         >
-          <Sliders size={18} className="text-gray-300" />
-          <span className="text-[9px] font-bold text-gray-400 tracking-wider">Pinceles</span>
+          <Sliders size={20} className="text-gray-200" />
+          <span className="text-[11px] font-bold text-gray-300 tracking-wider">Pinceles</span>
         </button>
 
         {/* 3. Alternador de Navegación Libre (Mover con 1 dedo) */}
@@ -338,10 +338,10 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             }
           }}
           aria-label="Alternar modo mover lienzo"
-          className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+          className={`h-13 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-xs ${
             activeTool === 'hand'
               ? 'shadow-sm'
-              : 'bg-[#171821] border-[#242634] text-gray-300 hover:text-white'
+              : 'bg-[#171821] border-[#242634] text-gray-200 hover:text-white'
           }`}
           style={activeTool === 'hand' ? {
             backgroundColor: theme.accentSoft25,
@@ -350,8 +350,8 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
           } : undefined}
           title="Mover con 1 dedo"
         >
-          {activeTool === 'hand' ? <Hand size={18} /> : <Move size={18} />}
-          <span className="text-[9px] font-bold tracking-wider">
+          {activeTool === 'hand' ? <Hand size={20} /> : <Move size={20} />}
+          <span className="text-[11px] font-bold tracking-wider">
             {activeTool === 'hand' ? 'Moviendo' : 'Mover'}
           </span>
         </button>
@@ -364,14 +364,14 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             onOpenColorPicker();
           }}
           aria-label="Abrir selector de color"
-          className="h-11 rounded-xl bg-[#171821] hover:bg-[#20222d] border border-[#242634] transition-all flex flex-col items-center justify-center gap-0.5 active:scale-95"
+          className="h-13 rounded-2xl bg-[#171821] hover:bg-[#20222d] border border-[#242634] transition-all flex flex-col items-center justify-center gap-1 active:scale-95 shadow-xs"
           title="Color Actual"
         >
           <div 
-            className="w-4 h-4 rounded-full border border-white shadow-sm shrink-0"
+            className="w-4.5 h-4.5 rounded-full border border-white shadow-sm shrink-0"
             style={{ backgroundColor: brushColor }}
           />
-          <span className="text-[9px] font-bold text-gray-400 tracking-wider font-mono truncate max-w-full px-1">
+          <span className="text-[10px] font-bold text-gray-300 tracking-wider font-mono truncate max-w-full px-1">
             {brushColor.toUpperCase()}
           </span>
         </button>
@@ -384,19 +384,19 @@ export const StudioBottomBar: React.FC<StudioBottomBarProps> = ({
             onOpenLayersModal();
           }}
           aria-label="Abrir gestor de capas"
-          className="h-11 rounded-xl bg-[#171821] border border-[#242634] text-gray-200 hover:text-white relative transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5 shrink-0"
+          className="h-13 rounded-2xl bg-[#171821] border border-[#242634] text-gray-100 hover:text-white relative transition-all active:scale-95 flex flex-col items-center justify-center gap-1 shrink-0 shadow-xs"
           title="Capas del Lienzo"
         >
           <div className="relative">
-            <LayersIcon size={18} style={{ color: theme.accentColor }} />
+            <LayersIcon size={20} style={{ color: theme.accentColor }} />
             <span 
-              className="absolute -top-1 -right-2 text-[8px] font-bold font-mono px-1 rounded-full text-black shadow-xs"
+              className="absolute -top-1 -right-2 text-[9px] font-bold font-mono px-1.5 py-0.2 rounded-full text-black shadow-xs"
               style={{ backgroundColor: theme.accentColor }}
             >
               {layers.length}
             </span>
           </div>
-          <span className="text-[9px] font-bold text-gray-300">
+          <span className="text-[11px] font-bold text-gray-200">
             {layers.length === 1 ? '1 Capa' : `${layers.length} Capas`}
           </span>
         </button>

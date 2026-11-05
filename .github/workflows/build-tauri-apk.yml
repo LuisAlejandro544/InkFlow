@@ -245,19 +245,19 @@ jobs:
 
           case "$TARGET_CHOICE" in
             "arm64")
-              TARGET_FLAGS="--target aarch64"
+              TARGET_FLAGS="--target aarch64 --split-per-abi"
               ;;
             "armv7")
-              TARGET_FLAGS="--target armv7"
+              TARGET_FLAGS="--target armv7 --split-per-abi"
               ;;
             "universal")
               TARGET_FLAGS="--target aarch64 --target armv7"
               ;;
             "all")
-              TARGET_FLAGS=""
+              TARGET_FLAGS="--split-per-abi"
               ;;
             *)
-              TARGET_FLAGS="--target aarch64 --target armv7"
+              TARGET_FLAGS="--target aarch64 --split-per-abi"
               ;;
           esac
 
@@ -273,20 +273,28 @@ jobs:
       - name: Recolectar archivos APK Debug
         id: collect_apks
         run: |
+          rm -rf build-artifacts
           mkdir -p build-artifacts
           echo "📦 Buscando archivos APK Debug generados..."
           
-          # Buscar todos los .apk dentro de src-tauri
-          find src-tauri -type f -name "*.apk" | while read -r apk_file; do
-            APK_NAME=$(basename "$apk_file")
-            echo "Encontrado: $apk_file -> Copiando a build-artifacts/InkFlow-Studio-${APK_NAME}"
-            cp "$apk_file" "build-artifacts/InkFlow-Studio-${APK_NAME}"
-          done
-
-          # Si no se encontró ninguno con el patrón exacto, copiar todo lo que esté en outputs/apk
-          if [ -d "src-tauri/gen/android/app/build/outputs/apk" ]; then
-            find "src-tauri/gen/android/app/build/outputs/apk" -type f -name "*.apk" -exec cp {} build-artifacts/ \;
+          # Buscar únicamente dentro de la carpeta oficial de outputs de Gradle de Tauri
+          SEARCH_DIR="src-tauri/gen/android/app/build/outputs/apk"
+          if [ ! -d "$SEARCH_DIR" ]; then
+            SEARCH_DIR="src-tauri"
           fi
+
+          echo "Explorando directorio de salida: $SEARCH_DIR"
+          # Filtrar solo archivos .apk finales y asegurar cero duplicación
+          find "$SEARCH_DIR" -type f -name "*.apk" | sort -u | while read -r apk_file; do
+            APK_NAME=$(basename "$apk_file")
+            # Normalizar nombre sin prefijos repetidos
+            CLEAN_NAME=$(echo "$APK_NAME" | sed 's/^app-//')
+            FINAL_NAME="InkFlow-Studio-${CLEAN_NAME}"
+            if [ ! -f "build-artifacts/${FINAL_NAME}" ]; then
+              echo "✅ Empaquetando APK único: $apk_file -> build-artifacts/${FINAL_NAME}"
+              cp "$apk_file" "build-artifacts/${FINAL_NAME}"
+            fi
+          done
 
           COUNT=$(find build-artifacts -type f -name "*.apk" | wc -l)
           echo "Total de APKs recolectados: $COUNT"

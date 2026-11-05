@@ -19,6 +19,16 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <style>
+      :root {
+        font-size: 16px;
+      }
+      html {
+        font-size: 16px !important;
+        -webkit-text-size-adjust: 100% !important;
+        text-size-adjust: 100% !important;
+        -moz-text-size-adjust: 100% !important;
+        -ms-text-size-adjust: 100% !important;
+      }
       html, body {
         background-color: #121316;
         color: #e5e7eb;
@@ -34,6 +44,12 @@
         -webkit-touch-callout: none;
         touch-action: manipulation;
         -webkit-tap-highlight-color: transparent;
+        font-size: 15px;
+        -webkit-font-smoothing: antialiased;
+      }
+      *, *::before, *::after {
+        -webkit-text-size-adjust: 100% !important;
+        text-size-adjust: 100% !important;
       }
       #root {
         width: 100%;

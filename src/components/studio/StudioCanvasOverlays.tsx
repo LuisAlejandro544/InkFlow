@@ -60,9 +60,9 @@ export const StudioCanvasOverlays: React.FC<StudioCanvasOverlaysProps> = ({
             triggerHaptic(10);
             onToggleTracingVisibility();
           }}
-          className={`absolute top-14 right-3 z-20 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-2xl backdrop-blur-md border transition-all active:scale-95 ${
+          className={`absolute top-[calc(4.25rem+max(env(safe-area-inset-top,0px),12px))] right-3 z-20 px-3.5 py-2 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-2xl backdrop-blur-md border transition-all active:scale-95 ${
             tracingRef.visible
-              ? 'bg-[#14151df0] border-gray-700/80 text-gray-300 hover:text-white'
+              ? 'bg-[#14151df0] border-gray-700/80 text-gray-200 hover:text-white'
               : tracingRef.purpose === 'accessory'
                 ? 'bg-pink-500 text-white border-pink-300 shadow-pink-500/40'
                 : 'text-black shadow-md'
@@ -75,9 +75,9 @@ export const StudioCanvasOverlays: React.FC<StudioCanvasOverlaysProps> = ({
           title="Toca para ocultar o mostrar la referencia y comparar tu dibujo"
         >
           {tracingRef.visible ? (
-            <Eye size={14} style={{ color: theme.accentColor }} />
+            <Eye size={15} style={{ color: theme.accentColor }} />
           ) : (
-            <EyeOff size={14} />
+            <EyeOff size={15} />
           )}
           <span>{tracingRef.visible ? (tracingRef.purpose === 'accessory' ? 'Accesorio' : 'Calco') : 'Oculto'}</span>
         </button>
@@ -85,7 +85,7 @@ export const StudioCanvasOverlays: React.FC<StudioCanvasOverlaysProps> = ({
 
       {/* Píldora Flotante Ergonómica: Expansión de Borde y Cierre Inteligente de Huecos */}
       {activeTool === 'bucket' && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-[#13141cf5] border border-indigo-500/50 rounded-2xl py-1.5 px-3 flex items-center gap-2.5 shadow-2xl backdrop-blur-md max-w-[96vw] animate-in fade-in slide-in-from-top-2 overflow-x-auto no-scrollbar">
+        <div className="absolute top-[calc(4.25rem+max(env(safe-area-inset-top,0px),12px))] left-1/2 -translate-x-1/2 z-40 bg-[#13141cf5] border border-indigo-500/50 rounded-2xl py-2 px-3.5 flex items-center gap-2.5 shadow-2xl backdrop-blur-md max-w-[96vw] animate-in fade-in slide-in-from-top-2 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-[11px] font-bold text-indigo-300">🪣 Exp:</span>
             <div className="flex items-center gap-0.5 bg-[#0b0c10] p-0.5 rounded-xl border border-[#222433]">

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  font-size: 16px;
   --color-app-accent: #f59e0b;
   --color-app-accent-hover: #d97706;
   --color-app-accent-soft: rgba(245, 158, 11, 0.15);
@@ -13,6 +14,20 @@
   --app-accent-soft25: rgba(245, 158, 11, 0.25);
   --app-accent-border: rgba(245, 158, 11, 0.50);
   --app-accent-text: #fbbf24;
+}
+
+/* Bloqueo estricto contra encogimiento o ampliación arbitraria del sistema operativo en WebView */
+html {
+  font-size: 16px !important;
+  -webkit-text-size-adjust: 100% !important;
+  text-size-adjust: 100% !important;
+  -moz-text-size-adjust: 100% !important;
+}
+
+body {
+  font-size: 15px;
+  -webkit-text-size-adjust: 100% !important;
+  text-size-adjust: 100% !important;
 }
 
 /* Clases utilitarias globales de tema reactivo para toda la aplicación */
