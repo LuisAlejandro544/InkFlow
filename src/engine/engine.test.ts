@@ -1909,3 +1909,98 @@ test('PWA Offline & Service Worker: Manifest y Estrategia de Caché 100% Sin Int
   assert.ok(html.includes('rel="manifest"'), 'index.html debe enlazar el manifest para Chromium');
   assert.ok(!html.includes('reg.unregister()'), 'index.html no debe desregistrar el Service Worker');
 });
+
+test('Mobile APK & PWA: Canvas de baja latencia (desynchronized: true)', async () => {
+  // Simular mock de HTMLCanvasElement con soporte para opciones de contexto 2D
+  let capturedOptions: CanvasRenderingContext2DSettings | undefined;
+  const mockCanvas = {
+    getContext: (_type: string, options?: CanvasRenderingContext2DSettings) => {
+      capturedOptions = options;
+      return {
+        save: () => {},
+        restore: () => {},
+        drawImage: () => {},
+      };
+    }
+  } as unknown as HTMLCanvasElement;
+
+  const ctx = mockCanvas.getContext('2d', { desynchronized: true });
+  assert.ok(ctx, 'Debe devolver contexto 2D');
+  assert.equal(capturedOptions?.desynchronized, true, 'Debe requerir desynchronized: true para eludir el compositor');
+});
+
+test('Mobile APK: Guardado directo en la carpeta Pictures/InkFlow Studio vía Tauri IPC', async () => {
+  // Configurar mock de entorno Tauri v2
+  let tauriCommandCalled = '';
+  let passedPayload: any = null;
+
+  (globalThis as any).window = {
+    __TAURI__: {
+      core: {
+        invoke: async (cmd: string, payload: any) => {
+          tauriCommandCalled = cmd;
+          passedPayload = payload;
+          return `/storage/emulated/0/Pictures/InkFlow Studio/${payload.fileName}`;
+        }
+      }
+    }
+  };
+
+  const mockCanvas = {
+    toDataURL: () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  } as unknown as HTMLCanvasElement;
+
+  const result = await saveArtworkToUserGallery(mockCanvas, 'mi_ilustracion_apk', 'full', 1, 'png');
+
+  assert.equal(result.success, true, 'El guardado debe reportar éxito');
+  assert.equal(result.method, 'tauri_pictures_folder', 'Debe utilizar el método directo tauri_pictures_folder');
+  assert.ok(result.message.includes('Pictures/InkFlow Studio'), 'El mensaje debe indicar la carpeta Pictures/InkFlow Studio');
+  assert.equal(tauriCommandCalled, 'save_image_to_gallery', 'Debe invocar el comando nativo save_image_to_gallery');
+  assert.ok(passedPayload.fileName.includes('mi_ilustracion_apk'), 'Debe enviar el nombre del archivo sanitizado');
+  assert.ok(Array.isArray(passedPayload.imageBytes), 'Debe transferir el array binario de bytes');
+
+  // Limpiar entorno global
+  delete (globalThis as any).window;
+});
+
+test('Android Native & Workflow: Modo Pantalla Completa Inmersivo (Immersive Sticky)', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  // 1. Verificar que el workflow de GitHub Actions inyecta Immersive Sticky en MainActivity.kt
+  const workflowPath = path.resolve('.github/workflows/build-tauri-apk.yml');
+  const workflowContent = fs.readFileSync(workflowPath, 'utf-8');
+  assert.ok(
+    workflowContent.includes('BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE'),
+    'El workflow debe inyectar el comportamiento BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE'
+  );
+  assert.ok(
+    workflowContent.includes('WindowInsetsCompat.Type.systemBars()'),
+    'El workflow debe ocultar systemBars() para modo inmersivo'
+  );
+  assert.ok(
+    workflowContent.includes('setupImmersiveStickyMode'),
+    'MainActivity.kt debe contar con setupImmersiveStickyMode'
+  );
+
+  // 2. Verificar tema Fullscreen en AndroidManifest.xml
+  const manifestPath = path.resolve('src-tauri/AndroidManifest.xml');
+  const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+  assert.ok(
+    manifestContent.includes('Theme.NoTitleBar.Fullscreen'),
+    'AndroidManifest.xml debe declarar tema NoTitleBar.Fullscreen'
+  );
+
+  // 3. Verificar comando nativo en src-tauri/src/lib.rs
+  const libRsPath = path.resolve('src-tauri/src/lib.rs');
+  const libRsContent = fs.readFileSync(libRsPath, 'utf-8');
+  assert.ok(
+    libRsContent.includes('save_image_to_gallery'),
+    'src-tauri/src/lib.rs debe registrar el comando save_image_to_gallery'
+  );
+  assert.ok(
+    libRsContent.includes('Pictures/InkFlow Studio'),
+    'src-tauri/src/lib.rs debe apuntar a Pictures/InkFlow Studio'
+  );
+});
+

@@ -63,7 +63,7 @@ export function useAccessoryStamper({
       const newCanvas = document.createElement('canvas');
       newCanvas.width = currentProject.width;
       newCanvas.height = currentProject.height;
-      const newCtx = newCanvas.getContext('2d')!;
+      const newCtx = newCanvas.getContext('2d', { desynchronized: true })!;
 
       newCtx.save();
       newCtx.imageSmoothingEnabled = true;

@@ -17,7 +17,7 @@ export function createInitialLayer(width: number = 800, height: number = 1200): 
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { desynchronized: true });
   if (!ctx) return null;
   return {
     id: 'layer_default_1',
@@ -44,7 +44,7 @@ export function useLayerManager() {
     const layerCanvas = document.createElement('canvas');
     layerCanvas.width = proj.width;
     layerCanvas.height = proj.height;
-    const ctx = layerCanvas.getContext('2d')!;
+    const ctx = layerCanvas.getContext('2d', { desynchronized: true })!;
 
     const initialLayer: Layer = {
       id: `layer_${Date.now()}_1`,
@@ -68,7 +68,7 @@ export function useLayerManager() {
     const newCanvas = document.createElement('canvas');
     newCanvas.width = width;
     newCanvas.height = height;
-    const newCtx = newCanvas.getContext('2d')!;
+    const newCtx = newCanvas.getContext('2d', { desynchronized: true })!;
 
     const newLayer: Layer = {
       id: `layer_${Date.now()}`,
@@ -94,7 +94,7 @@ export function useLayerManager() {
     const dupCanvas = document.createElement('canvas');
     dupCanvas.width = width;
     dupCanvas.height = height;
-    const dupCtx = dupCanvas.getContext('2d')!;
+    const dupCtx = dupCanvas.getContext('2d', { desynchronized: true })!;
     dupCtx.drawImage(srcLayer.canvas, 0, 0);
 
     const dupLayer: Layer = {

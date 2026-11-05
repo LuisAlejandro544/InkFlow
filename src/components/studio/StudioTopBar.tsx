@@ -10,7 +10,7 @@
  * - Totalmente reactiva al tema visual seleccionado por el usuario.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Undo2, Redo2, Download, MoreHorizontal, 
   Sparkles, RotateCcw, Camera, Eye, EyeOff, Sliders, Maximize2, 
@@ -81,6 +81,29 @@ export const StudioTopBar: React.FC<StudioTopBarProps> = ({
   const theme = useAppTheme();
   const [showStabilizerMenu, setShowStabilizerMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    return typeof document !== 'undefined' ? Boolean(document.fullscreenElement) : false;
+  });
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    triggerHaptic(10);
+    if (typeof document === 'undefined') return;
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  };
 
   return (
     <>
@@ -507,6 +530,27 @@ export const StudioTopBar: React.FC<StudioTopBarProps> = ({
                 </div>
               </button>
             )}
+
+            {/* Opción 3.6: Modo Pantalla Completa Inmersivo (Immersive Sticky) */}
+            <button
+              type="button"
+              onClick={() => {
+                toggleFullscreen();
+                setShowMoreMenu(false);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-200 hover:bg-[#20222f] active:scale-98 transition-all text-left"
+            >
+              <Maximize2 size={16} style={{ color: theme.accentColor }} />
+              <div className="flex-1 min-w-0">
+                <span className="block leading-tight font-medium">
+                  {isFullscreen ? 'Salir de Pantalla Completa' : 'Pantalla Completa Inmersiva'}
+                </span>
+                <span className="text-[9px] text-gray-400 block">
+                  {isFullscreen ? 'Restaurar interfaz estándar' : 'Maximizar área táctil para dibujar'}
+                </span>
+              </div>
+              {isFullscreen && <Check size={14} style={{ color: theme.accentColor }} className="stroke-[3]" />}
+            </button>
 
             <div className="h-px bg-[#262838] my-1" />
 

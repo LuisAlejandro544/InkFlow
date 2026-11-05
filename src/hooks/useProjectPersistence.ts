@@ -100,7 +100,7 @@ export function useProjectPersistence({
                 const canvas = document.createElement('canvas');
                 canvas.width = proj.width;
                 canvas.height = proj.height;
-                const ctx = canvas.getContext('2d')!;
+                const ctx = canvas.getContext('2d', { desynchronized: true })!;
 
                 if (sl.imageDataUrl) {
                   if (typeof createImageBitmap === 'function') {
@@ -271,7 +271,7 @@ export function useProjectPersistence({
             const canvas = document.createElement('canvas');
             canvas.width = payload.project.width;
             canvas.height = payload.project.height;
-            const ctx = canvas.getContext('2d')!;
+            const ctx = canvas.getContext('2d', { desynchronized: true })!;
 
             if (sl.imageDataUrl) {
               const img = new Image();

@@ -12,6 +12,7 @@
 import { Layer } from './types';
 import { BoundingBoxResult } from './transformMath';
 import { kotlinVectorEngine } from './kotlinWasmBridge';
+import { detectIsTauri } from './environmentDetector';
 
 export interface ExportDimensions {
   w: number;
@@ -335,7 +336,7 @@ export async function saveArtworkToUserGallery(
   scale: number,
   format: ExportFormat,
   qualityMode: ExportQualityMode = 'standard'
-): Promise<{ success: boolean; method: 'kotlin_mediastore' | 'download_direct' | 'native_gallery_share' | 'download_fallback'; message: string }> {
+): Promise<{ success: boolean; method: 'kotlin_mediastore' | 'tauri_pictures_folder' | 'download_direct' | 'native_gallery_share' | 'download_fallback'; message: string }> {
   const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
   const finalFilename = formatArtworkFilename(projectName, cropMode, scale, format, qualityMode);
   const encoderQuality = qualityMode === 'ultra_4k' ? 1.0 : qualityMode === 'hd' ? 0.98 : 0.92;
@@ -354,11 +355,63 @@ export async function saveArtworkToUserGallery(
         };
       }
     } catch {
+      // Continuar al siguiente método
+    }
+  }
+
+  // 2. Intentar guardado directo nativo mediante Tauri v2 (APK Android / Desktop)
+  // Escribe directamente en /storage/emulated/0/Pictures/InkFlow Studio e indexa en la Galería
+  if (detectIsTauri()) {
+    try {
+      const dataUrl = cvs.toDataURL(mimeType, encoderQuality);
+      const base64Data = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      
+      let imageBytes: number[] = [];
+      if (typeof atob === 'function') {
+        const binaryStr = atob(base64Data);
+        imageBytes = new Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          imageBytes[i] = binaryStr.charCodeAt(i);
+        }
+      }
+
+      const globalTauri = typeof window !== 'undefined' ? (window as unknown as { __TAURI__?: { core?: { invoke: (cmd: string, args: unknown) => Promise<string> }; invoke?: (cmd: string, args: unknown) => Promise<string> } }).__TAURI__ : null;
+      let savedPath: string | null = null;
+
+      if (globalTauri?.core?.invoke) {
+        savedPath = await globalTauri.core.invoke('save_image_to_gallery', {
+          imageBytes,
+          base64Data,
+          fileName: finalFilename,
+        });
+      } else if (globalTauri?.invoke) {
+        savedPath = await globalTauri.invoke('save_image_to_gallery', {
+          imageBytes,
+          base64Data,
+          fileName: finalFilename,
+        });
+      } else {
+        const { invoke } = await import('@tauri-apps/api/core');
+        savedPath = await invoke<string>('save_image_to_gallery', {
+          imageBytes,
+          base64Data,
+          fileName: finalFilename,
+        });
+      }
+
+      if (savedPath) {
+        return {
+          success: true,
+          method: 'tauri_pictures_folder',
+          message: '¡Guardado con éxito en Pictures/InkFlow Studio!'
+        };
+      }
+    } catch {
       // Continuar al método de descarga directa
     }
   }
 
-  // 2. Método Directo: Guardar directamente en el almacenamiento del teléfono.
+  // 3. Método Directo: Guardar directamente en el almacenamiento del teléfono.
   // Al descargarse el archivo, el sistema operativo móvil (Android/iOS) lo registra
   // de forma inmediata en la Galería de Fotos del dispositivo, sin abrir la ventana emergente
   // de "Compartir imagen" con WhatsApp/Drive.

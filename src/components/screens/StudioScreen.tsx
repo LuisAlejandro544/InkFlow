@@ -169,7 +169,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     const fallbackCanvas = document.createElement('canvas');
     fallbackCanvas.width = project.width;
     fallbackCanvas.height = project.height;
-    const fallbackCtx = fallbackCanvas.getContext('2d');
+    // Contexto 2D de baja latencia desincronizado directo al framebuffer
+    const fallbackCtx = fallbackCanvas.getContext('2d', { desynchronized: true });
     if (fallbackCtx) {
       fallbackLayerRef.current = {
         id: 'layer_default_1',
@@ -219,7 +220,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const renderTracingLayer = useCallback(() => {
     const canvas = tracingCanvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { desynchronized: true });
     if (!ctx) return;
 
     if (canvas.width !== project.width || canvas.height !== project.height) {
@@ -275,11 +276,12 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
   /**
    * Redibuja la composición de capas transparentes y trazos vectoriales en el displayCanvas.
+   * Utiliza desynchronized: true para eliminar el búfer intermedio del compositor de Android.
    */
   const renderComposite = useCallback(() => {
     const displayCanvas = displayCanvasRef.current;
     if (!displayCanvas) return;
-    const ctx = displayCanvas.getContext('2d');
+    const ctx = displayCanvas.getContext('2d', { desynchronized: true });
     if (!ctx) return;
 
     if (displayCanvas.width !== project.width || displayCanvas.height !== project.height) {

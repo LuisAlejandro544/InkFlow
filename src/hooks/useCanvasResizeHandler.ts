@@ -52,7 +52,7 @@ export function useCanvasResizeHandler({
         const newCanvas = document.createElement('canvas');
         newCanvas.width = newWidth;
         newCanvas.height = newHeight;
-        const newCtx = newCanvas.getContext('2d')!;
+        const newCtx = newCanvas.getContext('2d', { desynchronized: true })!;
 
         newCtx.drawImage(layer.canvas, offsetX, offsetY);
 
