@@ -252,8 +252,8 @@ jobs:
               ;;
           esac
 
-          echo "Ejecutando: npx tauri android build --debug --apk --ci --ignore-version-mismatches $TARGET_FLAGS -- --stacktrace --info"
-          npx tauri android build --debug --apk --ci --ignore-version-mismatches $TARGET_FLAGS -- --stacktrace --info
+          echo "Ejecutando: npx tauri android build --debug --apk --ci --ignore-version-mismatches -v $TARGET_FLAGS"
+          npx tauri android build --debug --apk --ci --ignore-version-mismatches -v $TARGET_FLAGS
 
           echo "✅ Compilación de Tauri v2 finalizada"
 
