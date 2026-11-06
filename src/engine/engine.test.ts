@@ -1967,19 +1967,26 @@ test('Android Native & Workflow: Modo Pantalla Completa Inmersivo (Immersive Sti
   const fs = await import('fs');
   const path = await import('path');
 
-  // 1. Verificar que el workflow de GitHub Actions inyecta Immersive Sticky en MainActivity.kt
+  // 1. Verificar que el workflow de GitHub Actions ejecuta scripts/configure-android-native.cjs
   const workflowPath = path.resolve('.github/workflows/build-tauri-apk.yml');
   const workflowContent = fs.readFileSync(workflowPath, 'utf-8');
   assert.ok(
-    workflowContent.includes('BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE'),
-    'El workflow debe inyectar el comportamiento BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE'
+    workflowContent.includes('scripts/configure-android-native.cjs'),
+    'El workflow debe ejecutar scripts/configure-android-native.cjs'
+  );
+
+  const scriptPath = path.resolve('scripts/configure-android-native.cjs');
+  const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
+  assert.ok(
+    scriptContent.includes('BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE'),
+    'El script nativo debe inyectar el comportamiento BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE'
   );
   assert.ok(
-    workflowContent.includes('WindowInsetsCompat.Type.systemBars()'),
-    'El workflow debe ocultar systemBars() para modo inmersivo'
+    scriptContent.includes('WindowInsetsCompat.Type.systemBars()'),
+    'El script nativo debe ocultar systemBars() para modo inmersivo'
   );
   assert.ok(
-    workflowContent.includes('setupImmersiveStickyMode'),
+    scriptContent.includes('setupImmersiveStickyMode'),
     'MainActivity.kt debe contar con setupImmersiveStickyMode'
   );
 
