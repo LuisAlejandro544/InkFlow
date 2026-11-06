@@ -263,8 +263,6 @@ import android.webkit.WebView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import app.tauri.plugin.TauriActivity
-import app.tauri.plugin.PluginManager
 import com.inkflow.studio.platform.AndroidGalleryManager
 import com.inkflow.studio.platform.AndroidScreenWakeLockManager
 import com.inkflow.studio.platform.InkFlowJavascriptInterface
@@ -275,16 +273,6 @@ open class MainActivity : TauriActivity() {
     super.onCreate(savedInstanceState)
     setupImmersiveStickyMode()
     setupNativeJavascriptBridge()
-  }
-
-  /**
-   * Ciclo de vida oficial de Tauri v2 en Android:
-   * onWebViewCreate se ejecuta exactamente en el momento en que Tauri crea la instancia de WebView,
-   * permitiendo inyectar InkFlowNativeBridge antes de que la página web termine de evaluar sus scripts.
-   */
-  override fun onWebViewCreate(webView: WebView) {
-    super.onWebViewCreate(webView)
-    attachNativeBridge(webView)
   }
 
   override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -412,19 +400,47 @@ function configureGradleProperties(androidDir) {
   console.log('✅ gradle.properties configurado con flags de memoria y AndroidX');
 }
 
+function configureSettingsGradle(androidDir) {
+  const settingsPath = path.join(androidDir, 'settings.gradle');
+  if (fs.existsSync(settingsPath)) {
+    let content = fs.readFileSync(settingsPath, 'utf8');
+    if (content.includes('1.8.20')) {
+      content = content.replace(/useVersion\("1\.8\.20"\)/g, 'useVersion("1.9.22")');
+      fs.writeFileSync(settingsPath, content, 'utf8');
+      console.log('✅ settings.gradle actualizado a Kotlin 1.9.22');
+    }
+  }
+}
+
+function configureBuildGradleCompatibility(gradleDir) {
+  const ktsPath = path.join(gradleDir, 'build.gradle.kts');
+  if (fs.existsSync(ktsPath)) {
+    let content = fs.readFileSync(ktsPath, 'utf8');
+    if (content.includes('JvmTarget.JVM_1_8')) {
+      content = content.replace(/JvmTarget\.JVM_1_8/g, 'JvmTarget.JVM_17');
+      content = content.replace(/JavaVersion\.VERSION_1_8/g, 'JavaVersion.VERSION_17');
+      fs.writeFileSync(ktsPath, content, 'utf8');
+      console.log('✅ build.gradle.kts actualizado a JVM 17');
+    }
+  }
+}
+
 // Ejecución principal
 const manifestTarget = path.resolve('src-tauri/gen/android/app/src/main/AndroidManifest.xml');
 const javaTargetDir = path.resolve('src-tauri/gen/android/app/src/main/java');
 const resTargetDir = path.resolve('src-tauri/gen/android/app/src/main/res');
 const appGradleDir = path.resolve('src-tauri/gen/android/app');
+const androidRoot = path.resolve('src-tauri/gen/android');
 
 console.log('🔧 Ejecutando configuración nativa para Android con soporte Room Database...');
+configureSettingsGradle(androidRoot);
+configureBuildGradleCompatibility(appGradleDir);
 configureAndroidManifest(manifestTarget);
 ensureFilePathsXml(resTargetDir);
 copyKotlinPlatformBridge(javaTargetDir);
 copyKotlinDatabaseFiles(javaTargetDir);
 configureGradleRoomDependencies(appGradleDir);
-configureGradleProperties(path.resolve('src-tauri/gen/android'));
+configureGradleProperties(androidRoot);
 configureMainActivity(javaTargetDir);
 console.log('🚀 Configuración nativa completada.');
 

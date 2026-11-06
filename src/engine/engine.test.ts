@@ -2003,8 +2003,8 @@ test('Android Native & Workflow: Modo Pantalla Completa Inmersivo (Immersive Sti
     'MainActivity.kt debe contar con setupImmersiveStickyMode'
   );
   assert.ok(
-    scriptContent.includes('onWebViewCreate'),
-    'MainActivity.kt debe sobreescribir onWebViewCreate para inyectar InkFlowNativeBridge de forma síncrona en Tauri v2'
+    scriptContent.includes('setupNativeJavascriptBridge'),
+    'MainActivity.kt debe contar con setupNativeJavascriptBridge para inyectar InkFlowNativeBridge'
   );
   assert.ok(
     scriptContent.includes('attachNativeBridge'),
