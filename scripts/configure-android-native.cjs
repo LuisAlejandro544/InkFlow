@@ -171,30 +171,34 @@ function configureGradleRoomDependencies(gradleDir) {
 
   if (fs.existsSync(ktsPath)) {
     let content = fs.readFileSync(ktsPath, 'utf8');
+    // Limpiar cualquier referencia obsoleta o inválida a sqlite-bundled
+    content = content.replace(/.*androidx\.sqlite:sqlite-bundled.*\n?/g, '');
+    
     if (!content.includes('androidx.room:room-runtime')) {
       const roomDeps = `
     // Android Jetpack Room para persistencia física en disco de InkFlow Studio
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-    implementation("androidx.sqlite:sqlite-bundled:2.4.0")
 `;
       content = content.replace(/(dependencies\s*\{)/, `$1${roomDeps}`);
-      fs.writeFileSync(ktsPath, content, 'utf8');
       console.log('✅ Dependencias de Android Jetpack Room inyectadas en build.gradle.kts');
     }
+    fs.writeFileSync(ktsPath, content, 'utf8');
   } else if (fs.existsSync(groovyPath)) {
     let content = fs.readFileSync(groovyPath, 'utf8');
+    // Limpiar cualquier referencia obsoleta o inválida a sqlite-bundled
+    content = content.replace(/.*androidx\.sqlite:sqlite-bundled.*\n?/g, '');
+    
     if (!content.includes('androidx.room:room-runtime')) {
       const roomDeps = `
     // Android Jetpack Room para persistencia física en disco de InkFlow Studio
     implementation 'androidx.room:room-runtime:2.6.1'
     implementation 'androidx.room:room-ktx:2.6.1'
-    implementation 'androidx.sqlite:sqlite-bundled:2.4.0'
 `;
       content = content.replace(/(dependencies\s*\{)/, `$1${roomDeps}`);
-      fs.writeFileSync(groovyPath, content, 'utf8');
       console.log('✅ Dependencias de Android Jetpack Room inyectadas en build.gradle');
     }
+    fs.writeFileSync(groovyPath, content, 'utf8');
   }
 }
 

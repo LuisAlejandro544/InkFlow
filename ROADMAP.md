@@ -360,7 +360,7 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
   - Al ser llamadas síncronas a nivel de Activity nativa, se ejecutan de inmediato en eventos de ciclo de vida (`visibilitychange`, `pagehide`, `error`) antes de que el kernel de Android pueda enviar SIGKILL al proceso.
 - [x] **Inyección Automatizada en Gradle (`configure-android-native.cjs`):**
   - Copia automática de las entidades, DAOs y `RoomStorageManager` a `src-tauri/gen/android/app/src/main/java/com/inkflow/studio/database/`.
-  - Inyección de dependencias `androidx.room:room-runtime:2.6.1`, `androidx.room:room-ktx:2.6.1` y `androidx.sqlite:sqlite-bundled:2.4.0`.
+  - Inyección de dependencias oficiales `androidx.room:room-runtime:2.6.1` y `androidx.room:room-ktx:2.6.1`.
 - [x] **78 Pruebas Unitarias Deterministas:**
   - 69 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, calco, flood fill, Sobel, Kotlin/PWA y corrutinas + 9 tests de almacenamiento relacional (SQLite Wasm OPFS y Android Jetpack Room).
 
