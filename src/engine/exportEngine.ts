@@ -466,27 +466,43 @@ export async function shareArtworkFile(
   projectName: string,
   format: ExportFormat
 ): Promise<boolean> {
-  if (typeof navigator === 'undefined' || !navigator.share) {
-    return false;
+  const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
+  const cleanName = (projectName || 'mi_obra').toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const finalFilename = `${cleanName}.${format}`;
+
+  // 1. Probar puente nativo de Android en Kotlin (@JavascriptInterface InkFlowNativeBridge)
+  // Despliega la hoja nativa Intent.ACTION_SEND con WhatsApp, Instagram, Google Fotos, etc.
+  if (typeof window !== 'undefined' && (window as unknown as { InkFlowNativeBridge?: { shareImage?: (dataUrl: string, name: string, mime: string) => string } }).InkFlowNativeBridge?.shareImage) {
+    try {
+      const dataUrl = cvs.toDataURL(mimeType, 0.95);
+      const rawRes = (window as unknown as { InkFlowNativeBridge: { shareImage: (dataUrl: string, name: string, mime: string) => string } }).InkFlowNativeBridge.shareImage(dataUrl, finalFilename, mimeType);
+      const parsed = JSON.parse(rawRes || '{}');
+      if (parsed.success) {
+        return true;
+      }
+    } catch {
+      // Continuar al método estándar
+    }
   }
 
-  const mimeType = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
-  const blob = await new Promise<Blob | null>((resolve) => {
-    cvs.toBlob(resolve, mimeType, 0.95);
-  });
-
-  if (!blob) return false;
-
-  const cleanName = (projectName || 'mi_obra').toLowerCase().replace(/[^a-z0-9]/g, '_');
-  const file = new File([blob], `${cleanName}.${format}`, { type: blob.type });
-
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({
-      files: [file],
-      title: projectName || 'Mi Obra Maestra',
-      text: 'Ilustración creada en InkFlow Studio',
+  // 2. Probar Web Share API para PWA y navegadores
+  if (typeof navigator !== 'undefined' && navigator.share) {
+    const blob = await new Promise<Blob | null>((resolve) => {
+      cvs.toBlob(resolve, mimeType, 0.95);
     });
-    return true;
+
+    if (!blob) return false;
+
+    const file = new File([blob], finalFilename, { type: blob.type });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: projectName || 'Mi Obra Maestra',
+        text: 'Ilustración creada en InkFlow Studio',
+      });
+      return true;
+    }
   }
 
   return false;

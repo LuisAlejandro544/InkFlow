@@ -234,6 +234,58 @@ class InkFlowJavascriptInterface(
     }
 
     /**
+     * Método invocado por la app para compartir mediante la hoja nativa de Android (Intent.ACTION_SEND)
+     */
+    @JavascriptInterface
+    fun shareImage(base64Data: String, filename: String, mimeType: String): String {
+        return try {
+            val cleanBase64 = if (base64Data.contains(",")) {
+                base64Data.substringAfter(",")
+            } else {
+                base64Data
+            }
+            val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+            val extension = when {
+                mimeType.contains("jpeg") || mimeType.contains("jpg") -> ".jpg"
+                mimeType.contains("webp") -> ".webp"
+                else -> ".png"
+            }
+            val cleanName = filename.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
+            val targetFolder = File(activity.cacheDir, "shared_drawings").apply {
+                if (!exists()) mkdirs()
+            }
+            val file = File(targetFolder, "${cleanName}_share$extension")
+            FileOutputStream(file).use { fos ->
+                fos.write(bytes)
+                fos.flush()
+            }
+
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                activity,
+                "${activity.packageName}.fileprovider",
+                file
+            )
+
+            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, filename)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            activity.runOnUiThread {
+                val chooser = android.content.Intent.createChooser(shareIntent, "Compartir ilustración")
+                chooser.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(chooser)
+            }
+
+            "{\"success\": true}"
+        } catch (e: Exception) {
+            "{\"success\": false, \"error\": \"${e.localizedMessage}\"}"
+        }
+    }
+
+    /**
      * Consulta si el puente nativo está disponible
      */
     @JavascriptInterface

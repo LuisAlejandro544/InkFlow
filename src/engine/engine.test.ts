@@ -36,7 +36,7 @@ import {
 } from './brushTextureEngine';
 import { Layer, BrushTextureConfig } from './types';
 import { wakeLockService } from './wakeLockService';
-import { saveArtworkToUserGallery, applyUnsharpMask, formatArtworkFilename, estimateArtworkFileSizeFast, computeExportDimensions } from './exportEngine';
+import { saveArtworkToUserGallery, shareArtworkFile, applyUnsharpMask, formatArtworkFilename, estimateArtworkFileSizeFast, computeExportDimensions } from './exportEngine';
 import { gpuBitmapCache } from './bitmapCache';
 import { getAvailableThemes, getActiveThemeId, applyAppTheme, APP_THEMES } from './themeEngine';
 
@@ -1438,6 +1438,7 @@ test('C++23 Wasm Motor Vectorial Analítico: Douglas-Peucker y Curvas Bézier Ca
 test('Kotlin / PWA Integración: Guardado Real en Galería y WakeLock de Pantalla Encendida', async () => {
   // 1. Simulación de entorno con puente nativo Kotlin y WakeLock
   let nativeSaved = false;
+  let nativeShared = false;
   let nativeKeepAlive = false;
 
   (globalThis as any).window = {
@@ -1445,6 +1446,10 @@ test('Kotlin / PWA Integración: Guardado Real en Galería y WakeLock de Pantall
       saveImageToGallery: (_base64: string, _filename: string, _mime: string) => {
         nativeSaved = true;
         return JSON.stringify({ success: true, uri: 'content://media/external/images/media/42' });
+      },
+      shareImage: (_base64: string, _filename: string, _mime: string) => {
+        nativeShared = true;
+        return JSON.stringify({ success: true });
       },
       setScreenKeepAlive: (keep: boolean) => {
         nativeKeepAlive = keep;
@@ -1472,6 +1477,11 @@ test('Kotlin / PWA Integración: Guardado Real en Galería y WakeLock de Pantall
   assert.equal(result.success, true);
   assert.equal(result.method, 'kotlin_mediastore');
   assert.equal(nativeSaved, true, 'Debe llamar al método de guardado en Galería de MediaStore');
+
+  // Probar Compartir Real a través de Intent.ACTION_SEND Kotlin
+  const shared = await shareArtworkFile(mockCanvas, 'obra_maestra', 'png');
+  assert.equal(shared, true, 'Debe invocar shareImage de InkFlowNativeBridge con éxito');
+  assert.equal(nativeShared, true, 'Debe disparar el método nativo de compartir');
 
   // Limpiar mock global
   delete (globalThis as any).window;
@@ -1990,12 +2000,20 @@ test('Android Native & Workflow: Modo Pantalla Completa Inmersivo (Immersive Sti
     'MainActivity.kt debe contar con setupImmersiveStickyMode'
   );
 
-  // 2. Verificar tema Fullscreen en AndroidManifest.xml
+  // 2. Verificar tema Fullscreen y FileProvider en AndroidManifest.xml
   const manifestPath = path.resolve('src-tauri/AndroidManifest.xml');
   const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
   assert.ok(
     manifestContent.includes('Theme.NoTitleBar.Fullscreen'),
     'AndroidManifest.xml debe declarar tema NoTitleBar.Fullscreen'
+  );
+  assert.ok(
+    manifestContent.includes('androidx.core.content.FileProvider'),
+    'AndroidManifest.xml debe declarar FileProvider para compartir imágenes'
+  );
+  assert.ok(
+    manifestContent.includes('com.inkflow.studio.fileprovider'),
+    'AndroidManifest.xml debe declarar authority de com.inkflow.studio.fileprovider'
   );
 
   // 3. Verificar comando nativo en src-tauri/src/lib.rs
@@ -2009,5 +2027,12 @@ test('Android Native & Workflow: Modo Pantalla Completa Inmersivo (Immersive Sti
     libRsContent.includes('Pictures/InkFlow Studio'),
     'src-tauri/src/lib.rs debe apuntar a Pictures/InkFlow Studio'
   );
+
+  // 4. Verificar capabilities de Tauri v2 y file_paths.xml
+  const capabilitiesPath = path.resolve('src-tauri/capabilities/default.json');
+  assert.ok(fs.existsSync(capabilitiesPath), 'src-tauri/capabilities/default.json debe existir');
+
+  const filePathsPath = path.resolve('src-tauri/res/xml/file_paths.xml');
+  assert.ok(fs.existsSync(filePathsPath), 'src-tauri/res/xml/file_paths.xml debe existir');
 });
 
