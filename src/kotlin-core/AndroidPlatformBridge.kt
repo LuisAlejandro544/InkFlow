@@ -444,7 +444,7 @@ class InkFlowJavascriptInterface(
             }
             bufferedReader.close()
             process.destroy()
-            if (log.isEmpty()) "(Logcat vacío o sin permisos de lectura en el proceso)" else log.toString()
+            if (log.length == 0) "(Logcat vacío o sin permisos de lectura en el proceso)" else log.toString()
         } catch (e: Exception) {
             "Error leyendo logcat nativo: " + e.localizedMessage
         }

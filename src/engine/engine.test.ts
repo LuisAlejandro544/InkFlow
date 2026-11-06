@@ -2190,7 +2190,7 @@ test('APK Companion App: Declaración de DiagnosticMonitorActivity en AndroidMan
   const kotlinActivityPath = path.resolve('src/kotlin-core/DiagnosticMonitorActivity.kt');
   assert.ok(fs.existsSync(kotlinActivityPath), 'src/kotlin-core/DiagnosticMonitorActivity.kt debe existir');
   const kotlinActivityContent = fs.readFileSync(kotlinActivityPath, 'utf-8');
-  assert.ok(kotlinActivityContent.includes('class DiagnosticMonitorActivity : MainActivity()'));
+  assert.ok(kotlinActivityContent.includes('class DiagnosticMonitorActivity : Activity()'));
   assert.ok(kotlinActivityContent.includes('INITIAL_SCREEN'));
 });
 

@@ -207,8 +207,20 @@ jobs:
 
           echo "Ejecutando: npx tauri android build --debug --apk --ci --ignore-version-mismatches -v $TARGET_FLAGS"
           npx tauri android build --debug --apk --ci --ignore-version-mismatches -v $TARGET_FLAGS
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.logging.level=lifecycle -Dorg.gradle.daemon=false"
 
-          echo "✅ Compilación de Tauri v2 finalizada"
+      # 12.1. Diagnóstico de compilación en caso de fallo
+      - name: Diagnóstico de logs de Gradle en caso de error
+        if: failure()
+        run: |
+          echo "⚠️ La compilación falló. Extrayendo reportes de Gradle y Kotlin..."
+          if [ -d "src-tauri/gen/android" ]; then
+            find src-tauri/gen/android -name "*.log" -o -name "*output*.txt" | while read -r f; do
+              echo "=== REPORTE: $f ==="
+              head -n 80 "$f" 2>/dev/null || true
+            done
+          fi
 
       # 13. Recolectar y organizar los APKs generados para descarga
       - name: Recolectar archivos APK Debug

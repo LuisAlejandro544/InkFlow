@@ -200,12 +200,15 @@ function configureGradleRoomDependencies(gradleDir) {
     
     if (!content.includes('androidx.room:room-runtime')) {
       const roomDeps = `
-    // Android Jetpack Room para persistencia física en disco de InkFlow Studio
+    // Dependencias nativas de InkFlow Studio (Room, Coroutines y Core KTX)
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 `;
       content = content.replace(/(dependencies\s*\{)/, `$1${roomDeps}`);
-      console.log('✅ Dependencias de Android Jetpack Room inyectadas en build.gradle.kts');
+      console.log('✅ Dependencias de Android Jetpack Room y Corrutinas inyectadas en build.gradle.kts');
     }
     fs.writeFileSync(ktsPath, content, 'utf8');
   } else if (fs.existsSync(groovyPath)) {
@@ -215,12 +218,15 @@ function configureGradleRoomDependencies(gradleDir) {
     
     if (!content.includes('androidx.room:room-runtime')) {
       const roomDeps = `
-    // Android Jetpack Room para persistencia física en disco de InkFlow Studio
+    // Dependencias nativas de InkFlow Studio (Room, Coroutines y Core KTX)
     implementation 'androidx.room:room-runtime:2.6.1'
     implementation 'androidx.room:room-ktx:2.6.1'
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
 `;
       content = content.replace(/(dependencies\s*\{)/, `$1${roomDeps}`);
-      console.log('✅ Dependencias de Android Jetpack Room inyectadas en build.gradle');
+      console.log('✅ Dependencias de Android Jetpack Room y Corrutinas inyectadas en build.gradle');
     }
     fs.writeFileSync(groovyPath, content, 'utf8');
   }
@@ -257,13 +263,14 @@ import android.webkit.WebView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import app.tauri.plugin.TauriActivity
 import app.tauri.plugin.PluginManager
 import com.inkflow.studio.platform.AndroidGalleryManager
 import com.inkflow.studio.platform.AndroidScreenWakeLockManager
 import com.inkflow.studio.platform.InkFlowJavascriptInterface
 import com.inkflow.studio.database.RoomStorageManager
 
-class MainActivity : TauriActivity() {
+open class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setupImmersiveStickyMode()
@@ -359,16 +366,23 @@ class MainActivity : TauriActivity() {
   fs.writeFileSync(mainActivityPath, code, 'utf8');
   console.log('✅ MainActivity.kt configurado exitosamente con Modo Inmersivo y puente InkFlowNativeBridge con Room');
 
-  // Generar la actividad compañera de Diagnóstico y Debug
+  // Generar la actividad compañera de Diagnóstico y Debug heredando de android.app.Activity
   const diagPath = path.join(path.dirname(mainActivityPath), 'DiagnosticMonitorActivity.kt');
   const diagCode = `package com.inkflow.studio
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 
-class DiagnosticMonitorActivity : MainActivity() {
+class DiagnosticMonitorActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    intent?.putExtra("INITIAL_SCREEN", "monitor")
     super.onCreate(savedInstanceState)
+    val targetIntent = Intent(this, MainActivity::class.java).apply {
+      putExtra("INITIAL_SCREEN", "monitor")
+      addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    }
+    startActivity(targetIntent)
+    finish()
   }
 }
 `;
@@ -376,6 +390,26 @@ class DiagnosticMonitorActivity : MainActivity() {
   console.log('✅ DiagnosticMonitorActivity.kt generado exitosamente en:', diagPath);
 
   return true;
+}
+
+function configureGradleProperties(androidDir) {
+  if (!fs.existsSync(androidDir)) return;
+  const propPath = path.join(androidDir, 'gradle.properties');
+  let content = fs.existsSync(propPath) ? fs.readFileSync(propPath, 'utf8') : '';
+  const additions = [
+    'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8',
+    'kotlin.daemon.jvmargs=-Xmx1536m',
+    'android.useAndroidX=true',
+    'android.enableJetifier=true'
+  ];
+  for (const item of additions) {
+    const key = item.split('=')[0];
+    if (!content.includes(key)) {
+      content += `\n${item}`;
+    }
+  }
+  fs.writeFileSync(propPath, content, 'utf8');
+  console.log('✅ gradle.properties configurado con flags de memoria y AndroidX');
 }
 
 // Ejecución principal
@@ -390,6 +424,7 @@ ensureFilePathsXml(resTargetDir);
 copyKotlinPlatformBridge(javaTargetDir);
 copyKotlinDatabaseFiles(javaTargetDir);
 configureGradleRoomDependencies(appGradleDir);
+configureGradleProperties(path.resolve('src-tauri/gen/android'));
 configureMainActivity(javaTargetDir);
 console.log('🚀 Configuración nativa completada.');
 
