@@ -87,6 +87,7 @@ interface StudioScreenProps {
   onOpenTextureModal?: () => void;
   onOpenSettings?: () => void;
   onOpenRoadmap?: () => void;
+  onOpenMonitor?: () => void;
 }
 
 export const StudioScreen: React.FC<StudioScreenProps> = ({
@@ -144,6 +145,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onStampAccessory,
   onOpenSettings,
   onOpenRoadmap,
+  onOpenMonitor,
 }) => {
   const tracingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const displayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -444,6 +446,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         onOpenCanvasResizeModal={onOpenCanvasResizeModal}
         onOpenSettings={onOpenSettings}
         onOpenRoadmap={onOpenRoadmap}
+        onOpenMonitor={onOpenMonitor}
         onOpenExportModal={onOpenExportModal}
         onRestoreCrash={onRestoreCrash}
         onDismissCrash={onDismissCrash}

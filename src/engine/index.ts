@@ -33,3 +33,7 @@ export * from './bitmapCache';
 export * from './webgpuEngine';
 export * from './renderers/canvas2dRenderer';
 export * from './shaders/brushShader.wgsl';
+
+// Diagnóstico, telemetría y monitoreo
+export * from './diagnosticLogHub';
+

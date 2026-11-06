@@ -47,6 +47,25 @@
             </intent-filter>
         </activity>
 
+        <!-- App Acompañante de Diagnóstico & Debug:
+             Aparece como una segunda app ("InkFlow Monitor") en el cajón de aplicaciones de Android
+             para inspeccionar en vivo errores, logs, memoria RAM y LogCat sin necesitar PC -->
+        <activity
+            android:name=".DiagnosticMonitorActivity"
+            android:label="InkFlow Monitor"
+            android:icon="@mipmap/ic_launcher"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoTitleBar"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:launchMode="singleTask"
+            android:screenOrientation="unspecified">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <!-- FileProvider para compartir ilustraciones con apps externas (WhatsApp, Instagram, etc.) -->
         <provider
             android:name="androidx.core.content.FileProvider"

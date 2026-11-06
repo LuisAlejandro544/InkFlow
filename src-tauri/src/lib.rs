@@ -45,6 +45,8 @@ fn resolve_pictures_directory() -> PathBuf {
         "/sdcard/Pictures/InkFlow Studio",
         "/storage/emulated/0/DCIM/InkFlow Studio",
         "/sdcard/DCIM/InkFlow Studio",
+        "/storage/emulated/0/Android/data/com.inkflow.studio/files/Pictures/InkFlow Studio",
+        "/data/data/com.inkflow.studio/files/Pictures/InkFlow Studio",
     ];
 
     for candidate in candidates {

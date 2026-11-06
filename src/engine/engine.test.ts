@@ -6,6 +6,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { wasmEngine } from './wasmEngine';
 import { drawingEngine, dilateBinaryMask } from './webgpuEngine';
 import { kotlinVectorEngine, cppVectorEngine } from './index';
@@ -38,6 +40,7 @@ import { Layer, BrushTextureConfig } from './types';
 import { wakeLockService } from './wakeLockService';
 import { saveArtworkToUserGallery, shareArtworkFile, applyUnsharpMask, formatArtworkFilename, estimateArtworkFileSizeFast, computeExportDimensions } from './exportEngine';
 import { gpuBitmapCache } from './bitmapCache';
+import { diagnosticHub } from './diagnosticLogHub';
 import { getAvailableThemes, getActiveThemeId, applyAppTheme, APP_THEMES } from './themeEngine';
 
 test('Wasm Lerp e Interpolación Lineal', () => {
@@ -1999,6 +2002,14 @@ test('Android Native & Workflow: Modo Pantalla Completa Inmersivo (Immersive Sti
     scriptContent.includes('setupImmersiveStickyMode'),
     'MainActivity.kt debe contar con setupImmersiveStickyMode'
   );
+  assert.ok(
+    scriptContent.includes('onWebViewCreate'),
+    'MainActivity.kt debe sobreescribir onWebViewCreate para inyectar InkFlowNativeBridge de forma síncrona en Tauri v2'
+  );
+  assert.ok(
+    scriptContent.includes('attachNativeBridge'),
+    'MainActivity.kt debe conectar InkFlowNativeBridge al WebView de Tauri'
+  );
 
   // 2. Verificar tema Fullscreen y FileProvider en AndroidManifest.xml
   const manifestPath = path.resolve('src-tauri/AndroidManifest.xml');
@@ -2035,4 +2046,152 @@ test('Android Native & Workflow: Modo Pantalla Completa Inmersivo (Immersive Sti
   const filePathsPath = path.resolve('src-tauri/res/xml/file_paths.xml');
   assert.ok(fs.existsSync(filePathsPath), 'src-tauri/res/xml/file_paths.xml debe existir');
 });
+
+test('DiagnosticLogHub: Registro determinista, límite FIFO 500 y filtros de niveles', () => {
+  diagnosticHub.clear();
+  assert.equal(diagnosticHub.getLogs().length, 0);
+
+  // 1. Registro en diferentes categorías
+  diagnosticHub.info('TEST_TAG', 'Mensaje de información');
+  diagnosticHub.warn('TEST_WARN', 'Advertencia de prueba', 'Detalle adicional');
+  diagnosticHub.error('TEST_ERR', 'Error crítico detectado', new Error('Fallo simulado'));
+  diagnosticHub.engine('GPU_TEST', 'Fallo shader WebGPU');
+  diagnosticHub.native('ROOM_TEST', 'Transacción Room completada');
+
+  const logs = diagnosticHub.getLogs();
+  assert.equal(logs.length, 5);
+
+  const stats = diagnosticHub.getStats();
+  assert.equal(stats.total, 5);
+  assert.equal(stats.errors, 1);
+  assert.equal(stats.warnings, 1);
+  assert.equal(stats.engine, 1);
+  assert.equal(stats.native, 1);
+
+  // 2. Comprobar límite de buffer circular FIFO de 500 entradas
+  for (let i = 0; i < 550; i++) {
+    diagnosticHub.info('FLOOD', `Evento masivo #${i}`);
+  }
+  const cappedLogs = diagnosticHub.getLogs();
+  assert.equal(cappedLogs.length, 500, 'El buffer debe permanecer estrictamente acotado a 500 entradas');
+  assert.equal(cappedLogs[cappedLogs.length - 1].message, 'Evento masivo #549');
+
+  diagnosticHub.clear();
+  assert.equal(diagnosticHub.getLogs().length, 0);
+});
+
+test('DiagnosticLogHub: Patrón de suscripción reactiva en tiempo real', () => {
+  diagnosticHub.clear();
+  let notificationCount = 0;
+  let receivedLogsLength = 0;
+
+  const unsubscribe = diagnosticHub.subscribe((currentLogs) => {
+    notificationCount++;
+    receivedLogsLength = currentLogs.length;
+  });
+
+  // La suscripción inicial dispara de inmediato con el estado actual
+  assert.equal(notificationCount, 1);
+  assert.equal(receivedLogsLength, 0);
+
+  diagnosticHub.warn('SUBSCRIBE_TEST', 'Notificación reactiva');
+  assert.equal(notificationCount, 2);
+  assert.equal(receivedLogsLength, 1);
+
+  // Cancelar suscripción
+  unsubscribe();
+  diagnosticHub.warn('SUBSCRIBE_TEST', 'Mensaje posterior a cancelación');
+  assert.equal(notificationCount, 2, 'No debe recibir más notificaciones tras cancelar la suscripción');
+
+  diagnosticHub.clear();
+});
+
+test('DiagnosticLogHub: Generación de reporte completo formateado y especificaciones de hardware', async () => {
+  diagnosticHub.clear();
+  diagnosticHub.error('CRITICAL_TEST', 'Simulación de crash resguardado', 'Traza detallada');
+
+  const report = await diagnosticHub.generateDiagnosticReport();
+  assert.ok(report.includes('REPORTE COMPLETO DE DIAGNÓSTICO Y DEBUG'), 'Debe incluir encabezado');
+  assert.ok(report.includes('CRITICAL_TEST'), 'Debe listar el tag registrado');
+  assert.ok(report.includes('Simulación de crash resguardado'), 'Debe listar el mensaje registrado');
+
+  const specs = diagnosticHub.getDeviceSpecs();
+  assert.ok(typeof specs === 'object');
+  assert.ok('isTauri' in specs);
+  assert.ok('webGpuSupported' in specs);
+  assert.ok('nativeBridgeAvailable' in specs);
+
+  diagnosticHub.clear();
+});
+
+test('DiagnosticLogHub: Integración con puente nativo Android para LogCat y Memoria RAM', async () => {
+  // Simular la presencia del puente de Android en el entorno global
+  const originalBridge = (globalThis as any).InkFlowNativeBridge;
+  
+  try {
+    (globalThis as any).InkFlowNativeBridge = {
+      getNativeMemoryInfo: () => JSON.stringify({
+        availMemMB: 3450,
+        totalMemMB: 7680,
+        lowMemory: false,
+        deviceModel: 'Pixel 8 Pro Test',
+        androidRelease: '14',
+        androidSdk: 34,
+      }),
+      getNativeLogcat: (lines: number) => `11-05 22:00:00.000 I/InkFlowStudio: Test LogCat output (${lines} lines)`
+    };
+
+    const specs = diagnosticHub.getDeviceSpecs();
+    assert.equal(specs.nativeBridgeAvailable, true);
+    assert.equal(specs.androidMemoryInfo?.availMemMB, 3450);
+    assert.equal(specs.androidMemoryInfo?.deviceModel, 'Pixel 8 Pro Test');
+
+    const logcat = await diagnosticHub.getNativeLogcat(50);
+    assert.ok(logcat.includes('Pixel 8 Pro') || logcat.includes('Test LogCat output'));
+  } finally {
+    if (originalBridge) {
+      (globalThis as any).InkFlowNativeBridge = originalBridge;
+    } else {
+      delete (globalThis as any).InkFlowNativeBridge;
+    }
+  }
+});
+
+test('APK Companion App: Declaración de DiagnosticMonitorActivity en AndroidManifest.xml y scripts de configuración', () => {
+  // 1. AndroidManifest.xml
+  const manifestPath = path.resolve('src-tauri/AndroidManifest.xml');
+  const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+  assert.ok(
+    manifestContent.includes('.DiagnosticMonitorActivity'),
+    'AndroidManifest.xml debe declarar .DiagnosticMonitorActivity'
+  );
+  assert.ok(
+    manifestContent.includes('android:label="InkFlow Monitor"'),
+    'La actividad acompañante debe tener etiqueta InkFlow Monitor'
+  );
+  assert.ok(
+    manifestContent.includes('android.intent.category.LAUNCHER'),
+    'La actividad acompañante debe ser lanzable de forma independiente con LAUNCHER'
+  );
+
+  // 2. scripts/configure-android-native.cjs
+  const scriptPath = path.resolve('scripts/configure-android-native.cjs');
+  const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
+  assert.ok(
+    scriptContent.includes('DiagnosticMonitorActivity'),
+    'configure-android-native.cjs debe inyectar DiagnosticMonitorActivity'
+  );
+  assert.ok(
+    scriptContent.includes('INITIAL_SCREEN'),
+    'configure-android-native.cjs debe propagar INITIAL_SCREEN hacia el WebView'
+  );
+
+  // 3. src/kotlin-core/DiagnosticMonitorActivity.kt
+  const kotlinActivityPath = path.resolve('src/kotlin-core/DiagnosticMonitorActivity.kt');
+  assert.ok(fs.existsSync(kotlinActivityPath), 'src/kotlin-core/DiagnosticMonitorActivity.kt debe existir');
+  const kotlinActivityContent = fs.readFileSync(kotlinActivityPath, 'utf-8');
+  assert.ok(kotlinActivityContent.includes('class DiagnosticMonitorActivity : MainActivity()'));
+  assert.ok(kotlinActivityContent.includes('INITIAL_SCREEN'));
+});
+
 

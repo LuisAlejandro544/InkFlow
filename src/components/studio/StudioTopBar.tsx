@@ -14,7 +14,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Undo2, Redo2, Download, MoreHorizontal, 
   Sparkles, RotateCcw, Camera, Eye, EyeOff, Sliders, Maximize2, 
-  X, Check, Settings, Rocket 
+  X, Check, Settings, Rocket, Bug 
 } from 'lucide-react';
 import { ProjectData, TracingReference } from '../../engine/types';
 import { useAppTheme } from '../../engine/themeEngine';
@@ -44,6 +44,7 @@ export interface StudioTopBarProps {
   onTriggerImportAccessory?: () => void;
   onOpenSettings?: () => void;
   onOpenRoadmap?: () => void;
+  onOpenMonitor?: () => void;
   onRestoreCrash?: () => void;
   onDismissCrash?: () => void;
   triggerHaptic: (duration?: number) => void;
@@ -74,6 +75,7 @@ export const StudioTopBar: React.FC<StudioTopBarProps> = ({
   onTriggerImportAccessory,
   onOpenSettings,
   onOpenRoadmap,
+  onOpenMonitor,
   onRestoreCrash,
   onDismissCrash,
   triggerHaptic,
@@ -593,6 +595,29 @@ export const StudioTopBar: React.FC<StudioTopBarProps> = ({
                   </span>
                   <span className="text-[9px] text-gray-400 block">
                     Mover trazos de vectores y novedades
+                  </span>
+                </div>
+              </button>
+            )}
+
+            {/* Opción 6: InkFlow Monitor & Debug (Copiar Logs y Diagnóstico) */}
+            {onOpenMonitor && (
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(8);
+                  setShowMoreMenu(false);
+                  onOpenMonitor();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-emerald-300 hover:bg-emerald-950/30 border border-emerald-500/20 active:scale-98 transition-all text-left"
+              >
+                <Bug size={16} className="text-emerald-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="block leading-tight font-bold text-emerald-300">
+                    Monitor de Debug & Errores
+                  </span>
+                  <span className="text-[9px] text-gray-400 block">
+                    Copiar logs, advertencias y LogCat Android
                   </span>
                 </div>
               </button>

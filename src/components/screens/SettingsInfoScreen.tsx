@@ -13,7 +13,7 @@
 import React, { useState } from 'react';
 import { 
   ArrowLeft, Palette, Rocket, Cpu, Vibrate, 
-  Info, ChevronRight, HardDrive, Smartphone, Sliders 
+  Info, ChevronRight, HardDrive, Smartphone, Sliders, Bug 
 } from 'lucide-react';
 import { useAppTheme } from '../../engine/themeEngine';
 
@@ -22,6 +22,7 @@ interface SettingsInfoScreenProps {
   onGoToThemeCustomization: () => void;
   onGoToRoadmap: () => void;
   onGoToEngine: () => void;
+  onGoToMonitor?: () => void;
   onGoToGallery?: () => void;
 }
 
@@ -30,6 +31,7 @@ export const SettingsInfoScreen: React.FC<SettingsInfoScreenProps> = ({
   onGoToThemeCustomization,
   onGoToRoadmap,
   onGoToEngine,
+  onGoToMonitor,
   onGoToGallery,
 }) => {
   const activeTheme = useAppTheme();
@@ -345,6 +347,39 @@ export const SettingsInfoScreen: React.FC<SettingsInfoScreenProps> = ({
 
             <ChevronRight size={18} className="text-gray-400" />
           </button>
+
+          {/* Tarjeta de Monitor de Debug & Registro de Errores */}
+          {onGoToMonitor && (
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic(8);
+                onGoToMonitor();
+              }}
+              className="w-full bg-[#151722] hover:bg-[#1b1e2c] border border-emerald-500/30 hover:border-emerald-500/60 rounded-2xl p-4 flex items-center justify-between gap-3 text-left transition-all active:scale-98 shadow-md"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-950/40 text-emerald-400">
+                  <Bug size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs sm:text-sm font-bold text-white">
+                      Monitor de Debug & Registro de Errores
+                    </h3>
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      EN VIVO
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Inspeccionar errores, avisos, memoria RAM y LogCat de Android con botón de copia
+                  </p>
+                </div>
+              </div>
+
+              <ChevronRight size={18} className="text-emerald-400" />
+            </button>
+          )}
         </section>
 
         {/* SECCIÓN 5: INFORMACIÓN DE VERSIÓN Y ARQUITECTURA (SIN LICENCIA MIT) */}

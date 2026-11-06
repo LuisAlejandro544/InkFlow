@@ -397,5 +397,58 @@ class InkFlowJavascriptInterface(
      */
     @JavascriptInterface
     fun isNativeBridgeReady(): Boolean = true
+
+    /**
+     * Obtiene el estado físico de la memoria RAM del dispositivo Android en tiempo real
+     */
+    @JavascriptInterface
+    fun getNativeMemoryInfo(): String {
+        return try {
+            val actManager = activity.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val memInfo = android.app.ActivityManager.MemoryInfo()
+            actManager.getMemoryInfo(memInfo)
+            val runtime = Runtime.getRuntime()
+            val maxRamMB = runtime.maxMemory() / (1024 * 1024)
+            val totalRamMB = runtime.totalMemory() / (1024 * 1024)
+            val freeRamMB = runtime.freeMemory() / (1024 * 1024)
+            """{
+                "availMemMB": ${memInfo.availMem / (1024 * 1024)},
+                "totalMemMB": ${memInfo.totalMem / (1024 * 1024)},
+                "lowMemory": ${memInfo.lowMemory},
+                "thresholdMB": ${memInfo.threshold / (1024 * 1024)},
+                "jvmMaxMB": $maxRamMB,
+                "jvmTotalMB": $totalRamMB,
+                "jvmFreeMB": $freeRamMB,
+                "deviceModel": "${Build.MANUFACTURER} ${Build.MODEL}",
+                "androidSdk": ${Build.VERSION.SDK_INT},
+                "androidRelease": "${Build.VERSION.RELEASE}"
+            }""".trimIndent()
+        } catch (e: Exception) {
+            "{\"error\": \"${e.localizedMessage}\"}"
+        }
+    }
+
+    /**
+     * Lee las líneas más recientes del LogCat del sistema operativo móvil sin requerir PC con adb
+     */
+    @JavascriptInterface
+    fun getNativeLogcat(maxLines: Int): String {
+        return try {
+            val lines = if (maxLines in 10..500) maxLines else 80
+            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "-t", lines.toString()))
+            val bufferedReader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
+            val log = StringBuilder()
+            var line: String?
+            while (bufferedReader.readLine().also { line = it } != null) {
+                log.append(line).append("\n")
+            }
+            bufferedReader.close()
+            process.destroy()
+            if (log.isEmpty()) "(Logcat vacío o sin permisos de lectura en el proceso)" else log.toString()
+        } catch (e: Exception) {
+            "Error leyendo logcat nativo: " + e.localizedMessage
+        }
+    }
 }
+
 

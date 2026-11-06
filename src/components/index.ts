@@ -11,6 +11,7 @@ export * from './screens/EngineInfoScreen';
 export * from './screens/SettingsInfoScreen';
 export * from './screens/ThemeCustomizationScreen';
 export * from './screens/AppRoadmapScreen';
+export * from './screens/DiagnosticMonitorScreen';
 
 // Diálogos modales
 export * from './modals/LayersModal';

@@ -20,6 +20,7 @@ import { EngineInfoScreen } from './components/screens/EngineInfoScreen';
 import { SettingsInfoScreen } from './components/screens/SettingsInfoScreen';
 import { ThemeCustomizationScreen } from './components/screens/ThemeCustomizationScreen';
 import { AppRoadmapScreen } from './components/screens/AppRoadmapScreen';
+import { DiagnosticMonitorScreen } from './components/screens/DiagnosticMonitorScreen';
 import { LayersModal } from './components/modals/LayersModal';
 import { ColorPickerModal } from './components/modals/ColorPickerModal';
 import { ToolPickerModal } from './components/modals/ToolPickerModal';
@@ -59,9 +60,19 @@ export default function App() {
     initializeAppTheme();
   }, []);
 
-  // Pantalla activa: 'welcome' | 'studio' | 'gallery' | 'engine' | 'settings' | 'theme' | 'roadmap'
-  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'studio' | 'gallery' | 'engine' | 'settings' | 'theme' | 'roadmap'>(() => {
+  // Pantalla activa: 'welcome' | 'studio' | 'gallery' | 'engine' | 'settings' | 'theme' | 'roadmap' | 'monitor'
+  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'studio' | 'gallery' | 'engine' | 'settings' | 'theme' | 'roadmap' | 'monitor'>(() => {
     if (typeof window === 'undefined') return 'studio';
+
+    // 0. Si viene invocado para abrir el Monitor de Diagnóstico (desde launcher nativo de Android o deep link)
+    const isMonitorRequested = 
+      (window as unknown as { __INKFLOW_INITIAL_SCREEN?: string }).__INKFLOW_INITIAL_SCREEN === 'monitor' ||
+      window.location.search.includes('screen=monitor') ||
+      window.location.hash.includes('screen=monitor');
+
+    if (isMonitorRequested) {
+      return 'monitor';
+    }
 
     // 1. Detectar si corre en modo standalone (PWA instalada en pantalla de inicio del teléfono)
     const isStandalone = detectIsStandalone(
@@ -346,6 +357,7 @@ export default function App() {
           onOpenCanvasResizeModal={() => setIsCanvasResizeModalOpen(true)}
           onOpenSettings={() => setCurrentScreen('settings')}
           onOpenRoadmap={() => setCurrentScreen('roadmap')}
+          onOpenMonitor={() => setCurrentScreen('monitor')}
           onGoToGallery={() => setCurrentScreen('gallery')}
           onGoToEngine={() => setCurrentScreen('engine')}
           onUpdateProjectThumbnail={(thumb) => handleUpdateProjectThumbnail(thumb, layers)}
@@ -391,6 +403,7 @@ export default function App() {
           onGoToRoadmap={() => setCurrentScreen('roadmap')}
           onGoToEngine={() => setCurrentScreen('engine')}
           onGoToGallery={() => setCurrentScreen('gallery')}
+          onGoToMonitor={() => setCurrentScreen('monitor')}
         />
       )}
 
@@ -406,6 +419,14 @@ export default function App() {
         <AppRoadmapScreen
           onReturnToPrevious={() => setCurrentScreen('settings')}
           onGoToStudio={() => setCurrentScreen('studio')}
+        />
+      )}
+
+      {/* Pantalla 7: Monitor de Diagnóstico, Errores y LogCat OS */}
+      {currentScreen === 'monitor' && (
+        <DiagnosticMonitorScreen
+          onReturnToStudio={() => setCurrentScreen('studio')}
+          onGoToSettings={() => setCurrentScreen('settings')}
         />
       )}
 

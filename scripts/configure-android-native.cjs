@@ -96,6 +96,30 @@ function configureAndroidManifest(manifestPath) {
     manifest = manifest.replace(/<\/application>/, fileProviderSnippet);
   }
 
+  // 5. Inyectar Actividad de Diagnóstico & Debug si no está presente
+  if (!manifest.includes('DiagnosticMonitorActivity')) {
+    const monitorActivitySnippet = `
+        <!-- App Acompañante de Diagnóstico & Debug:
+             Aparece como app independiente ("InkFlow Monitor") en el teléfono del usuario -->
+        <activity
+            android:name=".DiagnosticMonitorActivity"
+            android:label="InkFlow Monitor"
+            android:icon="@mipmap/ic_launcher"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoTitleBar"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:launchMode="singleTask"
+            android:screenOrientation="unspecified">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>`;
+    manifest = manifest.replace(/<\/application>/, monitorActivitySnippet);
+  }
+
   fs.writeFileSync(manifestPath, manifest, 'utf8');
   console.log('✅ AndroidManifest.xml parcheado con éxito en:', manifestPath);
   return true;
@@ -246,10 +270,21 @@ class MainActivity : TauriActivity() {
     setupNativeJavascriptBridge()
   }
 
+  /**
+   * Ciclo de vida oficial de Tauri v2 en Android:
+   * onWebViewCreate se ejecuta exactamente en el momento en que Tauri crea la instancia de WebView,
+   * permitiendo inyectar InkFlowNativeBridge antes de que la página web termine de evaluar sus scripts.
+   */
+  override fun onWebViewCreate(webView: WebView) {
+    super.onWebViewCreate(webView)
+    attachNativeBridge(webView)
+  }
+
   override fun onWindowFocusChanged(hasFocus: Boolean) {
     super.onWindowFocusChanged(hasFocus)
     if (hasFocus) {
       setupImmersiveStickyMode()
+      setupNativeJavascriptBridge()
     }
   }
 
@@ -283,22 +318,38 @@ class MainActivity : TauriActivity() {
     return null
   }
 
+  /**
+   * Conecta de forma determinista la interfaz nativa al WebView configurando
+   * permisos de ejecución Javascript y almacenamiento local.
+   */
+  private fun attachNativeBridge(webView: WebView) {
+    try {
+      webView.settings.javaScriptEnabled = true
+      webView.settings.domStorageEnabled = true
+      val galleryManager = AndroidGalleryManager(this)
+      val wakeLockManager = AndroidScreenWakeLockManager(this)
+      val roomStorageManager = RoomStorageManager(this)
+      val bridge = InkFlowJavascriptInterface(this, galleryManager, wakeLockManager, roomStorageManager)
+      webView.addJavascriptInterface(bridge, "InkFlowNativeBridge")
+      val initialScreen = intent?.getStringExtra("INITIAL_SCREEN") ?: ""
+      if (initialScreen.isNotEmpty()) {
+        webView.evaluateJavascript("window.__INKFLOW_INITIAL_SCREEN = '$initialScreen';", null)
+      }
+      println("✅ InkFlowNativeBridge con Android Jetpack Room inyectado con éxito en WebView")
+    } catch (e: Exception) {
+      println("⚠️ Error inyectando InkFlowNativeBridge: " + e.message)
+    }
+  }
+
   private fun setupNativeJavascriptBridge() {
     window.decorView.post {
       try {
         val webView = findWebView(window.decorView)
         if (webView != null) {
-          val galleryManager = AndroidGalleryManager(this)
-          val wakeLockManager = AndroidScreenWakeLockManager(this)
-          val roomStorageManager = RoomStorageManager(this)
-          val bridge = InkFlowJavascriptInterface(this, galleryManager, wakeLockManager, roomStorageManager)
-          webView.settings.javaScriptEnabled = true
-          webView.settings.domStorageEnabled = true
-          webView.addJavascriptInterface(bridge, "InkFlowNativeBridge")
-          println("✅ InkFlowNativeBridge con Android Jetpack Room inyectado con éxito en WebView")
+          attachNativeBridge(webView)
         }
       } catch (e: Exception) {
-        println("⚠️ Error inyectando InkFlowNativeBridge: " + e.message)
+        println("⚠️ Error en setupNativeJavascriptBridge: " + e.message)
       }
     }
   }
@@ -307,6 +358,23 @@ class MainActivity : TauriActivity() {
 
   fs.writeFileSync(mainActivityPath, code, 'utf8');
   console.log('✅ MainActivity.kt configurado exitosamente con Modo Inmersivo y puente InkFlowNativeBridge con Room');
+
+  // Generar la actividad compañera de Diagnóstico y Debug
+  const diagPath = path.join(path.dirname(mainActivityPath), 'DiagnosticMonitorActivity.kt');
+  const diagCode = `package com.inkflow.studio
+
+import android.os.Bundle
+
+class DiagnosticMonitorActivity : MainActivity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    intent?.putExtra("INITIAL_SCREEN", "monitor")
+    super.onCreate(savedInstanceState)
+  }
+}
+`;
+  fs.writeFileSync(diagPath, diagCode, 'utf8');
+  console.log('✅ DiagnosticMonitorActivity.kt generado exitosamente en:', diagPath);
+
   return true;
 }
 

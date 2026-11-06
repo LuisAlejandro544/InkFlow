@@ -342,10 +342,17 @@ export async function saveArtworkToUserGallery(
   const encoderQuality = qualityMode === 'ultra_4k' ? 1.0 : qualityMode === 'hd' ? 0.98 : 0.92;
 
   // 1. Intentar primero con el puente nativo de Kotlin si está disponible (Android MediaStore)
-  if (typeof window !== 'undefined' && window.InkFlowNativeBridge?.saveImageToGallery) {
+  let nativeBridge = typeof window !== 'undefined' ? window.InkFlowNativeBridge : undefined;
+  if (!nativeBridge?.saveImageToGallery && typeof window !== 'undefined' && detectIsTauri()) {
+    // Breve espera de sincronización defensiva por si el WebView de Tauri v2 está terminando de inyectar la interfaz
+    await new Promise((r) => setTimeout(r, 60));
+    nativeBridge = window.InkFlowNativeBridge;
+  }
+
+  if (nativeBridge?.saveImageToGallery) {
     try {
       const dataUrl = cvs.toDataURL(mimeType, encoderQuality);
-      const rawResult = window.InkFlowNativeBridge.saveImageToGallery(dataUrl, finalFilename, mimeType);
+      const rawResult = nativeBridge.saveImageToGallery(dataUrl, finalFilename, mimeType);
       const parsed = JSON.parse(rawResult || '{}');
       if (parsed.success) {
         return {
@@ -472,10 +479,16 @@ export async function shareArtworkFile(
 
   // 1. Probar puente nativo de Android en Kotlin (@JavascriptInterface InkFlowNativeBridge)
   // Despliega la hoja nativa Intent.ACTION_SEND con WhatsApp, Instagram, Google Fotos, etc.
-  if (typeof window !== 'undefined' && (window as unknown as { InkFlowNativeBridge?: { shareImage?: (dataUrl: string, name: string, mime: string) => string } }).InkFlowNativeBridge?.shareImage) {
+  let nativeBridge = typeof window !== 'undefined' ? (window as unknown as { InkFlowNativeBridge?: { shareImage?: (dataUrl: string, name: string, mime: string) => string } }).InkFlowNativeBridge : undefined;
+  if (!nativeBridge?.shareImage && typeof window !== 'undefined' && detectIsTauri()) {
+    await new Promise((r) => setTimeout(r, 60));
+    nativeBridge = (window as unknown as { InkFlowNativeBridge?: { shareImage?: (dataUrl: string, name: string, mime: string) => string } }).InkFlowNativeBridge;
+  }
+
+  if (nativeBridge?.shareImage) {
     try {
       const dataUrl = cvs.toDataURL(mimeType, 0.95);
-      const rawRes = (window as unknown as { InkFlowNativeBridge: { shareImage: (dataUrl: string, name: string, mime: string) => string } }).InkFlowNativeBridge.shareImage(dataUrl, finalFilename, mimeType);
+      const rawRes = nativeBridge.shareImage(dataUrl, finalFilename, mimeType);
       const parsed = JSON.parse(rawRes || '{}');
       if (parsed.success) {
         return true;
