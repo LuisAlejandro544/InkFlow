@@ -141,6 +141,63 @@ function copyKotlinPlatformBridge(javaAppDir) {
   console.log('✅ AndroidPlatformBridge.kt copiado con éxito a:', targetBridge);
 }
 
+function copyKotlinDatabaseFiles(javaAppDir) {
+  const sourceDbDir = path.resolve('src/kotlin-core/database');
+  if (!fs.existsSync(sourceDbDir)) {
+    console.warn('⚠️ Directorio de base de datos Room src/kotlin-core/database no encontrado');
+    return;
+  }
+
+  const targetDbDir = path.join(javaAppDir, 'com/inkflow/studio/database');
+  if (!fs.existsSync(targetDbDir)) {
+    fs.mkdirSync(targetDbDir, { recursive: true });
+  }
+
+  const files = fs.readdirSync(sourceDbDir);
+  for (const file of files) {
+    if (file.endsWith('.kt')) {
+      const srcPath = path.join(sourceDbDir, file);
+      const destPath = path.join(targetDbDir, file);
+      fs.copyFileSync(srcPath, destPath);
+      console.log(`✅ Archivo Room ${file} copiado con éxito a:`, destPath);
+    }
+  }
+}
+
+function configureGradleRoomDependencies(gradleDir) {
+  // Buscar build.gradle o build.gradle.kts en src-tauri/gen/android/app
+  const ktsPath = path.join(gradleDir, 'build.gradle.kts');
+  const groovyPath = path.join(gradleDir, 'build.gradle');
+
+  if (fs.existsSync(ktsPath)) {
+    let content = fs.readFileSync(ktsPath, 'utf8');
+    if (!content.includes('androidx.room:room-runtime')) {
+      const roomDeps = `
+    // Android Jetpack Room para persistencia física en disco de InkFlow Studio
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    implementation("androidx.sqlite:sqlite-bundled:2.4.0")
+`;
+      content = content.replace(/(dependencies\s*\{)/, `$1${roomDeps}`);
+      fs.writeFileSync(ktsPath, content, 'utf8');
+      console.log('✅ Dependencias de Android Jetpack Room inyectadas en build.gradle.kts');
+    }
+  } else if (fs.existsSync(groovyPath)) {
+    let content = fs.readFileSync(groovyPath, 'utf8');
+    if (!content.includes('androidx.room:room-runtime')) {
+      const roomDeps = `
+    // Android Jetpack Room para persistencia física en disco de InkFlow Studio
+    implementation 'androidx.room:room-runtime:2.6.1'
+    implementation 'androidx.room:room-ktx:2.6.1'
+    implementation 'androidx.sqlite:sqlite-bundled:2.4.0'
+`;
+      content = content.replace(/(dependencies\s*\{)/, `$1${roomDeps}`);
+      fs.writeFileSync(groovyPath, content, 'utf8');
+      console.log('✅ Dependencias de Android Jetpack Room inyectadas en build.gradle');
+    }
+  }
+}
+
 function findMainActivity(dir) {
   if (!fs.existsSync(dir)) return null;
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -176,6 +233,7 @@ import app.tauri.plugin.PluginManager
 import com.inkflow.studio.platform.AndroidGalleryManager
 import com.inkflow.studio.platform.AndroidScreenWakeLockManager
 import com.inkflow.studio.platform.InkFlowJavascriptInterface
+import com.inkflow.studio.database.RoomStorageManager
 
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -228,11 +286,12 @@ class MainActivity : TauriActivity() {
         if (webView != null) {
           val galleryManager = AndroidGalleryManager(this)
           val wakeLockManager = AndroidScreenWakeLockManager(this)
-          val bridge = InkFlowJavascriptInterface(this, galleryManager, wakeLockManager)
+          val roomStorageManager = RoomStorageManager(this)
+          val bridge = InkFlowJavascriptInterface(this, galleryManager, wakeLockManager, roomStorageManager)
           webView.settings.javaScriptEnabled = true
           webView.settings.domStorageEnabled = true
           webView.addJavascriptInterface(bridge, "InkFlowNativeBridge")
-          println("✅ InkFlowNativeBridge (@JavascriptInterface) inyectado con éxito en WebView")
+          println("✅ InkFlowNativeBridge con Android Jetpack Room inyectado con éxito en WebView")
         }
       } catch (e: Exception) {
         println("⚠️ Error inyectando InkFlowNativeBridge: " + e.message)
@@ -243,7 +302,7 @@ class MainActivity : TauriActivity() {
 `;
 
   fs.writeFileSync(mainActivityPath, code, 'utf8');
-  console.log('✅ MainActivity.kt configurado exitosamente con Modo Inmersivo y puente InkFlowNativeBridge');
+  console.log('✅ MainActivity.kt configurado exitosamente con Modo Inmersivo y puente InkFlowNativeBridge con Room');
   return true;
 }
 
@@ -251,10 +310,14 @@ class MainActivity : TauriActivity() {
 const manifestTarget = path.resolve('src-tauri/gen/android/app/src/main/AndroidManifest.xml');
 const javaTargetDir = path.resolve('src-tauri/gen/android/app/src/main/java');
 const resTargetDir = path.resolve('src-tauri/gen/android/app/src/main/res');
+const appGradleDir = path.resolve('src-tauri/gen/android/app');
 
-console.log('🔧 Ejecutando configuración nativa para Android...');
+console.log('🔧 Ejecutando configuración nativa para Android con soporte Room Database...');
 configureAndroidManifest(manifestTarget);
 ensureFilePathsXml(resTargetDir);
 copyKotlinPlatformBridge(javaTargetDir);
+copyKotlinDatabaseFiles(javaTargetDir);
+configureGradleRoomDependencies(appGradleDir);
 configureMainActivity(javaTargetDir);
 console.log('🚀 Configuración nativa completada.');
+

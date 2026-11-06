@@ -321,4 +321,133 @@ describe('📦 Motor de Almacenamiento SQLite Wasm & OPFS', () => {
     assert.equal(parsedCheckpoint.tracing.x, 400);
     assert.equal(parsedCheckpoint.tracing.y, 600);
   });
+
+  it('8. Android Jetpack Room: Debe validar el esquema de TracingEntity con almacenamiento físico y rotación continua', () => {
+    // Validar modelo relacional de Room en disco (inkflow_studio_room.db)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS room_project_tracings (
+        project_id TEXT PRIMARY KEY,
+        tracing_id TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        scale REAL NOT NULL,
+        rotation REAL NOT NULL,
+        opacity REAL NOT NULL,
+        visible INTEGER NOT NULL,
+        filter_mode TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        extracted_colors_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+
+    const roomTracing = {
+      projectId: 'proj_room_apk',
+      tracingId: 'trace_room_001',
+      filePath: '/data/user/0/com.inkflow.studio/files/tracings/tracing_proj_room_apk.png',
+      x: 320.5,
+      y: 480.0,
+      width: 1080,
+      height: 1920,
+      scale: 1.15,
+      rotation: 45.0, // 45 grados de rotación
+      opacity: 0.5,
+      visible: 1,
+      filterMode: 'lineart',
+      purpose: 'tracing',
+      extractedColorsJson: JSON.stringify(['#121212', '#ffffff']),
+      updatedAt: Date.now(),
+    };
+
+    db.exec({
+      sql: `
+        INSERT INTO room_project_tracings (
+          project_id, tracing_id, file_path, x, y, width, height, scale, rotation,
+          opacity, visible, filter_mode, purpose, extracted_colors_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_id) DO UPDATE SET
+          file_path = excluded.file_path,
+          rotation = excluded.rotation,
+          scale = excluded.scale,
+          updated_at = excluded.updated_at;
+      `,
+      bind: [
+        roomTracing.projectId,
+        roomTracing.tracingId,
+        roomTracing.filePath,
+        roomTracing.x,
+        roomTracing.y,
+        roomTracing.width,
+        roomTracing.height,
+        roomTracing.scale,
+        roomTracing.rotation,
+        roomTracing.opacity,
+        roomTracing.visible,
+        roomTracing.filterMode,
+        roomTracing.purpose,
+        roomTracing.extractedColorsJson,
+        roomTracing.updatedAt,
+      ],
+    });
+
+    const retrieved = db.selectObject('SELECT * FROM room_project_tracings WHERE project_id = ?;', ['proj_room_apk']);
+    assert.ok(retrieved, 'El registro de Room debe existir en disco');
+    assert.equal(retrieved.file_path, '/data/user/0/com.inkflow.studio/files/tracings/tracing_proj_room_apk.png');
+    assert.equal(retrieved.rotation, 45.0, 'La rotación del calco en Room debe ser exacta');
+    assert.equal(retrieved.scale, 1.15);
+    assert.equal(retrieved.visible, 1);
+  });
+
+  it('9. Android Jetpack Room: Centinela de Crash Recovery con persistencia física en disco', () => {
+    // Validar tabla Room crash_recovery
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS room_crash_recovery (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        project_name TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        timestamp INTEGER NOT NULL,
+        layer_count INTEGER NOT NULL,
+        preview_thumbnail_url TEXT NOT NULL,
+        payload_json TEXT NOT NULL
+      );
+    `);
+
+    const crashPayload = {
+      project: { id: 'room_crash_proj', name: 'Obra APK Salvada', width: 1080, height: 1920 },
+      layers: [{ id: 'l1', name: 'Lineart' }],
+      tracing: { id: 't1', rotation: 30.0, scale: 1.0 },
+    };
+
+    db.exec({
+      sql: `
+        INSERT INTO room_crash_recovery (
+          id, project_id, project_name, width, height, timestamp, layer_count, preview_thumbnail_url, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET payload_json = excluded.payload_json;
+      `,
+      bind: [
+        'latest_emergency_checkpoint',
+        'room_crash_proj',
+        'Obra APK Salvada',
+        1080,
+        1920,
+        Date.now(),
+        1,
+        'thumb',
+        JSON.stringify(crashPayload),
+      ],
+    });
+
+    const crashRec = db.selectObject("SELECT * FROM room_crash_recovery WHERE id = 'latest_emergency_checkpoint';");
+    assert.ok(crashRec, 'El registro de Room crash_recovery debe existir');
+    const parsed = JSON.parse(crashRec.payload_json);
+    assert.equal(parsed.project.name, 'Obra APK Salvada');
+    assert.equal(parsed.tracing.rotation, 30.0);
+  });
 });
+

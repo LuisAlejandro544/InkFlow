@@ -22,10 +22,10 @@ Este documento proporciona instrucciones de compilación, patrones de arquitectu
 | **Texturas de Pincel (Estilo IbisPaint)** | 9 texturas de ilustración + proyección en espacio de lienzo + Live Preview modal | `src/engine/brushTextureEngine.ts`, `src/components/BrushTextureModal.tsx` |
 | **Expansión y Redimensionado de Hoja** | Matriz visual 3x3, cálculo de offsets y presets de espacio (+25%, +50%, 2x, 1:1, 9:16) | `src/components/CanvasResizeModal.tsx`, `src/engine/canvasResizeMath.ts` |
 | **Guardado de Obra a Galería** | Guardado Real en Galería (MediaStore / Web Share API) + Hoja Completa vs Auto-Crop | `src/components/ExportModal.tsx`, `src/engine/exportEngine.ts` |
-| **Persistencia Masiva SQLite Wasm** | Base de datos ACID sobre OPFS en Web Worker dedicado + Centinela Crash | `src/storage/sqliteStorage.worker.ts`, `src/storage/sqliteStorageService.ts` |
+| **Persistencia Masiva Dual: SQLite OPFS & Room** | SQLite Wasm OPFS en PWA + Android Jetpack Room en APK con almacenamiento físico en disco (`context.filesDir/tracings/`) | `src/storage/*`, `src/kotlin-core/database/*`, `scripts/configure-android-native.cjs` |
 | **Caché Integral & Aceleración VRAM** | Workbox 15MB + Wasm Streaming JIT + Inmutabilidad Cloudflare + GPU ImageBitmap | `vite.config.ts`, `public/_headers`, `src/engine/wasmStreamingCompiler.ts`, `src/engine/bitmapCache.ts` |
 | **Arquitectura Dual: PWA + Tauri APK** | PWA Nativa (Cloudflare Pages) + APK Nativo con Tauri v2 (Android WebView, Keystore Debug automático) | `.github/workflows/deploy.yml`, `.github/workflows/build-tauri-apk.yml`, `src-tauri/*` |
-| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (73 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
+| **Suite de Tests** | Node.js Test Runner (`node:test`) + `tsx` (78 tests deterministas en 2 suites) | `src/engine/engine.test.ts`, `src/storage/storage.test.ts` |
 
 ---
 
@@ -35,7 +35,7 @@ Este documento proporciona instrucciones de compilación, patrones de arquitectu
 # 1. Compilación TypeScript y linter estricto:
 npm run lint
 
-# 2. Pruebas unitarias de matemática de curvas, C++23/TS, Kotlin/Wasm, corrutinas, calco, flood fill, expansión, texturas y SQLite Wasm OPFS:
+# 2. Pruebas unitarias de matemática de curvas, C++23/TS, Kotlin/Wasm, corrutinas, calco, flood fill, expansión, texturas, SQLite Wasm OPFS y Android Jetpack Room:
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 
 # 3. Compilación de producción con Vite:
@@ -61,10 +61,10 @@ Nunca embeber cálculos trigonométricos o de amortiguación de trazos dentro de
 ### 3. Lápiz Vectorial Analítico (Kotlin/Wasm)
 A diferencia de los pinceles raster que pintan píxeles en un mapa de bits estático, el Lápiz Vectorial almacena los puntos y segmentos cúbicos de Bézier $B(t)$. Cuando el usuario hace zoom, `drawingEngine.compositeLayers` re-evalúa los trazos vectoriales a la resolución nativa del dispositivo, logrando **cero pixelación**.
 
-### 4. Persistencia Masiva SQLite Wasm sobre OPFS & Centinela de Crash
-- Todo el I/O pesado de píxeles y vectores corre en el Web Worker `sqliteStorage.worker.ts` sin tocar el hilo de UI.
-- Si el usuario minimiza la PWA o el sistema operativo móvil descarga el proceso de memoria (`visibilitychange` o `pagehide`), se ejecuta un snapshot atómico en la tabla `crash_recovery`.
-- Los errores de JavaScript se interceptan en `window.onerror`, `unhandledrejection` y `ErrorBoundary.tsx`, permitiendo recuperar la ilustración intacta en 1 toque al reiniciar.
+### 4. Persistencia Dual Masiva: SQLite Wasm sobre OPFS (PWA) & Android Jetpack Room (APK)
+- **En la PWA Web:** Todo el I/O pesado de píxeles y vectores corre en el Web Worker `sqliteStorage.worker.ts` sobre OPFS sin tocar el hilo de UI.
+- **En el APK Android:** Android Jetpack Room (`src/kotlin-core/database/` con `AppDatabase.kt`, `ProjectDao.kt`, `ProjectEntities.kt`, `TracingEntity.kt`, `CrashRecoveryEntity.kt` y `RoomStorageManager.kt`) guarda las referencias en disco físico (`context.filesDir/tracings/tracing_{projectId}.png`).
+- **Rescate Inviolable de Calco y Crash:** La foto de calco conserva su ángulo exacto de rotación, escala y posición en disco físico. Al ocurrir `visibilitychange`, `pagehide` o error fatal, se dispara un guardado síncrono inmediato vía `window.InkFlowNativeBridge.saveEmergencyCrashToRoom`, garantizando que la sesión se rescate aunque el kernel de Android mate el proceso.
 
 ### 5. Caché Integral al 100% y Aceleración VRAM
 - Las fuentes compiladas Wasm se prealmacenan en el Service Worker con Workbox configurado a 10MB en `vite.config.ts`.

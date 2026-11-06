@@ -98,6 +98,22 @@ class SqliteStorageService {
    */
   public setCurrentTracing(tracing: TracingReference | null): void {
     this.currentActiveTracing = tracing;
+
+    // Sincronización inmediata con Room en disco físico (APK Android)
+    if (typeof window !== 'undefined' && (window as any).InkFlowNativeBridge?.saveTracingToRoom && this.currentActiveProject) {
+      try {
+        const serialized = serializeTracing(tracing);
+        if (serialized) {
+          (window as any).InkFlowNativeBridge.saveTracingToRoom(
+            this.currentActiveProject.id,
+            JSON.stringify(serialized),
+            serialized.src || ''
+          );
+        }
+      } catch (e) {
+        console.warn('[Room Native] Error al sincronizar calco con Room:', e);
+      }
+    }
   }
 
   public getCurrentTracing(): TracingReference | null {
@@ -263,6 +279,22 @@ class SqliteStorageService {
       timestamp: Date.now(),
     };
 
+    // Si corre en APK con puente Room nativo, sincronizar calco con Room en disco físico
+    if (typeof window !== 'undefined' && (window as any).InkFlowNativeBridge?.saveTracingToRoom) {
+      try {
+        const serializedTracing = serializeTracing(this.currentActiveTracing);
+        if (serializedTracing) {
+          (window as any).InkFlowNativeBridge.saveTracingToRoom(
+            project.id,
+            JSON.stringify(serializedTracing),
+            serializedTracing.src || ''
+          );
+        }
+      } catch (e) {
+        console.warn('[Room Native] Error guardando calco en Room:', e);
+      }
+    }
+
     const res = await this.sendRequest({
       type: 'SAVE_PROJECT',
       id: '',
@@ -276,7 +308,7 @@ class SqliteStorageService {
   }
 
   /**
-   * Carga un proyecto, todas sus capas y su foto de calco desde SQLite Wasm
+   * Carga un proyecto, todas sus capas y su foto de calco desde SQLite Wasm o Room
    */
   public async loadProject(projectId: string): Promise<{
     project: ProjectData;
@@ -290,6 +322,39 @@ class SqliteStorageService {
       id: '',
       projectId,
     });
+
+    // Si corre en APK con puente Room, comprobar si Room tiene el calco persistido en disco físico
+    if (typeof window !== 'undefined' && (window as any).InkFlowNativeBridge?.loadTracingFromRoom) {
+      try {
+        const raw = (window as any).InkFlowNativeBridge.loadTracingFromRoom(projectId);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.success && parsed.data) {
+            if (res && res.data) {
+              res.data.tracing = parsed.data;
+            } else if (!res || !res.data) {
+              // Si SQLite no lo tenía, reconstruir con calco de Room
+              return {
+                project: {
+                  id: projectId,
+                  name: 'Ilustración',
+                  width: parsed.data.width || 800,
+                  height: parsed.data.height || 600,
+                  createdAt: Date.now(),
+                  updatedAt: Date.now(),
+                  thumbnailUrl: '',
+                  layerCount: 1,
+                },
+                layers: [],
+                tracing: parsed.data,
+              };
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Room Native] Error cargando calco desde Room:', e);
+      }
+    }
 
     if (!res.data) return null;
     return {
@@ -317,6 +382,12 @@ class SqliteStorageService {
    * Elimina un proyecto
    */
   public async deleteProject(projectId: string): Promise<boolean> {
+    if (typeof window !== 'undefined' && (window as any).InkFlowNativeBridge?.deleteProjectFromRoom) {
+      try {
+        (window as any).InkFlowNativeBridge.deleteProjectFromRoom(projectId);
+      } catch {}
+    }
+
     await this.init();
 
     const res = await this.sendRequest({
@@ -415,24 +486,36 @@ class SqliteStorageService {
         timestamp: Date.now(),
       };
 
-      // Enviar inmediatamente sin esperar promesa
+      // 1. Si estamos en el APK Android con Room, guardar inmediatamente de forma síncrona en disco
+      if (typeof window !== 'undefined' && (window as any).InkFlowNativeBridge?.saveEmergencyCrashToRoom) {
+        try {
+          const rawPayload = JSON.stringify(payload);
+          (window as any).InkFlowNativeBridge.saveEmergencyCrashToRoom(rawPayload);
+          console.log('✅ [Room Native] Checkpoint de emergencia guardado con éxito en Room y disco físico');
+        } catch (err) {
+          console.warn('[Room Native] Error en guardado de emergencia Room:', err);
+        }
+      }
+
+      // 2. Enviar al worker SQLite Wasm en segundo plano
       this.worker.postMessage({
         type: 'SAVE_EMERGENCY_CRASH',
         id: `emergency_${Date.now()}`,
         payload,
       });
 
-      // Respaldo de contingencia en sessionStorage
+      // 3. Respaldo persistente de contingencia en localStorage (sobrevive en Android WebView)
       try {
-        sessionStorage.setItem('inkflow_emergency_saved_at', String(Date.now()));
-        sessionStorage.setItem('inkflow_emergency_project_id', this.currentActiveProject.id);
+        localStorage.setItem('inkflow_emergency_saved_at', String(Date.now()));
+        localStorage.setItem('inkflow_emergency_project_id', this.currentActiveProject.id);
+        localStorage.setItem('inkflow_emergency_checkpoint_payload', JSON.stringify(payload));
         if (serializedTracing) {
-          sessionStorage.setItem('inkflow_emergency_tracing', JSON.stringify(serializedTracing));
+          localStorage.setItem('inkflow_emergency_tracing', JSON.stringify(serializedTracing));
         } else {
-          sessionStorage.removeItem('inkflow_emergency_tracing');
+          localStorage.removeItem('inkflow_emergency_tracing');
         }
       } catch {
-        // Ignorar
+        // Ignorar límites de cuota
       }
     } catch (err) {
       console.error('[SqliteStorageService] Error en guardado de emergencia:', err);
@@ -443,6 +526,22 @@ class SqliteStorageService {
    * Comprueba si existe un dibujo recuperable de un crash o salida abrupta previa
    */
   public async checkCrashRecovery(): Promise<CrashRecoveryRecord | null> {
+    // 1. Primero consultar a Android Jetpack Room en el APK
+    if (typeof window !== 'undefined' && (window as any).InkFlowNativeBridge?.checkCrashRecoveryFromRoom) {
+      try {
+        const raw = (window as any).InkFlowNativeBridge.checkCrashRecoveryFromRoom();
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.recovery) {
+            return parsed.recovery;
+          }
+        }
+      } catch (err) {
+        console.warn('[Room Native] Error consultando crash en Room:', err);
+      }
+    }
+
+    // 2. Consultar al motor SQLite Wasm
     await this.init();
 
     try {
@@ -450,16 +549,57 @@ class SqliteStorageService {
         type: 'CHECK_CRASH_RECOVERY',
         id: '',
       });
-      return res.recovery || null;
+      if (res.recovery) {
+        return res.recovery;
+      }
     } catch {
-      return null;
+      // Continuar al fallback de contingencia
     }
+
+    // 3. Fallback de contingencia en localStorage
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const rawPayload = localStorage.getItem('inkflow_emergency_checkpoint_payload');
+        if (rawPayload) {
+          const payload = JSON.parse(rawPayload);
+          return {
+            projectId: payload.project.id,
+            projectName: payload.project.name,
+            width: payload.project.width,
+            height: payload.project.height,
+            timestamp: payload.timestamp || Date.now(),
+            layerCount: payload.layers?.length || 1,
+            previewThumbnailUrl: payload.project.thumbnailUrl || '',
+            payloadJson: rawPayload,
+          };
+        }
+      }
+    } catch {
+      // Ignorar
+    }
+
+    return null;
   }
 
   /**
    * Limpia el registro de recuperación de crash
    */
   public async clearCrashRecovery(): Promise<void> {
+    if (typeof window !== 'undefined' && (window as any).InkFlowNativeBridge?.clearCrashRecoveryFromRoom) {
+      try {
+        (window as any).InkFlowNativeBridge.clearCrashRecoveryFromRoom();
+      } catch {}
+    }
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('inkflow_emergency_saved_at');
+        localStorage.removeItem('inkflow_emergency_project_id');
+        localStorage.removeItem('inkflow_emergency_checkpoint_payload');
+        localStorage.removeItem('inkflow_emergency_tracing');
+      }
+    } catch {}
+
     await this.init();
     try {
       await this.sendRequest({

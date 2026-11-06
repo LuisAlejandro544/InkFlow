@@ -64,16 +64,17 @@ Aplicación de dibujo e ilustración digital profesional para dispositivos móvi
   - Algoritmo de suavizado exponencial ejecutado en WebAssembly de bajo nivel con bloc de pruebas interactivo.
 - **📑 Gestión Avanzada de Capas:**
   - Panel estilo IbisPaint con creación (inicio con 1 capa limpia), duplicación, combinación hacia abajo, borrado, visibilidad y opacidad.
-- **🗄️ Persistencia Masiva con SQLite Wasm sobre OPFS (Origin Private File System):**
-  - Implementado con el paquete oficial `@sqlite.org/sqlite-wasm` ejecutándose dentro de un **Web Worker dedicado**.
-  - Almacena ilustraciones, capas transparentes en alta fidelidad y vectores directamente en el sistema de archivos privado y nativo del teléfono móvil (**OPFS**), con transacciones atómicas **ACID**.
-  - **Cero caídas de FPS (Zero Frame-Drop):** La serialización y escritura de megabytes de píxeles ocurre en un hilo secundario sin interrumpir los 60–120 FPS del trazo táctil.
+- **🗄️ Persistencia Dual Masiva: SQLite Wasm (OPFS) en PWA & Android Jetpack Room en APK:**
+  - **En la PWA Web:** Implementado con `@sqlite.org/sqlite-wasm` ejecutándose dentro de un Web Worker dedicado sobre **OPFS (Origin Private File System)** nativo con transacciones atómicas ACID.
+  - **En el APK Android (Nativo con Tauri v2):** Implementado con **Android Jetpack Room** (`src/kotlin-core/database/` con `AppDatabase.kt`, `ProjectDao.kt`, `ProjectEntities.kt`, `TracingEntity.kt`, `CrashRecoveryEntity.kt` y `RoomStorageManager.kt`).
+  - **Inmunidad a pérdidas de fotos de calco en el APK:** Las imágenes de calco y stickers se escriben físicamente como archivos en el almacenamiento interno privado del dispositivo (`context.filesDir/tracings/tracing_{projectId}.png`), guardando su rotación continua, escala y posición en Room. Aunque el sistema operativo mate el proceso por batería o memoria, la foto de calco se restaura intacta.
+  - **Cero caídas de FPS (Zero Frame-Drop):** La serialización y escritura de megabytes ocurre fuera del hilo principal en `Dispatchers.IO` y Web Workers, sin interrumpir los 60–120 FPS del trazo táctil.
   - **Supera las limitaciones de la web tradicional:** Elimina las cuotas de 5 MB de `localStorage` y la sobrecarga de recolector de basura de librerías como `dexie.js`.
-- **🛡️ Centinela de Auto-Guardado y Resguardo ante Cierre de App o Crash:**
-  - **Auto-guardado continuo en segundo plano:** Tras cada trazo completado o modificación de capas, se programa un punto de control automático (*debounced* a 1s) hacia SQLite.
-  - **Salida abrupta o borrado del proceso:** Escucha los eventos de ciclo de vida del sistema operativo móvil (`visibilitychange` cuando la app se minimiza o se cambia a otra app, y `pagehide` cuando el proceso se descarga) para disparar un snapshot de emergencia inmediato.
+- **🛡️ Centinela de Auto-Guardado y Resguardo ante Cierre de App o Crash (Web & APK):**
+  - **Auto-guardado continuo en segundo plano:** Tras cada trazo completado o modificación de capas, se programa un punto de control automático (*debounced* a 1s) hacia SQLite y Room.
+  - **Salida abrupta o borrado del proceso:** Escucha los eventos de ciclo de vida del sistema operativo móvil (`visibilitychange`, `pagehide` y pausas del Activity) disparando un snapshot de emergencia inmediato de forma síncrona hacia Room e `InkFlowNativeBridge`.
   - **Protección contra crasheos:** Integrado en excepciones globales de JavaScript (`window.onerror`, `unhandledrejection`) y en el `ErrorBoundary` de React, resguardando la obra antes de interrumpir la interfaz.
-  - **Banner de Recuperación en 1 Toque:** Si la app detecta un punto de recuperación de una sesión interrumpida, despliega un aviso táctil nativo para restaurar todas las capas y dimensiones exactamente como estaban.
+  - **Banner de Recuperación en 1 Toque:** Si la app detecta un punto de recuperación de una sesión interrumpida, despliega un aviso táctil nativo para restaurar todas las capas, dimensiones y fotos de calco exactamente como estaban.
 - **⚡ Precaché Completo de WebAssembly & Service Worker Workbox (Límite 10 MB):**
   - Configurado en `vite.config.ts` con límite ampliado a **10 MB** (`maximumFileSizeToCacheInBytes: 10485760`) y patrón `globPatterns` que incluye explícitamente todos los binarios `**/*.wasm`.
   - La primera vez que el usuario abre la aplicación en su teléfono móvil, los motores de SQLite Wasm, Kotlin y Rust se descargan y quedan congelados en el `CacheStorage`. La app abre en **0.05 segundos** incluso en modo avión.
@@ -179,11 +180,9 @@ Abre `http://localhost:3000` en tu teléfono móvil y pulsa el botón **"Instala
 
 ## 🧪 Pruebas Unitarias de Lógica
 
-## 🧪 Pruebas Unitarias de Lógica
+El proyecto cuenta con **78 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
 
-El proyecto cuenta con **71 pruebas unitarias automatizadas deterministas** con `node:test` en 2 suites:
-
-### Suite 1: Motor Gráfico, C++23 Vectores, Calco, Wasm, Historial, Caché GPU, Expansión, Huecos, Accesorios, Texturas, Corrutinas, Temas & Kotlin / PWA (64 tests)
+### Suite 1: Motor Gráfico, C++23 Vectores, Calco, Wasm, Historial, Caché GPU, Expansión, Huecos, Accesorios, Texturas, Corrutinas, Temas & Kotlin / PWA (69 tests)
 1. Interpolación lineal y cálculo euclidiano Wasm.
 2. Estabilizador exponencial anti-temblor S-Form.
 3. Simulación de curva de presión táctil por velocidad.
@@ -248,18 +247,25 @@ El proyecto cuenta con **71 pruebas unitarias automatizadas deterministas** con 
 62. Invarianza cromática y validación de variables CSS de acento.
 63. Integridad de esquemas de tema y claves hexadecimales válidas.
 64. Desacoplamiento de sub-pantallas de Ajustes, Personalización y Planes futuros.
+65. Gobernanza de versión y privacidad v1.0.0 sin licencias restrictivas.
+66. PWA Offline & Service Worker con estrategia de caché 100% sin internet.
+67. Mobile APK & PWA: Canvas de baja latencia con `desynchronized: true`.
+68. Mobile APK: Guardado directo en Pictures/InkFlow Studio vía Tauri IPC.
+69. Android Native & Workflow: Modo Pantalla Completa Inmersivo (Immersive Sticky).
 
-### Suite 2: Persistencia Masiva SQLite Wasm sobre OPFS (7 tests)
-65. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
-66. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`).
-67. Transacción ACID completa de proyectos con capas y orden z.
-68. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
-69. Eliminación limpia en cascada sin fugas de almacenamiento.
-70. Persistencia y recuperación exacta de la foto de calco con su rotación angular y escala.
-71. Crash Recovery de calco: Rescate y restauración de rotación angular tras fallo del navegador.
+### Suite 2: Persistencia Masiva SQLite Wasm OPFS & Android Jetpack Room (9 tests)
+70. Inicialización oficial del módulo `@sqlite.org/sqlite-wasm`.
+71. Creación atómica del esquema relacional (`projects`, `layers`, `crash_recovery`, `project_tracings`).
+72. Transacción ACID completa de proyectos con capas y orden z.
+73. Centinela de Crash: Registro de emergencia, consulta y restauración tras salida abrupta.
+74. Eliminación limpia en cascada sin fugas de almacenamiento.
+75. Persistencia y recuperación exacta de la foto de calco con su rotación angular y escala.
+76. Crash Recovery de calco: Rescate y restauración de rotación angular tras fallo del navegador.
+77. **Android Jetpack Room:** Validación de esquema `TracingEntity` con almacenamiento físico y rotación continua.
+78. **Android Jetpack Room:** Centinela de Crash Recovery con persistencia física en disco.
 
 ```bash
-# Ejecutar todas las pruebas deterministas (73 tests)
+# Ejecutar todas las pruebas deterministas (78 tests)
 npx --yes tsx --test src/engine/engine.test.ts src/storage/storage.test.ts
 ```
 

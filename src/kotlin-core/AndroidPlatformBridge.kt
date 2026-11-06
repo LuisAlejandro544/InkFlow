@@ -33,6 +33,8 @@ import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
+import com.inkflow.studio.database.RoomStorageManager
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
@@ -195,8 +197,113 @@ class AndroidScreenWakeLockManager(private val activity: Activity) {
 class InkFlowJavascriptInterface(
     private val activity: Activity,
     private val galleryManager: AndroidGalleryManager,
-    private val wakeLockManager: AndroidScreenWakeLockManager
+    private val wakeLockManager: AndroidScreenWakeLockManager,
+    private val roomStorageManager: RoomStorageManager = RoomStorageManager(activity)
 ) {
+
+    /**
+     * Guarda la foto de calco o accesorio directamente en disco físico con metadatos en Room
+     */
+    @JavascriptInterface
+    fun saveTracingToRoom(projectId: String, tracingJson: String, imageBase64: String): String {
+        return try {
+            val ok = runBlocking {
+                roomStorageManager.saveTracing(projectId, tracingJson, imageBase64)
+            }
+            "{\"success\": $ok}"
+        } catch (e: Exception) {
+            "{\"success\": false, \"error\": \"${e.localizedMessage}\"}"
+        }
+    }
+
+    /**
+     * Carga la foto de calco y su ángulo continuo desde Room y disco físico
+     */
+    @JavascriptInterface
+    fun loadTracingFromRoom(projectId: String): String {
+        return try {
+            val result = runBlocking {
+                roomStorageManager.loadTracing(projectId)
+            }
+            if (result != null) {
+                "{\"success\": true, \"data\": $result}"
+            } else {
+                "{\"success\": false, \"data\": null}"
+            }
+        } catch (e: Exception) {
+            "{\"success\": false, \"error\": \"${e.localizedMessage}\"}"
+        }
+    }
+
+    /**
+     * Guarda el punto de rescate de emergencia síncronamente ante cierre de app o crash
+     */
+    @JavascriptInterface
+    fun saveEmergencyCrashToRoom(payloadJson: String): String {
+        return try {
+            val ok = runBlocking {
+                roomStorageManager.saveEmergencyCrash(payloadJson)
+            }
+            "{\"success\": $ok}"
+        } catch (e: Exception) {
+            "{\"success\": false, \"error\": \"${e.localizedMessage}\"}"
+        }
+    }
+
+    /**
+     * Comprueba si hay un punto de rescate de crash disponible en Room
+     */
+    @JavascriptInterface
+    fun checkCrashRecoveryFromRoom(): String {
+        return try {
+            val result = runBlocking {
+                roomStorageManager.checkCrashRecovery()
+            }
+            if (result != null) {
+                "{\"success\": true, \"recovery\": $result}"
+            } else {
+                "{\"success\": true, \"recovery\": null}"
+            }
+        } catch (e: Exception) {
+            "{\"success\": false, \"error\": \"${e.localizedMessage}\"}"
+        }
+    }
+
+    /**
+     * Limpia el registro de rescate de crash
+     */
+    @JavascriptInterface
+    fun clearCrashRecoveryFromRoom(): String {
+        return try {
+            val ok = runBlocking {
+                roomStorageManager.clearCrashRecovery()
+            }
+            "{\"success\": $ok}"
+        } catch (e: Exception) {
+            "{\"success\": false, \"error\": \"${e.localizedMessage}\"}"
+        }
+    }
+
+    /**
+     * Elimina el proyecto y sus calcos en Room y disco
+     */
+    @JavascriptInterface
+    fun deleteProjectFromRoom(projectId: String): String {
+        return try {
+            val ok = runBlocking {
+                roomStorageManager.deleteProject(projectId)
+            }
+            "{\"success\": $ok}"
+        } catch (e: Exception) {
+            "{\"success\": false, \"error\": \"${e.localizedMessage}\"}"
+        }
+    }
+
+    /**
+     * Indica que el almacenamiento Room nativo está activo y listo
+     */
+    @JavascriptInterface
+    fun isRoomAvailable(): Boolean = true
 
     /**
      * Método invocado por la PWA para guardar directamente en la Galería de fotos
@@ -291,3 +398,4 @@ class InkFlowJavascriptInterface(
     @JavascriptInterface
     fun isNativeBridgeReady(): Boolean = true
 }
+

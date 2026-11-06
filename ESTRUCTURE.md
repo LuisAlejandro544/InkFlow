@@ -42,9 +42,14 @@ Este documento detalla la arquitectura de archivos, la responsabilidad de cada m
 │   │   ├── CMakeLists.txt        # Configuración CMake con soporte Wasm SIMD128 y NDK 32/64 bits
 │   │   └── README.md             # Documentación técnica del módulo C++23
 │   ├── kotlin-core/              # Código fuente en Kotlin para Android Runtime y Serialización
-│   │   ├── AndroidPlatformBridge.kt # Puente nativo Android: MediaStore (Galería Real) y WakeLock (Pantalla Encendida)
+│   │   ├── AndroidPlatformBridge.kt # Puente nativo Android: MediaStore, WakeLock e InkFlowJavascriptInterface con Room
 │   │   ├── CoroutineOrchestrator.kt # Orquestador de concurrencia estructurada: kotlinx.coroutines, conflate táctil y centinela
-│   │   └── VectorEngine.kt       # Modelado de datos, puente Stylus API 240Hz, serializador .inkflow y teoría del color
+│   │   ├── VectorEngine.kt       # Modelado de datos, puente Stylus API 240Hz, serializador .inkflow y teoría del color
+│   │   └── database/             # [ANDROID JETPACK ROOM] Persistencia física en disco para el APK Android
+│   │       ├── AppDatabase.kt    # Base de datos Singleton Room (inkflow_studio_room.db)
+│   │       ├── ProjectEntities.kt # Entidades relacionales: ProjectEntity, LayerEntity, TracingEntity, CrashRecoveryEntity
+│   │       ├── ProjectDao.kt     # DAOs con suspend functions para consultas asíncronas seguras
+│   │       └── RoomStorageManager.kt # Gestor físico de calcos en context.filesDir/tracings/ y rescate de crash
 │   ├── rust-core/                # Código fuente en Rust para compilación a Wasm
 │   │   ├── Cargo.toml            # Configuración de paquete Rust y perfil wasm32
 │   │   └── src/

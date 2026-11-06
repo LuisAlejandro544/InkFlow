@@ -342,6 +342,30 @@ Este documento establece las fases de evolución del motor gráfico, optimizacio
 
 ---
 
+## 🏛️ Fase 4.18: Persistencia Nativa en Android con Jetpack Room & Almacenamiento Físico Anti-Crash (Completada ✅)
+
+- [x] **Arquitectura de Base de Datos Nativa con Android Jetpack Room (`src/kotlin-core/database/`):**
+  - Implementación de `AppDatabase.kt` con motor SQLite nativo en disco local (`/data/user/0/com.inkflow.studio/databases/inkflow_studio_room.db`).
+  - Entidades relacionales fuertemente tipadas:
+    - `ProjectEntity`: Metadatos, dimensiones, timestamps y miniatura.
+    - `LayerEntity`: Capas con modos de fusión, opacidad y orden z.
+    - `TracingEntity`: Referencia de calco/accesorio con persistencia física de ruta en disco, ángulo de rotación continuo, escala, opacidad y filtro.
+    - `CrashRecoveryEntity`: Registro permanente inviolable de sesión ante cierre inesperado o muerte del proceso por el sistema.
+- [x] **Almacenamiento Físico en Disco para Fotos de Calco y Stickers (`RoomStorageManager.kt`):**
+  - Resuelve el problema de pérdida de fotos en el APK: escribe los bytes de las referencias de calco directamente en `context.filesDir/tracings/tracing_{projectId}.png`.
+  - Inmune al reciclaje de memoria RAM de WebView o a la inexistencia de OPFS en Android WebView.
+  - Al reabrir la app o recuperar un crash, la foto se restaura con su escala y ángulo de rotación exacto.
+- [x] **Puente Nativo `@JavascriptInterface` con Invocación Síncrona Inviolable:**
+  - Métodos inyectados en `InkFlowJavascriptInterface` (`saveTracingToRoom`, `loadTracingFromRoom`, `saveEmergencyCrashToRoom`, `checkCrashRecoveryFromRoom`, `clearCrashRecoveryFromRoom`).
+  - Al ser llamadas síncronas a nivel de Activity nativa, se ejecutan de inmediato en eventos de ciclo de vida (`visibilitychange`, `pagehide`, `error`) antes de que el kernel de Android pueda enviar SIGKILL al proceso.
+- [x] **Inyección Automatizada en Gradle (`configure-android-native.cjs`):**
+  - Copia automática de las entidades, DAOs y `RoomStorageManager` a `src-tauri/gen/android/app/src/main/java/com/inkflow/studio/database/`.
+  - Inyección de dependencias `androidx.room:room-runtime:2.6.1`, `androidx.room:room-ktx:2.6.1` y `androidx.sqlite:sqlite-bundled:2.4.0`.
+- [x] **78 Pruebas Unitarias Deterministas:**
+  - 69 tests de motor gráfico, C++23 vectores, Wasm, historial, texturas, calco, flood fill, Sobel, Kotlin/PWA y corrutinas + 9 tests de almacenamiento relacional (SQLite Wasm OPFS y Android Jetpack Room).
+
+---
+
 ## 🎨 Fase 5: Pipeline WebGPU Avanzado & Herramientas de Ilustración
 
 - [ ] Soporte para mapas de bits como puntas de pincel personalizadas (*Brush Dabs*).
